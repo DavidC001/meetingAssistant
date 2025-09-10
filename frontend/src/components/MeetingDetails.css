@@ -1,0 +1,66 @@
+.meeting-details-container {
+    background-color: #ffffff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}
+
+.details-header h2 {
+    margin: 0;
+}
+
+.status-badge {
+    font-weight: bold;
+    text-transform: capitalize;
+    padding: 0.5rem 1rem;
+    border-radius: 16px;
+    color: white;
+    font-size: 1rem;
+}
+
+.content-section {
+    margin-top: 2rem;
+}
+
+.summary-box, .transcript-box {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    padding: 1.5rem;
+    border-radius: 8px;
+    white-space: pre-wrap; /* Preserves line breaks in transcript */
+    line-height: 1.6;
+}
+
+.action-items-list {
+    list-style: none;
+    padding: 0;
+}
+
+.action-items-list li {
+    background-color: #f1f8e9;
+    border-left: 5px solid #81c784;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+}
+
+.action-items-list p {
+    margin: 0.2rem 0;
+}
+
+.processing-notice {
+    text-align: center;
+    padding: 3rem;
+    background-color: #e3f2fd;
+    border-radius: 8px;
+    margin-top: 2rem;
+}
