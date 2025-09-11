@@ -54,6 +54,9 @@ class MeetingBase(BaseModel):
 class MeetingCreate(MeetingBase):
     pass
 
+class MeetingUpdate(MeetingBase):
+    pass
+
 class Meeting(MeetingBase):
     id: int
     status: MeetingStatus

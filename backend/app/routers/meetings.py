@@ -55,3 +55,40 @@ def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
     if db_meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return db_meeting
+
+@router.put("/{meeting_id}", response_model=schemas.Meeting)
+def update_meeting_details(
+    meeting_id: int,
+    meeting: schemas.MeetingUpdate,
+    db: Session = Depends(get_db),
+):
+    """
+    Update a meeting's details, e.g., rename it.
+    """
+    db_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting=meeting)
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return db_meeting
+
+
+@router.delete("/{meeting_id}", status_code=204)
+def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a meeting, its transcription, and the associated file.
+    """
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Attempt to delete the file
+    try:
+        if os.path.exists(db_meeting.filepath):
+            os.remove(db_meeting.filepath)
+    except OSError as e:
+        # Log this error, but don't block deletion of the DB record
+        print(f"Error deleting file {db_meeting.filepath}: {e}")
+
+    # Delete the meeting from the database
+    crud.delete_meeting(db, meeting_id=meeting_id)
+
+    return # Should return 204 No Content

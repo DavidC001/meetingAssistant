@@ -27,6 +27,21 @@ def update_meeting_status(db: Session, meeting_id: int, status: models.MeetingSt
         db.refresh(db_meeting)
     return db_meeting
 
+def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate):
+    db_meeting = get_meeting(db, meeting_id=meeting_id)
+    if db_meeting:
+        db_meeting.filename = meeting.filename
+        db.commit()
+        db.refresh(db_meeting)
+    return db_meeting
+
+def delete_meeting(db: Session, meeting_id: int):
+    db_meeting = get_meeting(db, meeting_id=meeting_id)
+    if db_meeting:
+        db.delete(db_meeting)
+        db.commit()
+    return db_meeting
+
 # Transcription CRUD operations
 def create_meeting_transcription(db: Session, meeting_id: int, transcription: schemas.TranscriptionCreate, action_items: list[schemas.ActionItemCreate]):
     # First, update the meeting status to COMPLETED
