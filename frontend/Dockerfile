@@ -3,12 +3,11 @@ FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json to leverage Docker cache
+# Copy package.json to leverage Docker cache
 COPY package.json ./
-COPY package-lock.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the application code
 COPY . ./
