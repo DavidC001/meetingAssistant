@@ -5,6 +5,7 @@ import os
 import shutil
 
 from .. import crud, models, schemas
+from ..core import chat
 from ..database import get_db
 
 router = APIRouter(
@@ -162,3 +163,32 @@ def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
     crud.delete_meeting(db, meeting_id=meeting_id)
 
     return # Should return 204 No Content
+
+
+@router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
+async def chat_with_meeting_endpoint(
+    meeting_id: int,
+    request: schemas.ChatRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Chat with a meeting's transcription.
+    """
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if not db_meeting.transcription or not db_meeting.transcription.full_text:
+        raise HTTPException(status_code=404, detail="Transcription not available for this meeting")
+
+    # Get the last 5 messages from the chat history
+    chat_history = request.chat_history or []
+
+    # Call the chat logic
+    response_text = await chat.chat_with_meeting(
+        query=request.query,
+        transcript=db_meeting.transcription.full_text,
+        chat_history=chat_history
+    )
+
+    return schemas.ChatResponse(response=response_text)

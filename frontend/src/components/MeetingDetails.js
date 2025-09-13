@@ -47,6 +47,7 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
+import Chat from './Chat';
 
 const ProcessingCard = styled(Card)(({ theme }) => ({
   background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
@@ -569,14 +570,14 @@ const MeetingDetails = () => {
 
       {meeting.status === 'completed' && meeting.transcription ? (
         <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card elevation={3}>
+          <Grid item xs={12} lg={6}>
+            <Card elevation={3} sx={{ height: '100%' }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <SummarizeIcon sx={{ mr: 1, color: 'primary.main' }} />
                   <Typography variant="h5">Meeting Summary</Typography>
                 </Box>
-                <Paper elevation={1} sx={{ p: 3, bgcolor: 'grey.50' }}>
+                <Paper elevation={1} sx={{ p: 3, bgcolor: 'grey.50', maxHeight: '400px', overflow: 'auto' }}>
                   <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
                     {meeting.transcription.summary.split('\n').map((line, index) => (
                       <React.Fragment key={index}>
@@ -588,6 +589,10 @@ const MeetingDetails = () => {
                 </Paper>
               </CardContent>
             </Card>
+          </Grid>
+
+          <Grid item xs={12} lg={6}>
+            <Chat meetingId={meetingId} />
           </Grid>
 
           <Grid item xs={12}>

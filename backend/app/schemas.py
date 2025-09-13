@@ -19,6 +19,14 @@ class ActionItem(ActionItemBase):
     class Config:
         from_attributes = True
 
+# Chat Schemas
+class ChatRequest(BaseModel):
+    query: str
+    chat_history: Optional[List[dict]] = None
+
+class ChatResponse(BaseModel):
+    response: str
+
 # Transcription Schemas
 class TranscriptionBase(BaseModel):
     summary: str
