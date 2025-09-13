@@ -1,7 +1,8 @@
 import tempfile
+import hashlib
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Any, Tuple, Callable, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 import logging
 import torch
@@ -9,6 +10,7 @@ from faster_whisper import WhisperModel
 from tqdm import tqdm
 
 from .utils import _run_ffmpeg
+from .cache import cache_result, get_file_hash
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -23,7 +25,9 @@ def _load_whisper(model_size: str = "base") -> WhisperModel:
     logger.info(f"Loading faster-whisper '{model_size}' on {DEVICE.type}...")
     # Adjust compute_type based on device
     compute_type = "int8" if DEVICE.type == "cpu" else "float16"
-    return WhisperModel(model_size, device=DEVICE.type, compute_type=compute_type)
+    model = WhisperModel(model_size, device=DEVICE.type, compute_type=compute_type)
+    logger.info(f"Whisper model loaded successfully on {DEVICE.type}")
+    return model
 
 def _transcribe_local(audio_slice: Path, whisper_model: WhisperModel, language: str = None) -> Tuple[str, str]:
     """Transcribes a single audio slice and returns text and detected language."""
@@ -63,33 +67,54 @@ def _transcribe_segment(args: Tuple[Path, Dict[str, Any], WhisperModel, str]) ->
     finally:
         clip_path.unlink(missing_ok=True)
 
+@cache_result()
 def compile_transcript(
     audio_path: str,
     segments: List[Dict[str, Any]],
     whisper_size: str = "base",
     language: str = "en",
-    num_workers: int = 4
+    num_workers: int = 4,
+    progress_callback: Optional[Callable[[int, int], None]] = None
 ) -> Tuple[str, str]:
     """
     Transcribes all diarized segments in parallel and compiles the full transcript.
     Returns the formatted transcript string and the detected dominant language.
+    Results are cached based on file hash, segments, and parameters.
     """
     logger.info(f"Starting transcription process with {num_workers} workers...")
+    
+    # Add file hash to cache key for better cache invalidation
+    file_hash = get_file_hash(audio_path)
+    segments_hash = hashlib.md5(str(segments).encode()).hexdigest()
+    logger.info(f"File hash: {file_hash}, Segments hash: {segments_hash}")
+    
     whisper_model = _load_whisper(whisper_size)
     src_path = Path(audio_path)
 
     tasks = [(src_path, seg, whisper_model, language) for seg in segments]
 
     results = []
+    completed_count = 0
+    total_count = len(tasks)
+    
+    if progress_callback:
+        progress_callback(0, total_count)
+
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(_transcribe_segment, task) for task in tasks]
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Transcribing", unit="segment"):
+        for future in as_completed(futures):
             try:
                 result = future.result()
                 if result.get("text"):
                     results.append(result)
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, total_count)
             except Exception as e:
                 logger.error(f"Error transcribing segment: {e}", exc_info=True)
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, total_count)
 
     # Sort results by start time to ensure correct order
     results.sort(key=lambda r: r["start"])

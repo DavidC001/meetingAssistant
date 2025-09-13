@@ -19,8 +19,17 @@ def process_meeting_task(self, meeting_id: int):
     db = SessionLocal()
 
     try:
-        # 1. Update meeting status to PROCESSING
+        # 1. Update meeting status to PROCESSING and set processing start time
         crud.update_meeting_status(db, meeting_id, models.MeetingStatus.PROCESSING)
+        crud.update_meeting_processing_details(
+            db, 
+            meeting_id, 
+            processing_start_time=time.time(),
+            current_stage=models.ProcessingStage.CONVERSION.value,
+            stage_start_time=time.time(),
+            progress_percentage=0.0,
+            processing_logs=['Processing started']
+        )
         logger.info(f"Meeting {meeting_id} status updated to PROCESSING.")
 
         # 2. Get meeting details from DB
@@ -37,9 +46,18 @@ def process_meeting_task(self, meeting_id: int):
         logger.info(f"Processing for meeting {meeting_id} completed successfully.")
 
     except Exception as e:
-        logger.error(f"Error processing meeting {meeting_id}: {e}", exc_info=True)
+        error_message = f"Error processing meeting {meeting_id}: {str(e)}"
+        logger.error(error_message, exc_info=True)
+        
         # Mark the task as failed in the database
         crud.update_meeting_status(db, meeting_id, models.MeetingStatus.FAILED)
+        crud.update_meeting_processing_details(
+            db, 
+            meeting_id, 
+            error_message=error_message,
+            progress_percentage=0.0
+        )
+        
         # You might want to re-raise the exception if you want Celery to record it as a failure
         raise
     finally:

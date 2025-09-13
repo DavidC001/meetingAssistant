@@ -39,6 +39,7 @@
   text-decoration: none;
   color: inherit;
   flex-grow: 1;
+  gap: 1rem;
 }
 
 .meeting-actions {
@@ -96,6 +97,13 @@
   font-size: 0.9em;
 }
 
+.meeting-status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .meeting-status {
   font-weight: bold;
   text-transform: capitalize;
@@ -103,6 +111,36 @@
   border-radius: 12px;
   text-align: center;
   color: white;
+}
+
+/* Mini progress bar for meetings list */
+.mini-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.mini-progress-bar {
+  width: 80px;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mini-progress-fill {
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.mini-progress-text {
+  font-size: 0.7rem;
+  color: white;
+  font-weight: bold;
 }
 
 .status-pending {

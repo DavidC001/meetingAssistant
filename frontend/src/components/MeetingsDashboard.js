@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Box, Typography, Fade } from '@mui/material';
 import UploadForm from './UploadForm';
 import MeetingsList from './MeetingsList';
 
@@ -11,10 +12,15 @@ const MeetingsDashboard = () => {
   };
 
   return (
-    <div>
-      <UploadForm onUploadSuccess={handleMeetingsUpdate} />
-      <MeetingsList refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
-    </div>
+    <Fade in timeout={500}>
+      <Box>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Meeting Dashboard
+        </Typography>
+        <UploadForm onUploadSuccess={handleMeetingsUpdate} />
+        <MeetingsList refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
+      </Box>
+    </Fade>
   );
 };
 

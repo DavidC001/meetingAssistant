@@ -5,7 +5,6 @@ psycopg2-binary
 celery[redis]
 python-dotenv
 requests
-torch
 faster-whisper
 pyannote.audio
 tqdm
@@ -18,3 +17,4 @@ reportlab
 icalendar
 gradio
 ffmpeg-python
+python-multipart
