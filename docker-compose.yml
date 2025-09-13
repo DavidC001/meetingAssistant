@@ -5,6 +5,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - cache_data:/app/cache
     env_file:
       - ./backend/.env
     environment:
@@ -30,20 +31,31 @@ services:
 
   worker:
     build: ./backend
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
     volumes:
       - ./backend:/app
+      - cache_data:/app/cache
     env_file:
       - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://user:password@db/mydatabase
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - NVIDIA_VISIBLE_DEVICES=all
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    # GPU support enabled
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   db:
     image: postgres:15-alpine
@@ -71,3 +83,4 @@ services:
 
 volumes:
   postgres_data:
+  cache_data:

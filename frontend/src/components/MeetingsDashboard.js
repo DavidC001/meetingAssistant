@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
+import { Box, Typography, Fade } from '@mui/material';
 import UploadForm from './UploadForm';
 import MeetingsList from './MeetingsList';
 
 const MeetingsDashboard = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleUploadSuccess = () => {
+  const handleMeetingsUpdate = () => {
     // Increment the key to force a re-render and re-fetch in MeetingsList
     setRefreshKey(prevKey => prevKey + 1);
   };
 
   return (
-    <div>
-      <UploadForm onUploadSuccess={handleUploadSuccess} />
-      <MeetingsList refreshKey={refreshKey} />
-    </div>
+    <Fade in timeout={500}>
+      <Box>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Meeting Dashboard
+        </Typography>
+        <UploadForm onUploadSuccess={handleMeetingsUpdate} />
+        <MeetingsList refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
+      </Box>
+    </Fade>
   );
 };
 

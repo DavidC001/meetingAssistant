@@ -4,6 +4,8 @@ import requests
 import logging
 from typing import Dict, Any
 
+from .retry import retry_api_call
+
 # Optional import for OpenAI
 try:
     import openai
@@ -21,6 +23,7 @@ SYSTEM_PROMPT = (
     "Return ONLY the JSON object, with no additional text or explanations."
 )
 
+@retry_api_call(max_retries=3, delay=5.0)
 def _call_openai(transcript: str, model: str) -> Dict[str, Any]:
     """Calls the OpenAI API for analysis."""
     if openai is None:
@@ -39,6 +42,7 @@ def _call_openai(transcript: str, model: str) -> Dict[str, Any]:
     )
     return json.loads(resp.choices[0].message.content)
 
+@retry_api_call(max_retries=3, delay=5.0)
 def _call_ollama(transcript: str, model: str, url: str) -> Dict[str, Any]:
     """Calls a local Ollama instance for analysis."""
     logger.info(f"Sending transcript to Ollama model: {model} at {url}")
@@ -59,6 +63,9 @@ def _call_ollama(transcript: str, model: str, url: str) -> Dict[str, Any]:
         ],
         "format": "json",
         "stream": False,
+        "options": {
+            "num_ctx": 32768  # Increase context window for longer transcripts
+        }
     }
 
     try:
@@ -79,22 +86,51 @@ def analyse_meeting(
 ) -> Dict[str, Any]:
     """
     Analyzes a meeting transcript using the specified LLM backend.
+    Includes automatic fallback and comprehensive error handling.
     """
     logger.info(f"Analyzing transcript using backend: {backend}")
 
-    # Auto mode logic
+    last_exception = None
+
+    # Auto mode logic with fallback
     if backend == "auto":
         if os.getenv("OPENAI_API_KEY") and openai:
-            logger.info("Auto-selecting OpenAI backend.")
-            return _call_openai(transcript, openai_model)
-        else:
-            logger.info("Auto-selecting Ollama backend.")
+            try:
+                logger.info("Auto-selecting OpenAI backend.")
+                return _call_openai(transcript, openai_model)
+            except Exception as e:
+                logger.warning(f"OpenAI backend failed: {e}")
+                last_exception = e
+        
+        try:
+            logger.info("Falling back to Ollama backend.")
             return _call_ollama(transcript, ollama_model, ollama_url)
+        except Exception as e:
+            logger.error(f"Ollama backend also failed: {e}")
+            last_exception = e
 
     # Explicit backend selection
-    if backend == "openai":
-        return _call_openai(transcript, openai_model)
-    if backend == "ollama":
-        return _call_ollama(transcript, ollama_model, ollama_url)
+    elif backend == "openai":
+        try:
+            return _call_openai(transcript, openai_model)
+        except Exception as e:
+            logger.error(f"OpenAI backend failed: {e}")
+            last_exception = e
 
-    raise ValueError(f"Invalid LLM backend specified: {backend}")
+    elif backend == "ollama":
+        try:
+            return _call_ollama(transcript, ollama_model, ollama_url)
+        except Exception as e:
+            logger.error(f"Ollama backend failed: {e}")
+            last_exception = e
+    else:
+        raise ValueError(f"Invalid LLM backend specified: {backend}")
+
+    # If all attempts failed, return a basic structure
+    logger.error("All LLM backends failed. Returning basic analysis.")
+    return {
+        "summary": ["Meeting analysis failed due to technical issues."],
+        "decisions": [],
+        "action_items": [],
+        "error": f"Analysis failed: {last_exception}"
+    }

@@ -82,6 +82,54 @@ def write_env_file(env_vars: Dict[str, str]) -> bool:
         print(f"Error writing .env file: {e}")
         return False
 
+@router.get("/app-settings")
+def get_app_settings():
+    """
+    Get application settings like max file size.
+    """
+    env_vars = read_env_file()
+    
+    # Default values
+    default_max_file_size = 3000  # 3GB in MB
+    
+    max_file_size = int(env_vars.get("MAX_FILE_SIZE_MB", default_max_file_size))
+    
+    return {
+        "maxFileSize": max_file_size,
+        "defaultMaxFileSize": default_max_file_size
+    }
+
+@router.post("/app-settings")
+def update_app_settings(settings: Dict[str, int]):
+    """
+    Update application settings.
+    """
+    env_updates = {}
+    updated_settings = []
+    
+    if "maxFileSize" in settings:
+        max_file_size = settings["maxFileSize"]
+        # Validate range (100MB to 5GB)
+        if max_file_size < 100 or max_file_size > 5000:
+            raise HTTPException(status_code=400, detail="Max file size must be between 100MB and 5000MB")
+        
+        env_updates["MAX_FILE_SIZE_MB"] = str(max_file_size)
+        updated_settings.append("max file size")
+    
+    if not env_updates:
+        raise HTTPException(status_code=400, detail="No valid settings provided")
+    
+    success = write_env_file(env_updates)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save settings to .env file")
+    
+    return {
+        "message": f"Successfully updated: {', '.join(updated_settings)}",
+        "updated": updated_settings,
+        "saved_to_env": True
+    }
+
 @router.get("/api-tokens")
 def get_api_tokens_status():
     """

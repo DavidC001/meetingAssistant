@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
-from .models import MeetingStatus
+from .models import MeetingStatus, ProcessingStage
 
 # Action Item Schemas
 class ActionItemBase(BaseModel):
@@ -17,7 +17,7 @@ class ActionItem(ActionItemBase):
     transcription_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Transcription Schemas
 class TranscriptionBase(BaseModel):
@@ -33,7 +33,7 @@ class Transcription(TranscriptionBase):
     action_items: List[ActionItem] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Meeting Schemas
 class MeetingMetadata(BaseModel):
@@ -52,13 +52,33 @@ class MeetingBase(BaseModel):
     filename: str
 
 class MeetingCreate(MeetingBase):
-    pass
+    transcription_language: Optional[str] = "en-US"
+    number_of_speakers: Optional[str] = "auto"
+
+class MeetingUpdate(MeetingBase):
+    transcription_language: Optional[str] = None
+    number_of_speakers: Optional[str] = None
 
 class Meeting(MeetingBase):
     id: int
     status: MeetingStatus
     created_at: datetime
+    transcription_language: Optional[str] = "en-US"
+    number_of_speakers: Optional[str] = "auto"
+    current_stage: Optional[ProcessingStage] = None
+    stage_progress: float = 0.0
+    overall_progress: float = 0.0
+    
+    # Processing details and metadata
+    file_size: Optional[int] = None
+    estimated_duration: Optional[float] = None
+    processing_start_time: Optional[datetime] = None
+    stage_start_time: Optional[datetime] = None
+    error_message: Optional[str] = None
+    processing_logs: Optional[str] = None
+    celery_task_id: Optional[str] = None
+    
     transcription: Optional[Transcription] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

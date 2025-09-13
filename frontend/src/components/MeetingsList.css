@@ -18,19 +18,74 @@
   margin: 0;
 }
 
-.meeting-item a {
-  display: grid;
-  grid-template-columns: 3fr 2fr 1fr;
+.meeting-item {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 0 1rem;
   border-bottom: 1px solid #eee;
-  text-decoration: none;
-  color: inherit;
   transition: background-color 0.3s;
 }
 
-.meeting-item a:hover {
+.meeting-item:hover {
   background-color: #f9f9f9;
+}
+
+.meeting-link {
+  display: grid;
+  grid-template-columns: 3fr 2fr 1fr;
+  align-items: center;
+  padding: 1rem 0;
+  text-decoration: none;
+  color: inherit;
+  flex-grow: 1;
+  gap: 1rem;
+}
+
+.meeting-actions {
+  position: relative;
+}
+
+.menu-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.5rem;
+  color: #666;
+  padding: 0.5rem;
+}
+
+.menu-button:hover {
+  color: #000;
+}
+
+.action-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  width: 150px;
+  padding: 0.5rem 0;
+}
+
+.action-menu button {
+  background: none;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  font-size: 1rem;
+}
+
+.action-menu button:hover {
+  background-color: #f5f5f5;
 }
 
 .meeting-filename {
@@ -42,6 +97,13 @@
   font-size: 0.9em;
 }
 
+.meeting-status-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .meeting-status {
   font-weight: bold;
   text-transform: capitalize;
@@ -49,6 +111,36 @@
   border-radius: 12px;
   text-align: center;
   color: white;
+}
+
+/* Mini progress bar for meetings list */
+.mini-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.mini-progress-bar {
+  width: 80px;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mini-progress-fill {
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.mini-progress-text {
+  font-size: 0.7rem;
+  color: white;
+  font-weight: bold;
 }
 
 .status-pending {
