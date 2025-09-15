@@ -46,7 +46,15 @@ def update_meeting_progress(db: Session, meeting_id: int, stage: models.Processi
 def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate):
     db_meeting = get_meeting(db, meeting_id=meeting_id)
     if db_meeting:
-        db_meeting.filename = meeting.filename
+        if meeting.filename is not None:
+            db_meeting.filename = meeting.filename
+        if meeting.transcription_language is not None:
+            db_meeting.transcription_language = meeting.transcription_language
+        if meeting.number_of_speakers is not None:
+            db_meeting.number_of_speakers = meeting.number_of_speakers
+        if meeting.model_configuration_id is not None:
+            db_meeting.model_configuration_id = meeting.model_configuration_id
+        
         db.commit()
         db.refresh(db_meeting)
     return db_meeting
@@ -107,6 +115,40 @@ def create_meeting_transcription(db: Session, meeting_id: int, transcription: sc
     db.refresh(db_transcription)
 
     return db_transcription
+
+# Action Item CRUD operations
+def create_action_item(db: Session, transcription_id: int, action_item: schemas.ActionItemCreate, is_manual: bool = True):
+    db_item = models.ActionItem(
+        transcription_id=transcription_id,
+        task=action_item.task,
+        owner=action_item.owner,
+        due_date=action_item.due_date,
+        is_manual=is_manual
+    )
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+def update_action_item(db: Session, item_id: int, action_item_update: schemas.ActionItemCreate):
+    db_item = db.query(models.ActionItem).filter(models.ActionItem.id == item_id).first()
+    if not db_item:
+        return None
+    db_item.task = action_item_update.task
+    db_item.owner = action_item_update.owner
+    db_item.due_date = action_item_update.due_date
+    db_item.is_manual = True
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+def delete_action_item(db: Session, item_id: int):
+    db_item = db.query(models.ActionItem).filter(models.ActionItem.id == item_id).first()
+    if not db_item:
+        return None
+    db.delete(db_item)
+    db.commit()
+    return db_item
 
 def update_meeting_processing_details(db: Session, meeting_id: int, **kwargs):
     """Update meeting processing details like stage, progress, error messages, etc."""

@@ -58,6 +58,13 @@ class Meeting(Base):
     model_configuration = relationship("ModelConfiguration", backref="meetings")
     chat_messages = relationship("ChatMessage", back_populates="meeting", cascade="all, delete-orphan")
 
+    # New fields for tags and folders
+    tags = Column(String, nullable=True)  # Comma-separated tags
+    folder = Column(String, nullable=True)  # Folder name or path
+
+    # Relationship for speakers
+    speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")
+
 class Transcription(Base):
     __tablename__ = "transcriptions"
 
@@ -77,8 +84,19 @@ class ActionItem(Base):
     task = Column(String)
     owner = Column(String, nullable=True)
     due_date = Column(String, nullable=True)
+    # Manual edit tracking
+    is_manual = Column(Boolean, default=False)  # True if manually added/edited
 
     transcription = relationship("Transcription", back_populates="action_items")
+class Speaker(Base):
+    __tablename__ = "speakers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    name = Column(String, nullable=False)  # Speaker name
+    label = Column(String, nullable=True)  # Diarization label (e.g., Speaker 1)
+
+    meeting = relationship("Meeting", back_populates="speakers")
 
 class DiarizationTiming(Base):
     __tablename__ = "diarization_timings"

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 import shutil
+import re
 
 from .. import crud, models, schemas
 from ..core import chat
@@ -91,11 +92,22 @@ def update_meeting_details(
     """
     Update a meeting's details, e.g., rename it.
     """
-    db_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting=meeting)
+    # Validate the meeting exists
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
     if db_meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    return db_meeting
-
+    
+    # Validate filename if provided
+    if meeting.filename and not meeting.filename.strip():
+        raise HTTPException(status_code=400, detail="Filename cannot be empty")
+    
+    try:
+        updated_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting=meeting)
+        print(f"Successfully updated meeting {meeting_id} with new filename: {meeting.filename}")
+        return updated_meeting
+    except Exception as e:
+        print(f"Error updating meeting {meeting_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update meeting")
 
 @router.post("/{meeting_id}/restart-processing", response_model=schemas.Meeting)
 def restart_meeting_processing(meeting_id: int, db: Session = Depends(get_db)):
@@ -164,18 +176,146 @@ def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     # Attempt to delete the file
+    file_deleted = False
     try:
-        if os.path.exists(db_meeting.filepath):
+        if db_meeting.filepath and os.path.exists(db_meeting.filepath):
             os.remove(db_meeting.filepath)
+            file_deleted = True
+            print(f"Successfully deleted file: {db_meeting.filepath}")
+        else:
+            print(f"File not found or path empty: {db_meeting.filepath}")
     except OSError as e:
         # Log this error, but don't block deletion of the DB record
         print(f"Error deleting file {db_meeting.filepath}: {e}")
 
     # Delete the meeting from the database
-    crud.delete_meeting(db, meeting_id=meeting_id)
+    try:
+        crud.delete_meeting(db, meeting_id=meeting_id)
+        print(f"Successfully deleted meeting {meeting_id} from database")
+    except Exception as e:
+        print(f"Error deleting meeting {meeting_id} from database: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete meeting from database")
 
     return # Should return 204 No Content
 
+# Speaker CRUD endpoints
+@router.post("/{meeting_id}/speakers", response_model=schemas.Speaker)
+def add_speaker(meeting_id: int, speaker: schemas.SpeakerCreate, db: Session = Depends(get_db)):
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    db_speaker = models.Speaker(
+        meeting_id=meeting_id,
+        name=speaker.name,
+        label=speaker.label
+    )
+    db.add(db_speaker)
+    db.commit()
+    db.refresh(db_speaker)
+    return db_speaker
+
+@router.get("/{meeting_id}/speakers", response_model=List[schemas.Speaker])
+def get_speakers(meeting_id: int, db: Session = Depends(get_db)):
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return db_meeting.speakers
+
+@router.put("/speakers/{speaker_id}", response_model=schemas.Speaker)
+def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session = Depends(get_db)):
+    db_speaker = db.query(models.Speaker).filter(models.Speaker.id == speaker_id).first()
+    if not db_speaker:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+    
+    # Store old values for updating transcript and action items
+    old_name = db_speaker.name
+    old_label = db_speaker.label
+    
+    # Update speaker
+    db_speaker.name = speaker.name
+    db_speaker.label = speaker.label
+    
+    # Update transcript text and action items if speaker name changed
+    if old_name != speaker.name or old_label != speaker.label:
+        # Get the meeting with all related data
+        meeting = db.query(models.Meeting).filter(models.Meeting.id == db_speaker.meeting_id).first()
+        if meeting and meeting.transcription:
+            
+            # Update transcript text: replace speaker references
+            if meeting.transcription.full_text:
+                updated_text = meeting.transcription.full_text
+                
+                # Replace speaker labels at the start of lines (typical transcript format)
+                # This handles both old_label and old_name patterns in speaker positions
+                
+                patterns_to_replace = []
+                
+                # Add old label pattern if it exists and is different from new name
+                if old_label and speaker.name and old_label != speaker.name:
+                    patterns_to_replace.append(old_label)
+                
+                # Add old name pattern if it exists, is different from new name, and wasn't already added
+                if old_name and old_name != speaker.name and old_name != old_label:
+                    patterns_to_replace.append(old_name)
+                
+                # Apply replacements for speaker names at beginning of lines (transcript format)
+                for pattern_text in patterns_to_replace:
+                    # Match speaker name at start of line or after whitespace, followed by colon
+                    pattern = rf'^(\s*){re.escape(pattern_text)}(\s*:)'
+                    updated_text = re.sub(pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
+                    
+                    # Also handle cases where speaker name appears in brackets or parentheses
+                    bracket_pattern = rf'(\[|\()\s*{re.escape(pattern_text)}\s*(\]|\))'
+                    updated_text = re.sub(bracket_pattern, rf'\1{speaker.name}\2', updated_text)
+                
+                meeting.transcription.full_text = updated_text
+                
+            # Update action items owner field
+            for action_item in meeting.transcription.action_items:
+                # Update if action item owner matches old speaker name or label
+                if action_item.owner == old_name or action_item.owner == old_label:
+                    action_item.owner = speaker.name
+    
+    db.commit()
+    db.refresh(db_speaker)
+    return db_speaker
+
+@router.delete("/speakers/{speaker_id}", status_code=204)
+def delete_speaker(speaker_id: int, db: Session = Depends(get_db)):
+    db_speaker = db.query(models.Speaker).filter(models.Speaker.id == speaker_id).first()
+    if not db_speaker:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+    db.delete(db_speaker)
+    db.commit()
+    return
+
+# Manual Action Item CRUD endpoints
+@router.post("/transcriptions/{transcription_id}/action-items", response_model=schemas.ActionItem)
+def add_action_item(transcription_id: int, action_item: schemas.ActionItemCreate, db: Session = Depends(get_db)):
+    return crud.create_action_item(db, transcription_id, action_item, is_manual=True)
+
+@router.put("/action-items/{item_id}", response_model=schemas.ActionItem)
+def update_action_item(item_id: int, action_item: schemas.ActionItemCreate, db: Session = Depends(get_db)):
+    return crud.update_action_item(db, item_id, action_item)
+
+@router.delete("/action-items/{item_id}", status_code=204)
+def delete_action_item(item_id: int, db: Session = Depends(get_db)):
+    crud.delete_action_item(db, item_id)
+    return
+
+# Meeting tags/folder update endpoint
+@router.put("/{meeting_id}/tags-folder", response_model=schemas.Meeting)
+def update_meeting_tags_folder(meeting_id: int, tags: Optional[str] = Body(None), folder: Optional[str] = Body(None), db: Session = Depends(get_db)):
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if tags is not None:
+        db_meeting.tags = tags
+    if folder is not None:
+        db_meeting.folder = folder
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
 
 @router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
 async def chat_with_meeting_endpoint(

@@ -116,17 +116,33 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   };
 
   const handleRenameConfirm = async () => {
-    if (newName && newName.trim() && newName !== selectedMeeting.filename) {
-      try {
-        await api.renameMeeting(selectedMeeting.id, newName.trim());
-        onMeetingUpdate();
-      } catch (err) {
-        setError('Failed to rename meeting.');
-        console.error(err);
-      }
+    if (!newName || !newName.trim()) {
+      setError('Please enter a valid name.');
+      return;
     }
-    setRenameDialogOpen(false);
-    setNewName('');
+    
+    const trimmedName = newName.trim();
+    if (trimmedName === selectedMeeting.filename) {
+      setRenameDialogOpen(false);
+      setNewName('');
+      return; // No change needed
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await api.renameMeeting(selectedMeeting.id, trimmedName);
+      console.log('Rename response:', response);
+      setError(null);
+      onMeetingUpdate();
+      setRenameDialogOpen(false);
+      setNewName('');
+    } catch (err) {
+      console.error('Rename meeting error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to rename meeting. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDelete = () => {
@@ -136,13 +152,19 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
 
   const handleDeleteConfirm = async () => {
     try {
+      setIsLoading(true);
       await api.deleteMeeting(selectedMeeting.id);
+      setError(null);
       onMeetingUpdate();
+      setDeleteDialogOpen(false);
     } catch (err) {
-      setError('Failed to delete meeting.');
-      console.error(err);
+      console.error('Delete meeting error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to delete meeting. Please try again.';
+      setError(errorMessage);
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsLoading(false);
     }
-    setDeleteDialogOpen(false);
   };
 
   const getStatusIcon = (status) => {
@@ -318,7 +340,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
       </Menu>
 
       {/* Rename Dialog */}
-      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)}>
+      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Rename Meeting</DialogTitle>
         <DialogContent>
           <TextField
@@ -329,12 +351,26 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
             variant="outlined"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            error={newName !== null && newName.trim().length === 0}
+            helperText={newName !== null && newName.trim().length === 0 ? "Meeting name cannot be empty" : ""}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && newName && newName.trim()) {
+                handleRenameConfirm();
+              }
+            }}
+            disabled={isLoading}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleRenameConfirm} variant="contained">
-            Rename
+          <Button onClick={() => setRenameDialogOpen(false)} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleRenameConfirm} 
+            variant="contained"
+            disabled={isLoading || !newName || !newName.trim() || newName.trim() === selectedMeeting?.filename}
+          >
+            {isLoading ? 'Renaming...' : 'Rename'}
           </Button>
         </DialogActions>
       </Dialog>

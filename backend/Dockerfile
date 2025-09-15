@@ -37,8 +37,8 @@ RUN if [ -d "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" ]; then \
 # Copy the rest of the application code
 COPY . /app
 
-# Create cache directory
-RUN mkdir -p /app/cache
+# Create necessary directories
+RUN mkdir -p /app/cache /app/uploads
 
 # Set environment variable for cuDNN library path
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH

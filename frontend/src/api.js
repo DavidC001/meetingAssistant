@@ -19,6 +19,19 @@ const api = {
   deleteMeeting: (meetingId) => {
     return client.delete(`/api/v1/meetings/${meetingId}`);
   },
+  // Speaker API
+  addSpeaker: (meetingId, speaker) => client.post(`/api/v1/meetings/${meetingId}/speakers`, speaker),
+  getSpeakers: (meetingId) => client.get(`/api/v1/meetings/${meetingId}/speakers`),
+  updateSpeaker: (speakerId, speaker) => client.put(`/api/v1/meetings/speakers/${speakerId}`, speaker),
+  deleteSpeaker: (speakerId) => client.delete(`/api/v1/meetings/speakers/${speakerId}`),
+
+  // Action Item API
+  addActionItem: (transcriptionId, actionItem) => client.post(`/api/v1/meetings/transcriptions/${transcriptionId}/action-items`, actionItem),
+  updateActionItem: (itemId, actionItem) => client.put(`/api/v1/meetings/action-items/${itemId}`, actionItem),
+  deleteActionItem: (itemId) => client.delete(`/api/v1/meetings/action-items/${itemId}`),
+
+  // Tags/Folder API
+  updateMeetingTagsFolder: (meetingId, tags, folder) => client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder }),
 };
 
 

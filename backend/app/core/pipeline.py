@@ -230,8 +230,8 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 # Create a progress callback for transcription
                 def transcription_progress_callback(current: int, total: int):
                     if total > 0:
-                        stage_progress = (current / total) * 100.0
-                        overall_progress = 50.0 + (stage_progress * 0.25)  # Transcription is 25% of overall
+                        stage_progress = round((current / total) * 100.0, 1)
+                        overall_progress = round(50.0 + (stage_progress * 0.25), 1)  # Transcription is 25% of overall
                         crud.update_meeting_processing_details(
                             db, meeting_id,
                             stage_progress=stage_progress,

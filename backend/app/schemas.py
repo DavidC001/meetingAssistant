@@ -89,6 +89,21 @@ class ActionItemCreate(ActionItemBase):
 class ActionItem(ActionItemBase):
     id: int
     transcription_id: int
+    is_manual: bool = False
+
+    class Config:
+        from_attributes = True
+# Speaker Schemas
+class SpeakerBase(BaseModel):
+    name: str
+    label: Optional[str] = None
+
+class SpeakerCreate(SpeakerBase):
+    pass
+
+class Speaker(SpeakerBase):
+    id: int
+    meeting_id: int
 
     class Config:
         from_attributes = True
@@ -175,6 +190,9 @@ class Meeting(MeetingBase):
     processing_logs: Optional[str] = None
     celery_task_id: Optional[str] = None
     
+    tags: Optional[str] = None
+    folder: Optional[str] = None
+    speakers: List[Speaker] = []
     transcription: Optional[Transcription] = None
     model_configuration: Optional[ModelConfiguration] = None
 
