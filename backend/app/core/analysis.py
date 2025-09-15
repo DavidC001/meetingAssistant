@@ -1,16 +1,10 @@
 import os
 import json
-import requests
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .retry import retry_api_call
-
-# Optional import for OpenAI
-try:
-    import openai
-except ImportError:
-    openai = None
+from .providers import ProviderFactory, LLMConfig
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -23,114 +17,117 @@ SYSTEM_PROMPT = (
     "Return ONLY the JSON object, with no additional text or explanations."
 )
 
+def get_default_analysis_config() -> LLMConfig:
+    """Get default analysis configuration from environment or fallback"""
+    # Try to determine the best available provider
+    if os.getenv("OPENAI_API_KEY"):
+        return LLMConfig(
+            provider="openai",
+            model=os.getenv("ANALYSIS_MODEL", "gpt-4o-mini"),
+            api_key_env="OPENAI_API_KEY",
+            max_tokens=4000,
+            temperature=0.1
+        )
+    else:
+        # Fallback to Ollama
+        return LLMConfig(
+            provider="ollama",
+            model=os.getenv("ANALYSIS_MODEL", "llama3"),
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            max_tokens=4000,
+            temperature=0.1
+        )
+
 @retry_api_call(max_retries=3, delay=5.0)
-def _call_openai(transcript: str, model: str) -> Dict[str, Any]:
-    """Calls the OpenAI API for analysis."""
-    if openai is None:
-        raise RuntimeError("OpenAI package not installed. Please run 'pip install openai'.")
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY environment variable not set.")
-
-    logger.info(f"Sending transcript to OpenAI model: {model}")
-    resp = openai.chat.completions.create(
-        model=model,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript},
-        ],
-    )
-    return json.loads(resp.choices[0].message.content)
-
-@retry_api_call(max_retries=3, delay=5.0)
-def _call_ollama(transcript: str, model: str, url: str) -> Dict[str, Any]:
-    """Calls a local Ollama instance for analysis."""
-    logger.info(f"Sending transcript to Ollama model: {model} at {url}")
-
-    # Check if Ollama is running
+async def analyze_transcript_with_provider(transcript: str, config: LLMConfig) -> Dict[str, Any]:
+    """Analyze transcript using the specified provider configuration"""
     try:
-        requests.get(f"{url}/api/tags", timeout=5).raise_for_status()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Ollama is not accessible at {url}: {e}")
-        raise RuntimeError(f"Ollama is not running or accessible at {url}.")
-
-    # Make the chat request
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript},
-        ],
-        "format": "json",
-        "stream": False,
-        "options": {
-            "num_ctx": 32768  # Increase context window for longer transcripts
-        }
-    }
-
-    try:
-        r = requests.post(f"{url}/api/chat", json=payload, timeout=300)
-        r.raise_for_status()
-        content = r.json().get("message", {}).get("content", "{}")
-        return json.loads(content)
-    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
-        logger.error(f"Ollama request failed: {e}")
-        raise RuntimeError(f"Failed to get a valid JSON response from Ollama: {e}")
+        provider = ProviderFactory.create_provider(config)
+        result = await provider.analyze_transcript(transcript, SYSTEM_PROMPT)
+        logger.info(f"Analysis completed using {config.provider} provider")
+        return result
+    except Exception as e:
+        logger.error(f"Analysis failed with {config.provider}: {e}")
+        raise
 
 def analyse_meeting(
+    transcript: str,
+    config: Optional[LLMConfig] = None,
+    progress_callback: Optional[object] = None
+) -> Dict[str, Any]:
+    """
+    Analyzes a meeting transcript using the specified or default LLM configuration.
+    Includes automatic fallback and comprehensive error handling.
+    
+    Args:
+        transcript: The meeting transcript to analyze
+        config: LLM configuration (if None, uses default)
+        progress_callback: Optional progress callback
+    """
+    import asyncio
+    
+    logger.info("Analyzing transcript...")
+    
+    if progress_callback:
+        progress_callback(10, "Preparing transcript for analysis...")
+
+    # Use provided config or get default
+    if config is None:
+        config = get_default_analysis_config()
+    
+    logger.info(f"Using {config.provider} provider for analysis")
+
+    try:
+        if progress_callback:
+            progress_callback(30, f"Sending transcript to {config.provider}...")
+        
+        # Run the async analysis in a sync context
+        result = asyncio.run(analyze_transcript_with_provider(transcript, config))
+        
+        if progress_callback:
+            progress_callback(100, "Analysis completed successfully")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        
+        if progress_callback:
+            progress_callback(100, "Analysis failed - using fallback")
+        
+        # Return a basic fallback structure
+        return {
+            "summary": ["Meeting analysis failed due to technical issues."],
+            "decisions": [],
+            "action_items": [],
+            "error": f"Analysis failed: {str(e)}"
+        }
+
+# Legacy function for backward compatibility
+def analyse_meeting_legacy(
     transcript: str,
     backend: str = "auto",
     openai_model: str = "gpt-4o-mini",
     ollama_model: str = "llama3",
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = "http://localhost:11434",
+    progress_callback: Optional[object] = None
 ) -> Dict[str, Any]:
-    """
-    Analyzes a meeting transcript using the specified LLM backend.
-    Includes automatic fallback and comprehensive error handling.
-    """
-    logger.info(f"Analyzing transcript using backend: {backend}")
-
-    last_exception = None
-
-    # Auto mode logic with fallback
-    if backend == "auto":
-        if os.getenv("OPENAI_API_KEY") and openai:
-            try:
-                logger.info("Auto-selecting OpenAI backend.")
-                return _call_openai(transcript, openai_model)
-            except Exception as e:
-                logger.warning(f"OpenAI backend failed: {e}")
-                last_exception = e
-        
-        try:
-            logger.info("Falling back to Ollama backend.")
-            return _call_ollama(transcript, ollama_model, ollama_url)
-        except Exception as e:
-            logger.error(f"Ollama backend also failed: {e}")
-            last_exception = e
-
-    # Explicit backend selection
-    elif backend == "openai":
-        try:
-            return _call_openai(transcript, openai_model)
-        except Exception as e:
-            logger.error(f"OpenAI backend failed: {e}")
-            last_exception = e
-
+    """Legacy wrapper for analyse_meeting with old parameter format"""
+    
+    # Convert legacy parameters to new LLMConfig format
+    if backend == "openai":
+        config = LLMConfig(
+            provider="openai",
+            model=openai_model,
+            api_key_env="OPENAI_API_KEY"
+        )
     elif backend == "ollama":
-        try:
-            return _call_ollama(transcript, ollama_model, ollama_url)
-        except Exception as e:
-            logger.error(f"Ollama backend failed: {e}")
-            last_exception = e
-    else:
-        raise ValueError(f"Invalid LLM backend specified: {backend}")
-
-    # If all attempts failed, return a basic structure
-    logger.error("All LLM backends failed. Returning basic analysis.")
-    return {
-        "summary": ["Meeting analysis failed due to technical issues."],
-        "decisions": [],
-        "action_items": [],
-        "error": f"Analysis failed: {last_exception}"
-    }
+        config = LLMConfig(
+            provider="ollama",
+            model=ollama_model,
+            base_url=ollama_url
+        )
+    else:  # auto mode
+        config = None  # Will use default detection
+    
+    return analyse_meeting(transcript, config, progress_callback)

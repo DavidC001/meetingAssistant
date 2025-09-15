@@ -27,7 +27,8 @@ def process_meeting_task(self, meeting_id: int):
             processing_start_time=time.time(),
             current_stage=models.ProcessingStage.CONVERSION.value,
             stage_start_time=time.time(),
-            progress_percentage=0.0,
+            stage_progress=0.0,
+            overall_progress=0.0,
             processing_logs=['Processing started']
         )
         logger.info(f"Meeting {meeting_id} status updated to PROCESSING.")
@@ -55,7 +56,8 @@ def process_meeting_task(self, meeting_id: int):
             db, 
             meeting_id, 
             error_message=error_message,
-            progress_percentage=0.0
+            stage_progress=0.0,
+            overall_progress=0.0
         )
         
         # You might want to re-raise the exception if you want Celery to record it as a failure

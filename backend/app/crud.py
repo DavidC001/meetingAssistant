@@ -15,6 +15,7 @@ def create_meeting(db: Session, meeting: schemas.MeetingCreate, file_path: str, 
         status=models.MeetingStatus.PENDING.value,
         transcription_language=meeting.transcription_language or "en-US",
         number_of_speakers=meeting.number_of_speakers or "auto",
+        model_configuration_id=meeting.model_configuration_id,
         file_size=file_size,
         celery_task_id=celery_task_id
     )
@@ -62,6 +63,11 @@ def delete_meeting(db: Session, meeting_id: int):
             except Exception as e:
                 print(f"Error cancelling Celery task {db_meeting.celery_task_id}: {e}")
         
+        # Delete related records first to avoid foreign key constraint violations
+        # Delete diarization timings
+        db.query(models.DiarizationTiming).filter(models.DiarizationTiming.meeting_id == meeting_id).delete()
+        
+        # Delete the meeting (this will cascade delete transcription and action items due to the cascade settings)
         db.delete(db_meeting)
         db.commit()
     return db_meeting
@@ -108,7 +114,7 @@ def update_meeting_processing_details(db: Session, meeting_id: int, **kwargs):
     if not db_meeting:
         return None
     
-    # Handle processing_logs specially to append instead of replace
+    # Handle processing_logs specially to append instead of replace, but limit total length
     if 'processing_logs' in kwargs:
         new_logs = kwargs.pop('processing_logs')
         if isinstance(new_logs, list):
@@ -120,7 +126,12 @@ def update_meeting_processing_details(db: Session, meeting_id: int, **kwargs):
             db_meeting.processing_logs = new_logs_str
         else:
             # Append new logs to existing ones
-            db_meeting.processing_logs = db_meeting.processing_logs + '\n' + new_logs_str
+            combined_logs = db_meeting.processing_logs + '\n' + new_logs_str
+            # Keep only the last 50 lines to prevent infinite growth
+            lines = combined_logs.split('\n')
+            if len(lines) > 50:
+                lines = lines[-50:]
+            db_meeting.processing_logs = '\n'.join(lines)
     
     # Update timestamp fields automatically
     if 'processing_start_time' in kwargs and isinstance(kwargs['processing_start_time'], (int, float)):
@@ -139,4 +150,200 @@ def update_meeting_processing_details(db: Session, meeting_id: int, **kwargs):
     db.commit()
     db.refresh(db_meeting)
     return db_meeting
-    return db_meeting
+
+# Diarization timing CRUD operations
+def create_diarization_timing(db: Session, meeting_id: int, audio_duration_seconds: float, 
+                             processing_time_seconds: float, num_speakers: int = None, 
+                             file_size_bytes: int = None):
+    """Record diarization timing data for future predictions."""
+    db_timing = models.DiarizationTiming(
+        meeting_id=meeting_id,
+        audio_duration_seconds=audio_duration_seconds,
+        processing_time_seconds=processing_time_seconds,
+        num_speakers=num_speakers,
+        file_size_bytes=file_size_bytes
+    )
+    db.add(db_timing)
+    db.commit()
+    db.refresh(db_timing)
+    return db_timing
+
+def get_diarization_timings(db: Session, limit: int = 20):
+    """Get recent diarization timing data for calculating averages."""
+    return db.query(models.DiarizationTiming).order_by(models.DiarizationTiming.created_at.desc()).limit(limit).all()
+
+def get_average_diarization_rate(db: Session, limit: int = 10):
+    """Calculate average processing rate (seconds of processing per second of audio)."""
+    timings = get_diarization_timings(db, limit)
+    if not timings:
+        return None
+    
+    rates = []
+    for timing in timings:
+        if timing.audio_duration_seconds > 0:
+            rate = timing.processing_time_seconds / timing.audio_duration_seconds
+            rates.append(rate)
+    
+    return sum(rates) / len(rates) if rates else None
+
+# API Key CRUD operations
+def get_api_keys(db: Session):
+    return db.query(models.APIKey).filter(models.APIKey.is_active == True).all()
+
+def get_api_key(db: Session, key_id: int):
+    return db.query(models.APIKey).filter(models.APIKey.id == key_id).first()
+
+def get_api_key_by_name(db: Session, name: str):
+    return db.query(models.APIKey).filter(models.APIKey.name == name).first()
+
+def get_api_keys_by_provider(db: Session, provider: str):
+    return db.query(models.APIKey).filter(
+        models.APIKey.provider == provider,
+        models.APIKey.is_active == True
+    ).all()
+
+def create_api_key(db: Session, api_key: schemas.APIKeyCreate):
+    db_api_key = models.APIKey(**api_key.dict())
+    db.add(db_api_key)
+    db.commit()
+    db.refresh(db_api_key)
+    return db_api_key
+
+def update_api_key(db: Session, key_id: int, api_key_update: schemas.APIKeyUpdate):
+    db_api_key = get_api_key(db, key_id)
+    if not db_api_key:
+        return None
+    
+    update_data = api_key_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_api_key, field, value)
+    
+    db.commit()
+    db.refresh(db_api_key)
+    return db_api_key
+
+def delete_api_key(db: Session, key_id: int):
+    db_api_key = get_api_key(db, key_id)
+    if not db_api_key:
+        return None
+    
+    # Soft delete by setting is_active to False
+    db_api_key.is_active = False
+    db.commit()
+    return db_api_key
+
+# Model Configuration CRUD operations
+def get_model_configurations(db: Session):
+    """Get all model configurations"""
+    return db.query(models.ModelConfiguration).all()
+
+def get_model_configuration(db: Session, config_id: int):
+    """Get a specific model configuration by ID"""
+    return db.query(models.ModelConfiguration).filter(models.ModelConfiguration.id == config_id).first()
+
+def get_model_configuration_by_name(db: Session, name: str):
+    """Get a model configuration by name"""
+    return db.query(models.ModelConfiguration).filter(models.ModelConfiguration.name == name).first()
+
+def get_default_model_configuration(db: Session):
+    """Get the default model configuration"""
+    return db.query(models.ModelConfiguration).filter(models.ModelConfiguration.is_default == True).first()
+
+def create_model_configuration(db: Session, config: schemas.ModelConfigurationCreate):
+    """Create a new model configuration"""
+    config_dict = config.dict()
+    
+    # Handle environment-based API keys (negative IDs) by setting them to None
+    # This allows the foreign key constraint to pass while preserving the logic
+    if config_dict.get("chat_api_key_id") and config_dict["chat_api_key_id"] < 0:
+        config_dict["chat_api_key_id"] = None
+    if config_dict.get("analysis_api_key_id") and config_dict["analysis_api_key_id"] < 0:
+        config_dict["analysis_api_key_id"] = None
+    
+    db_config = models.ModelConfiguration(**config_dict)
+    
+    # If this is the first configuration or explicitly set as default, make it default
+    if config.is_default or not get_model_configurations(db):
+        # Unset any existing default
+        db.query(models.ModelConfiguration).update({models.ModelConfiguration.is_default: False})
+        db_config.is_default = True
+    
+    db.add(db_config)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+def update_model_configuration(db: Session, config_id: int, config_update: schemas.ModelConfigurationUpdate):
+    """Update a model configuration"""
+    db_config = get_model_configuration(db, config_id)
+    if not db_config:
+        return None
+    
+    update_data = config_update.dict(exclude_unset=True)
+    
+    # Handle environment-based API keys (negative IDs) by setting them to None
+    if "chat_api_key_id" in update_data and update_data["chat_api_key_id"] and update_data["chat_api_key_id"] < 0:
+        update_data["chat_api_key_id"] = None
+    if "analysis_api_key_id" in update_data and update_data["analysis_api_key_id"] and update_data["analysis_api_key_id"] < 0:
+        update_data["analysis_api_key_id"] = None
+    
+    for field, value in update_data.items():
+        setattr(db_config, field, value)
+    
+    # Handle default setting
+    if config_update.is_default:
+        # Unset any existing default
+        db.query(models.ModelConfiguration).update({models.ModelConfiguration.is_default: False})
+        db_config.is_default = True
+    
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+def delete_model_configuration(db: Session, config_id: int):
+    """Delete a model configuration"""
+    db_config = get_model_configuration(db, config_id)
+    if db_config:
+        db.delete(db_config)
+        db.commit()
+    return db_config
+
+def set_default_model_configuration(db: Session, config_id: int):
+    """Set a model configuration as default"""
+    # Unset any existing default
+    db.query(models.ModelConfiguration).update({models.ModelConfiguration.is_default: False})
+    
+    # Set the new default
+    db_config = get_model_configuration(db, config_id)
+    if db_config:
+        db_config.is_default = True
+        db.commit()
+        db.refresh(db_config)
+    
+    return db_config
+
+# Chat Message CRUD operations
+def create_chat_message(db: Session, meeting_id: int, role: str, content: str):
+    """Create a new chat message"""
+    db_message = models.ChatMessage(
+        meeting_id=meeting_id,
+        role=role,
+        content=content
+    )
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+    return db_message
+
+def get_chat_history(db: Session, meeting_id: int, limit: int = 50):
+    """Get chat history for a meeting"""
+    return db.query(models.ChatMessage).filter(
+        models.ChatMessage.meeting_id == meeting_id
+    ).order_by(models.ChatMessage.created_at.asc()).limit(limit).all()
+
+def clear_chat_history(db: Session, meeting_id: int):
+    """Clear all chat messages for a meeting"""
+    db.query(models.ChatMessage).filter(
+        models.ChatMessage.meeting_id == meeting_id
+    ).delete()
+    db.commit()

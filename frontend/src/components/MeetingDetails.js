@@ -85,18 +85,22 @@ const MeetingDetails = () => {
 
   // Add restart processing function
   const handleRestartProcessing = async () => {
+    console.log('handleRestartProcessing called'); // Debug log
     if (!window.confirm('Are you sure you want to restart processing? This will cancel any current processing and start over.')) {
+      console.log('User cancelled restart'); // Debug log
       return;
     }
     
     try {
+      console.log('Starting restart processing request...'); // Debug log
       setIsUpdating(true);
       const response = await api.post(`/api/v1/meetings/${meetingId}/restart-processing`);
+      console.log('Restart processing response:', response.data); // Debug log
       setMeeting(response.data);
       setError(null);
     } catch (err) {
+      console.error('Restart processing error:', err); // Enhanced debug log
       setError('Failed to restart processing.');
-      console.error(err);
     } finally {
       setIsUpdating(false);
     }
@@ -181,9 +185,9 @@ const MeetingDetails = () => {
       let pollInterval;
       if (currentMeeting.status === 'pending') {
         pollInterval = 10000; // 10 seconds for pending
-      } else if (currentMeeting.progress_percentage && currentMeeting.progress_percentage > 80) {
+      } else if (currentMeeting.overall_progress && currentMeeting.overall_progress > 80) {
         pollInterval = 3000; // 3 seconds when close to completion
-      } else if (currentMeeting.progress_percentage && currentMeeting.progress_percentage > 50) {
+      } else if (currentMeeting.overall_progress && currentMeeting.overall_progress > 50) {
         pollInterval = 5000; // 5 seconds in middle stages
       } else {
         pollInterval = 8000; // 8 seconds for early stages
@@ -401,11 +405,11 @@ const MeetingDetails = () => {
             
             <Box sx={{ mb: 3 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Overall Progress: {meeting.progress_percentage || 0}%
+                Overall Progress: {meeting.overall_progress || 0}%
               </Typography>
               <LinearProgress 
                 variant="determinate" 
-                value={meeting.progress_percentage || 0} 
+                value={meeting.overall_progress || 0} 
                 sx={{ height: 8, borderRadius: 4, mb: 2 }}
               />
               
@@ -472,11 +476,11 @@ const MeetingDetails = () => {
                     <Typography variant="body2" color="text.secondary">
                       ~{meeting.estimated_duration} minutes
                     </Typography>
-                    {meeting.processing_start_time && meeting.progress_percentage > 0 && (
+                    {meeting.processing_start_time && meeting.overall_progress > 0 && (
                       <Typography variant="caption" color="text.secondary">
                         {(() => {
                           const elapsed = (new Date() - new Date(meeting.processing_start_time)) / (1000 * 60);
-                          const totalEstimated = elapsed / (meeting.progress_percentage / 100);
+                          const totalEstimated = elapsed / (meeting.overall_progress / 100);
                           const remaining = Math.max(0, totalEstimated - elapsed);
                           return `~${Math.ceil(remaining)} min remaining`;
                         })()}
@@ -497,8 +501,8 @@ const MeetingDetails = () => {
                       {(meeting.file_size / (1024 * 1024)).toFixed(1)} MB
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Processing rate: {meeting.processing_start_time && meeting.progress_percentage > 0 ? 
-                        `${((meeting.file_size / (1024 * 1024)) / ((new Date() - new Date(meeting.processing_start_time)) / (1000 * 60)) * (meeting.progress_percentage / 100)).toFixed(1)} MB/min` : 
+                      Processing rate: {meeting.processing_start_time && meeting.overall_progress > 0 ? 
+                        `${((meeting.file_size / (1024 * 1024)) / ((new Date() - new Date(meeting.processing_start_time)) / (1000 * 60)) * (meeting.overall_progress / 100)).toFixed(1)} MB/min` : 
                         'Calculating...'}
                     </Typography>
                   </Paper>

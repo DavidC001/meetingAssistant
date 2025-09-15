@@ -106,6 +106,18 @@ def restart_meeting_processing(meeting_id: int, db: Session = Depends(get_db)):
     if db_meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
+    # Check if meeting is already fully completed
+    if db_meeting.status == models.MeetingStatus.COMPLETED.value:
+        is_fully_completed = (db_meeting.transcription and 
+                             db_meeting.transcription.summary and 
+                             db_meeting.transcription.full_text and 
+                             db_meeting.transcription.action_items)
+        if is_fully_completed:
+            raise HTTPException(
+                status_code=400, 
+                detail="Meeting processing is already completed. All transcription, analysis, and action items are available."
+            )
+    
     # Only allow restart for failed, completed, or stuck processing meetings
     if db_meeting.status not in [models.MeetingStatus.FAILED.value, models.MeetingStatus.COMPLETED.value, models.MeetingStatus.PROCESSING.value]:
         raise HTTPException(
@@ -181,6 +193,9 @@ async def chat_with_meeting_endpoint(
     if not db_meeting.transcription or not db_meeting.transcription.full_text:
         raise HTTPException(status_code=404, detail="Transcription not available for this meeting")
 
+    # Save user message to database
+    crud.create_chat_message(db, meeting_id, "user", request.query)
+
     # Get the last 5 messages from the chat history
     chat_history = request.chat_history or []
 
@@ -191,4 +206,37 @@ async def chat_with_meeting_endpoint(
         chat_history=chat_history
     )
 
+    # Save assistant response to database
+    crud.create_chat_message(db, meeting_id, "assistant", response_text)
+
     return schemas.ChatResponse(response=response_text)
+
+@router.get("/{meeting_id}/chat/history", response_model=schemas.ChatHistoryResponse)
+def get_chat_history_endpoint(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get chat history for a meeting.
+    """
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    chat_messages = crud.get_chat_history(db, meeting_id)
+    return schemas.ChatHistoryResponse(history=chat_messages)
+
+@router.delete("/{meeting_id}/chat/history")
+def clear_chat_history_endpoint(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Clear chat history for a meeting.
+    """
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    crud.clear_chat_history(db, meeting_id)
+    return {"message": "Chat history cleared successfully"}

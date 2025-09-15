@@ -7,7 +7,8 @@ from sqlalchemy import (
     ForeignKey,
     Text,
     Enum,
-    Float
+    Float,
+    Boolean
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -37,6 +38,7 @@ class Meeting(Base):
     # Processing configuration
     transcription_language = Column(String, default="en-US")
     number_of_speakers = Column(String, default="auto")  # Can be "auto" or a number as string
+    model_configuration_id = Column(Integer, ForeignKey("model_configurations.id"), nullable=True)  # Link to model configuration
     
     # Progress tracking fields
     current_stage = Column(String, nullable=True)
@@ -53,6 +55,8 @@ class Meeting(Base):
     celery_task_id = Column(String, nullable=True)  # Track Celery task ID for cancellation
 
     transcription = relationship("Transcription", back_populates="meeting", uselist=False, cascade="all, delete-orphan")
+    model_configuration = relationship("ModelConfiguration", backref="meetings")
+    chat_messages = relationship("ChatMessage", back_populates="meeting", cascade="all, delete-orphan")
 
 class Transcription(Base):
     __tablename__ = "transcriptions"
@@ -75,3 +79,75 @@ class ActionItem(Base):
     due_date = Column(String, nullable=True)
 
     transcription = relationship("Transcription", back_populates="action_items")
+
+class DiarizationTiming(Base):
+    __tablename__ = "diarization_timings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    audio_duration_seconds = Column(Float)  # Duration of the audio file
+    processing_time_seconds = Column(Float)  # Time taken for diarization
+    num_speakers = Column(Integer, nullable=True)  # Number of speakers detected
+    file_size_bytes = Column(Integer, nullable=True)  # File size for correlation
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    meeting = relationship("Meeting")
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)  # Friendly name for the API key
+    provider = Column(String, index=True)  # Provider: openai, anthropic, etc.
+    environment_variable = Column(String)  # Environment variable name containing the actual key
+    description = Column(String, nullable=True)  # Optional description
+    is_active = Column(Boolean, default=True)  # Whether this key is active
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class ModelConfiguration(Base):
+    __tablename__ = "model_configurations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)  # Configuration name (e.g., "default", "high-quality")
+    
+    # Whisper/Transcription Configuration
+    whisper_model = Column(String, default="base")  # Model size: base, small, medium, large-v3
+    whisper_provider = Column(String, default="faster-whisper")  # Provider: faster-whisper, openai-whisper
+    
+    # Chat/Conversation Configuration  
+    chat_provider = Column(String, default="openai")  # Provider: openai, ollama
+    chat_model = Column(String, default="gpt-4o-mini")  # Model name
+    chat_base_url = Column(String, nullable=True)  # Custom base URL for ollama
+    chat_api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)  # Reference to API key
+    
+    # Analysis/Summarization Configuration
+    analysis_provider = Column(String, default="openai")  # Provider: openai, ollama
+    analysis_model = Column(String, default="gpt-4o-mini")  # Model name  
+    analysis_base_url = Column(String, nullable=True)  # Custom base URL for ollama
+    analysis_api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)  # Reference to API key
+    
+    # Additional Configuration
+    max_tokens = Column(Integer, default=4000)  # Maximum tokens for responses
+    temperature = Column(Float, default=0.1)  # Temperature for LLM responses
+    
+    # Metadata
+    is_default = Column(Boolean, default=False)  # Whether this is the default configuration
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    chat_api_key = relationship("APIKey", foreign_keys=[chat_api_key_id])
+    analysis_api_key = relationship("APIKey", foreign_keys=[analysis_api_key_id])
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    role = Column(String, nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    meeting = relationship("Meeting", back_populates="chat_messages")

@@ -1,8 +1,13 @@
-from fastapi import APIRouter, HTTPException
-from typing import Dict
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from typing import Dict, List
 import os
 from pathlib import Path
 import re
+
+from ..database import get_db
+from .. import crud, schemas
+from ..models import ModelConfiguration
 
 router = APIRouter(
     prefix="/settings",
@@ -11,6 +16,12 @@ router = APIRouter(
 
 # Path to the .env file
 ENV_FILE_PATH = Path(__file__).parent.parent.parent / ".env"
+
+def mask_api_key(key_value: str) -> str:
+    """Mask an API key to show only first 3 and last 4 characters"""
+    if not key_value or len(key_value) < 8:
+        return "****"
+    return f"{key_value[:3]}{'*' * (len(key_value) - 7)}{key_value[-4:]}"
 
 def read_env_file() -> Dict[str, str]:
     """Read environment variables from .env file"""
@@ -213,3 +224,280 @@ def clear_api_tokens():
         "cleared": cleared,
         "updated_env_file": bool(env_updates)
     }
+
+# Model Configuration Endpoints
+@router.get("/model-configurations", response_model=List[schemas.ModelConfiguration])
+def get_model_configurations(db: Session = Depends(get_db)):
+    """Get all model configurations"""
+    return crud.get_model_configurations(db)
+
+@router.get("/model-configurations/{config_id}", response_model=schemas.ModelConfiguration)
+def get_model_configuration(config_id: int, db: Session = Depends(get_db)):
+    """Get a specific model configuration"""
+    config = crud.get_model_configuration(db, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Model configuration not found")
+    return config
+
+@router.post("/model-configurations", response_model=schemas.ModelConfiguration)
+def create_model_configuration(
+    config: schemas.ModelConfigurationCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new model configuration"""
+    # Check if name already exists
+    existing = crud.get_model_configuration_by_name(db, config.name)
+    if existing:
+        raise HTTPException(status_code=400, detail="Configuration name already exists")
+    
+    return crud.create_model_configuration(db, config)
+
+@router.put("/model-configurations/{config_id}", response_model=schemas.ModelConfiguration)
+def update_model_configuration(
+    config_id: int,
+    config_update: schemas.ModelConfigurationUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a model configuration"""
+    config = crud.get_model_configuration(db, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Model configuration not found")
+    
+    return crud.update_model_configuration(db, config_id, config_update)
+
+@router.delete("/model-configurations/{config_id}")
+def delete_model_configuration(config_id: int, db: Session = Depends(get_db)):
+    """Delete a model configuration"""
+    config = crud.get_model_configuration(db, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Model configuration not found")
+    
+    if config.is_default:
+        raise HTTPException(status_code=400, detail="Cannot delete the default configuration")
+    
+    crud.delete_model_configuration(db, config_id)
+    return {"message": "Model configuration deleted successfully"}
+
+@router.post("/model-configurations/{config_id}/set-default")
+def set_default_model_configuration(config_id: int, db: Session = Depends(get_db)):
+    """Set a model configuration as default"""
+    config = crud.get_model_configuration(db, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Model configuration not found")
+    
+    crud.set_default_model_configuration(db, config_id)
+    return {"message": "Default model configuration updated successfully"}
+
+@router.get("/model-providers")
+def get_available_providers():
+    """Get list of available model providers and their capabilities"""
+    return {
+        "whisper_providers": [
+            {"id": "faster-whisper", "name": "Faster Whisper", "description": "Local fast Whisper implementation"},
+        ],
+        "llm_providers": [
+            {"id": "openai", "name": "OpenAI", "description": "OpenAI GPT models", "requires_api_key": True},
+            {"id": "anthropic", "name": "Anthropic", "description": "Anthropic Claude models", "requires_api_key": True},
+            {"id": "cohere", "name": "Cohere", "description": "Cohere language models", "requires_api_key": True},
+            {"id": "gemini", "name": "Google Gemini", "description": "Google Gemini models", "requires_api_key": True},
+            {"id": "grok", "name": "Grok (xAI)", "description": "xAI Grok models", "requires_api_key": True},
+            {"id": "groq", "name": "Groq", "description": "Groq language models", "requires_api_key": True},
+            {"id": "ollama", "name": "Ollama", "description": "Local Ollama instance", "requires_api_key": False},
+            {"id": "other", "name": "Other/Custom", "description": "Custom API endpoint", "requires_api_key": True}
+        ],
+        "whisper_models": ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"],
+        "openai_models": [],
+        "anthropic_models": [],
+        "cohere_models": [],
+        "gemini_models": [],
+        "grok_models": [],
+        "groq_models": [],
+        "ollama_models": [],
+        "other_models": []
+    }
+
+# API Key Management Endpoints
+@router.get("/api-keys", response_model=List[schemas.APIKey])
+def get_api_keys(db: Session = Depends(get_db)):
+    """Get all active API keys (both from database and environment variables) with masked values"""
+    # Get database-stored API keys
+    db_api_keys = crud.get_api_keys(db)
+    
+    # Convert database keys to response format with masked values
+    result_keys = []
+    for key in db_api_keys:
+        env_value = ""
+        env_vars = read_env_file()
+        if key.environment_variable in env_vars:
+            env_value = env_vars[key.environment_variable]
+        
+        result_keys.append(schemas.APIKey(
+            id=key.id,
+            name=key.name,
+            provider=key.provider,
+            environment_variable=key.environment_variable,
+            description=key.description,
+            is_active=key.is_active,
+            created_at=key.created_at,
+            updated_at=key.updated_at,
+            masked_value=mask_api_key(env_value),
+            is_environment_key=False
+        ))
+    
+    # Get environment-based API keys not in database
+    env_vars = read_env_file()
+    env_key_patterns = {
+        'OPENAI_API_KEY': {'provider': 'openai', 'name': 'OpenAI (Environment)'},
+        'HUGGINGFACE_TOKEN': {'provider': 'huggingface', 'name': 'Hugging Face (Environment)'},
+        'ANTHROPIC_API_KEY': {'provider': 'anthropic', 'name': 'Anthropic (Environment)'},
+        'COHERE_API_KEY': {'provider': 'cohere', 'name': 'Cohere (Environment)'},
+        'GEMINI_API_KEY': {'provider': 'gemini', 'name': 'Google Gemini (Environment)'},
+        'GROK_API_KEY': {'provider': 'grok', 'name': 'Grok (Environment)'},
+        'GROQ_API_KEY': {'provider': 'groq', 'name': 'Groq (Environment)'},
+    }
+    
+    # Check environment variables and create virtual API key entries
+    env_key_counter = -1000  # Start with a clearly negative number
+    for env_var, config in env_key_patterns.items():
+        if env_var in env_vars and env_vars[env_var]:
+            # Check if this environment variable is already referenced by a database entry
+            existing_db_key = next((key for key in db_api_keys if key.environment_variable == env_var), None)
+            
+            if not existing_db_key:
+                # Create a virtual API key entry for environment-based keys
+                result_keys.append(schemas.APIKey(
+                    id=env_key_counter,  # Use clearly negative ID to indicate it's environment-based
+                    name=config['name'],
+                    provider=config['provider'],
+                    environment_variable=env_var,
+                    description=f"API key loaded from environment variable {env_var}",
+                    is_active=True,
+                    created_at=None,
+                    updated_at=None,
+                    masked_value=mask_api_key(env_vars[env_var]),
+                    is_environment_key=True
+                ))
+                env_key_counter -= 1
+    
+    return result_keys
+
+@router.post("/api-keys", response_model=schemas.APIKey)
+def create_api_key(api_key: schemas.APIKeyCreate, db: Session = Depends(get_db)):
+    """Create a new API key configuration"""
+    # Check if name already exists
+    existing = crud.get_api_key_by_name(db, api_key.name)
+    if existing:
+        raise HTTPException(status_code=400, detail="API key with this name already exists")
+    
+    created_key = crud.create_api_key(db, api_key)
+    env_vars = read_env_file()
+    env_value = env_vars.get(created_key.environment_variable, "")
+    
+    return schemas.APIKey(
+        id=created_key.id,
+        name=created_key.name,
+        provider=created_key.provider,
+        environment_variable=created_key.environment_variable,
+        description=created_key.description,
+        is_active=created_key.is_active,
+        created_at=created_key.created_at,
+        updated_at=created_key.updated_at,
+        masked_value=mask_api_key(env_value),
+        is_environment_key=False
+    )
+
+@router.get("/api-keys/{key_id}", response_model=schemas.APIKey)
+def get_api_key(key_id: int, db: Session = Depends(get_db)):
+    """Get a specific API key by ID with masked value"""
+    api_key = crud.get_api_key(db, key_id)
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    env_vars = read_env_file()
+    env_value = env_vars.get(api_key.environment_variable, "")
+    
+    return schemas.APIKey(
+        id=api_key.id,
+        name=api_key.name,
+        provider=api_key.provider,
+        environment_variable=api_key.environment_variable,
+        description=api_key.description,
+        is_active=api_key.is_active,
+        created_at=api_key.created_at,
+        updated_at=api_key.updated_at,
+        masked_value=mask_api_key(env_value),
+        is_environment_key=False
+    )
+
+@router.put("/api-keys/{key_id}", response_model=schemas.APIKey)
+def update_api_key(key_id: int, api_key_update: schemas.APIKeyUpdate, db: Session = Depends(get_db)):
+    """Update an API key configuration"""
+    # Prevent editing of environment-based keys (they have negative IDs)
+    if key_id < 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot edit environment-based API keys. These are loaded from environment variables."
+        )
+        
+    api_key = crud.update_api_key(db, key_id, api_key_update)
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    env_vars = read_env_file()
+    env_value = env_vars.get(api_key.environment_variable, "")
+    
+    return schemas.APIKey(
+        id=api_key.id,
+        name=api_key.name,
+        provider=api_key.provider,
+        environment_variable=api_key.environment_variable,
+        description=api_key.description,
+        is_active=api_key.is_active,
+        created_at=api_key.created_at,
+        updated_at=api_key.updated_at,
+        masked_value=mask_api_key(env_value),
+        is_environment_key=False
+    )
+
+@router.delete("/api-keys/{key_id}")
+def delete_api_key(key_id: int, db: Session = Depends(get_db)):
+    """Delete (deactivate) an API key"""
+    # Prevent deletion of environment-based keys (they have negative IDs)
+    if key_id < 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete environment-based API keys. These are loaded from environment variables."
+        )
+        
+    api_key = crud.delete_api_key(db, key_id)
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"message": "API key deactivated successfully"}
+
+@router.get("/api-keys/provider/{provider}", response_model=List[schemas.APIKey])
+def get_api_keys_by_provider(provider: str, db: Session = Depends(get_db)):
+    """Get all active API keys for a specific provider with masked values"""
+    db_keys = crud.get_api_keys_by_provider(db, provider)
+    env_vars = read_env_file()
+    
+    # Convert to response format with masked values
+    result_keys = []
+    for key in db_keys:
+        env_value = ""
+        if key.environment_variable in env_vars:
+            env_value = env_vars[key.environment_variable]
+        
+        result_keys.append(schemas.APIKey(
+            id=key.id,
+            name=key.name,
+            provider=key.provider,
+            environment_variable=key.environment_variable,
+            description=key.description,
+            is_active=key.is_active,
+            created_at=key.created_at,
+            updated_at=key.updated_at,
+            masked_value=mask_api_key(env_value),
+            is_environment_key=False
+        ))
+    
+    return result_keys

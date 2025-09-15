@@ -4,11 +4,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
       - cache_data:/app/cache
     env_file:
       - ./backend/.env
     environment:
+      - ENVIRONMENT=production
       - DATABASE_URL=postgresql://user:password@db/mydatabase
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -17,6 +17,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -24,16 +25,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:80"
-    volumes:
-      - ./frontend/src:/app/src
+    volumes: []
     depends_on:
       - backend
+    restart: unless-stopped
 
   worker:
     build: ./backend
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--pool=solo"]
     volumes:
-      - ./backend:/app
       - cache_data:/app/cache
     env_file:
       - ./backend/.env
@@ -56,6 +56,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+        limits:
+          memory: 4G
 
   db:
     image: postgres:15-alpine
@@ -72,6 +74,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -80,6 +83,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
