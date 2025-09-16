@@ -17,7 +17,9 @@
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/x-date-pickers": "^6.18.2",
-    "date-fns": "^2.30.0"
+    "date-fns": "^2.30.0",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
   },
   "scripts": {
     "start": "react-scripts start",

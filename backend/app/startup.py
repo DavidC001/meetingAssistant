@@ -32,6 +32,23 @@ def resume_interrupted_processing():
         logger.info(f"Found {len(interrupted_meetings)} interrupted processing job(s)")
         
         for meeting in interrupted_meetings:
+            # Check if meeting is actually already completed
+            is_completed = (meeting.transcription and 
+                          meeting.transcription.summary and 
+                          meeting.transcription.full_text and 
+                          meeting.transcription.action_items)
+            
+            if is_completed:
+                logger.info(f"Meeting {meeting.id} appears to be completed, updating status to COMPLETED")
+                crud.update_meeting_status(db, meeting.id, models.MeetingStatus.COMPLETED)
+                crud.update_meeting_processing_details(
+                    db, meeting.id,
+                    overall_progress=100.0,
+                    stage_progress=100.0,
+                    current_stage=models.ProcessingStage.ANALYSIS.value
+                )
+                continue
+            
             logger.info(f"Resuming processing for meeting {meeting.id}: {meeting.filename}")
             
             # Reset the meeting to PENDING state

@@ -7,6 +7,7 @@ from ..database import get_db
 from ..core.cache import get_cache_info, clear_cache
 from ..core.export import export_meeting_data
 from ..core.calendar import generate_ics_calendar
+from ..core.checkpoint import CheckpointManager
 from .. import crud, schemas
 
 router = APIRouter(
@@ -154,4 +155,70 @@ def clear_gpu_cache():
         "message": "GPU cache cleared",
         "memory_allocated": torch.cuda.memory_allocated(),
         "memory_reserved": torch.cuda.memory_reserved()
+    }
+
+@router.get("/checkpoints/{meeting_id}")
+def get_meeting_checkpoints(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get checkpoint information for a specific meeting."""
+    
+    # Verify meeting exists
+    meeting = crud.get_meeting(db, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    checkpoint_manager = CheckpointManager(meeting_id)
+    
+    return {
+        "meeting_id": meeting_id,
+        "completed_stages": checkpoint_manager.get_completed_stages(),
+        "metadata": checkpoint_manager.get_metadata(),
+        "resume_point": checkpoint_manager.get_resume_point(db)
+    }
+
+@router.delete("/checkpoints/{meeting_id}")
+def clear_meeting_checkpoints(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """Clear all checkpoints for a specific meeting."""
+    
+    # Verify meeting exists
+    meeting = crud.get_meeting(db, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    checkpoint_manager = CheckpointManager(meeting_id)
+    success = checkpoint_manager.clear_checkpoints()
+    
+    if success:
+        return {"message": f"Cleared all checkpoints for meeting {meeting_id}"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to clear checkpoints")
+
+@router.get("/checkpoints/{meeting_id}/validate")
+def validate_meeting_checkpoints(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """Validate all checkpoints for a specific meeting."""
+    
+    # Verify meeting exists
+    meeting = crud.get_meeting(db, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    checkpoint_manager = CheckpointManager(meeting_id)
+    completed_stages = checkpoint_manager.get_completed_stages()
+    
+    validation_results = {}
+    for stage in completed_stages:
+        validation_results[stage] = checkpoint_manager.validate_checkpoint(stage)
+    
+    return {
+        "meeting_id": meeting_id,
+        "validation_results": validation_results,
+        "all_valid": all(validation_results.values())
     }

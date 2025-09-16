@@ -19,12 +19,29 @@ def _assert_file(p: str | Path) -> Path:
 
 def _run_ffmpeg(cmd: list[str]):
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return result
     except FileNotFoundError as exc:
-        raise RuntimeError("ffmpeg executable not found on PATH") from exc
+        raise RuntimeError("ffmpeg executable not found on PATH. Please ensure FFmpeg is installed in the Docker container.") from exc
     except subprocess.CalledProcessError as exc:
-        sys.stderr.write("FFmpeg error:\n" + exc.stderr.decode() + "\n")
-        raise
+        error_msg = exc.stderr.decode() if exc.stderr else "Unknown FFmpeg error"
+        # Log the full command for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"FFmpeg command failed: {' '.join(cmd)}")
+        logger.error(f"Exit code: {exc.returncode}")
+        logger.error(f"Error output: {error_msg}")
+        
+        # Provide specific error messages for common issues
+        if exc.returncode == 254:
+            if "No such file or directory" in error_msg:
+                raise RuntimeError(f"Input file not found: {cmd[cmd.index('-i') + 1] if '-i' in cmd else 'unknown'}. Check if file exists and is accessible in the container.") from exc
+            else:
+                raise RuntimeError(f"FFmpeg processing failed with exit code 254. This usually indicates an input/output error or missing file. Error: {error_msg}") from exc
+        elif "Permission denied" in error_msg:
+            raise RuntimeError(f"Permission denied accessing file. Check file permissions. Error: {error_msg}") from exc
+        else:
+            raise RuntimeError(f"FFmpeg failed with exit code {exc.returncode}: {error_msg}") from exc
 
 def is_supported_format(file_path: str | Path) -> bool:
     """Check if file format is supported."""
@@ -40,6 +57,18 @@ def convert_to_audio(input_path: str | Path, output_path: str | Path) -> Path:
     """Convert video or audio file to WAV format using ffmpeg."""
     input_path = Path(input_path)
     output_path = Path(output_path)
+
+    # Validate that input file exists
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file does not exist: {input_path}")
+    
+    # Create output directory if it doesn't exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Log the conversion for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Converting {input_path} to {output_path}")
 
     # Use ffmpeg to convert to WAV at 16kHz, mono
     cmd = [

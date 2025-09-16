@@ -5,6 +5,9 @@ psycopg2-binary
 celery[redis]
 python-dotenv
 requests
+# PyTorch with CUDA support - installed via Docker build command
+torch>=2.0.0
+torchaudio>=2.0.0
 faster-whisper
 pyannote.audio
 tqdm

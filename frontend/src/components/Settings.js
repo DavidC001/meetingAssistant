@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import ModelConfigurations from './ModelConfigurations';
+import APIKeyManagement from './APIKeyManagement';
 import {
   Card,
   CardContent,
@@ -24,7 +26,9 @@ import {
   InputLabel,
   Snackbar,
   CircularProgress,
-  Paper
+  Paper,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -37,10 +41,13 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Save as SaveIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Tune as TuneIcon,
+  Key as KeyIcon
 } from '@mui/icons-material';
 
 const Settings = () => {
+  const [currentTab, setCurrentTab] = useState(0);
   const [settings, setSettings] = useState({
     transcriptionLanguage: 'en-US',
     enableSpeakerDiarization: true,
@@ -182,17 +189,33 @@ const Settings = () => {
     );
   }
 
+  const TabPanel = ({ children, value, index }) => (
+    <div hidden={value !== index}>
+      {value === index && <Box sx={{ p: 0 }}>{children}</Box>}
+    </div>
+  );
+
   return (
     <Box>
       <Typography variant="h4" component="h1" gutterBottom>
         Settings
       </Typography>
 
-      <Grid container spacing={3}>
-        {/* System Status */}
-        <Grid item xs={12}>
-          <Card elevation={3}>
-            <CardContent>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
+          <Tab label="System" icon={<SettingsIcon />} />
+          <Tab label="Model Configurations" icon={<TuneIcon />} />
+          <Tab label="API Keys" icon={<KeyIcon />} />
+        </Tabs>
+      </Box>
+
+      {/* System Settings Tab */}
+      <TabPanel value={currentTab} index={0}>
+        <Grid container spacing={3}>
+          {/* System Status */}
+          <Grid item xs={12}>
+            <Card elevation={3}>
+              <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <SettingsIcon sx={{ mr: 1, color: 'primary.main' }} />
                 <Typography variant="h5">System Status</Typography>
@@ -441,7 +464,18 @@ const Settings = () => {
             </Button>
           </Box>
         </Grid>
-      </Grid>
+        </Grid>
+      </TabPanel>
+
+      {/* Model Configurations Tab */}
+      <TabPanel value={currentTab} index={1}>
+        <ModelConfigurations />
+      </TabPanel>
+
+      {/* API Keys Tab */}
+      <TabPanel value={currentTab} index={2}>
+        <APIKeyManagement />
+      </TabPanel>
 
       <Snackbar
         open={snackbar.open}

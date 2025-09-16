@@ -54,6 +54,8 @@ celery_app.conf.update(
     task_time_limit=3600,  # 1 hour timeout for large files
     task_soft_time_limit=3300,  # 55 minute soft timeout
     worker_max_memory_per_child=4000000,  # 4GB memory limit per worker
+    # Force spawn method for CUDA compatibility
+    worker_pool='solo',  # Use solo pool which avoids multiprocessing issues with CUDA
 )
 
 # Worker shutdown signal handler to properly cleanup GPU resources
@@ -67,41 +69,16 @@ def cleanup_gpu_resources(self):
     except Exception as e:
         logger.error(f"Error cleaning up GPU resources: {e}")
 
-# Preload GPU models when worker starts
-@celery_app.task(bind=True)
-def worker_init_task(self):
-    """Initialize worker with GPU resources"""
-    logger.info("Worker initializing...")
-    try:
-        if torch and torch.cuda.is_available():
-            # Initialize CUDA context
-            torch.cuda.init()
-            logger.info("CUDA context initialized")
-        logger.info("Worker ready")
-    except Exception as e:
-        logger.error(f"Error initializing worker: {e}")
-
-@celery_app.task(bind=True)
-def worker_shutdown_task(self):
-    """Cleanup when worker shuts down"""
-    logger.info("Worker shutting down...")
-    try:
-        if torch and torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            logger.info("GPU resources cleaned up")
-    except Exception as e:
-        logger.error(f"Error during worker shutdown: {e}")
-
 # Worker signal handlers (simplified)
 def on_worker_init(**kwargs):
     """Worker startup callback"""
-    logger.info("Worker started")
+    logger.info("Worker started - CUDA initialization will happen as needed")
 
 def on_worker_shutdown(**kwargs):
     """Worker shutdown callback"""
     logger.info("Worker shutdown")
     try:
-        if torch and torch.cuda.is_available():
+        if torch and hasattr(torch, 'cuda') and torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
