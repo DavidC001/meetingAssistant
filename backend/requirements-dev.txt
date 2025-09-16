@@ -1,0 +1,33 @@
+# Development Dependencies for Meeting Assistant Backend
+# ================================================
+
+# Include base requirements
+-r requirements.txt
+
+# Testing
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+httpx>=0.25.2  # For FastAPI testing
+
+# Code Quality
+black>=23.11.0
+isort>=5.12.0
+flake8>=6.1.0
+flake8-docstrings>=1.7.0
+mypy>=1.7.0
+
+# Documentation
+sphinx>=7.2.6
+sphinx-rtd-theme>=1.3.0
+
+# Development Tools
+pre-commit>=3.5.0
+watchdog>=3.0.0
+
+# Database Migration (if using Alembic)
+alembic>=1.13.0
+
+# Debugging
+ipdb>=0.13.13
+debugpy>=1.8.0

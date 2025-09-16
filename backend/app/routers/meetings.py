@@ -1,12 +1,22 @@
+"""
+Meetings router for the Meeting Assistant API.
+
+This module handles all meeting-related API endpoints including file upload,
+processing management, and meeting data retrieval.
+"""
+
+import os
+import re
+import shutil
+from pathlib import Path
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
 from sqlalchemy.orm import Session
-from typing import List, Optional
-import os
-import shutil
-import re
 
 from .. import crud, models, schemas
 from ..core import chat
+from ..core.config import config
 from ..database import get_db
 
 router = APIRouter(
@@ -14,9 +24,57 @@ router = APIRouter(
     tags=["meetings"],
 )
 
-# Define a directory to store uploaded files
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+class FileValidator:
+    """Utility class for file validation."""
+    
+    @staticmethod
+    def validate_file_size(file: UploadFile) -> int:
+        """Validate file size and return file size in bytes."""
+        file.file.seek(0, 2)  # Seek to end of file
+        file_size = file.file.tell()
+        file.file.seek(0)  # Reset to beginning
+        
+        if file_size > config.upload.max_file_size_bytes:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum allowed size ({config.upload.max_file_size_mb}MB)"
+            )
+        
+        return file_size
+    
+    @staticmethod
+    def validate_file_extension(filename: str) -> None:
+        """Validate file extension."""
+        file_ext = Path(filename).suffix.lower()
+        if file_ext not in config.upload.allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File extension '{file_ext}' not allowed. Allowed extensions: {', '.join(config.upload.allowed_extensions)}"
+            )
+
+
+class FileManager:
+    """Utility class for file management operations."""
+    
+    @staticmethod
+    def save_uploaded_file(file: UploadFile) -> str:
+        """Save uploaded file and return the file path."""
+        file_path = Path(config.upload.upload_dir) / file.filename
+        
+        # Ensure filename is unique
+        counter = 1
+        original_path = file_path
+        while file_path.exists():
+            stem = original_path.stem
+            suffix = original_path.suffix
+            file_path = original_path.parent / f"{stem}_{counter}{suffix}"
+            counter += 1
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        return str(file_path)
 
 @router.post("/upload", response_model=schemas.Meeting)
 def create_upload_file(
@@ -25,28 +83,16 @@ def create_upload_file(
     number_of_speakers: Optional[str] = Form("auto"),
     db: Session = Depends(get_db)
 ):
-    """
-    Upload a new meeting file for processing with custom parameters.
-    """
-    # Get max file size from environment or use default (3GB)
-    import os
-    max_file_size_mb = int(os.getenv("MAX_FILE_SIZE_MB", "3000"))  # Default 3GB
-    MAX_FILE_SIZE = max_file_size_mb * 1024 * 1024  # Convert MB to bytes
+    """Upload a new meeting file for processing with custom parameters."""
     
-    file.file.seek(0, 2)  # Seek to end of file
-    file_size = file.file.tell()
-    file.file.seek(0)  # Reset to beginning
+    # Validate file extension
+    FileValidator.validate_file_extension(file.filename)
     
-    if file_size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413, 
-            detail=f"File size ({file_size / (1024*1024):.1f}MB) exceeds maximum allowed size ({max_file_size_mb}MB)"
-        )
+    # Validate file size
+    file_size = FileValidator.validate_file_size(file)
     
-    # Save the uploaded file to the UPLOAD_DIR
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Save the uploaded file
+    file_path = FileManager.save_uploaded_file(file)
 
     # Create a meeting record in the database with processing parameters
     meeting_create = schemas.MeetingCreate(
