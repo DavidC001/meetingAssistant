@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from .retry import retry_api_call
+from .config import config
 
 # Optional imports
 try:
@@ -76,7 +77,10 @@ class OpenAIProvider(LLMProvider):
         
         api_key = self.get_api_key()
         if not api_key:
-            raise RuntimeError(f"API key not found in environment variable: {config.api_key_env}")
+            env_hint = f" '{self.config.api_key_env}'" if self.config.api_key_env else ""
+            raise RuntimeError(
+                f"OpenAI API key not provided{env_hint}. Configure it in the application settings."
+            )
         
         # Initialize clients
         self.client = openai.OpenAI(
@@ -240,21 +244,28 @@ class ProviderFactory:
 
 def create_default_configs() -> Dict[str, LLMConfig]:
     """Create default LLM configurations"""
+    model_settings = config.model
+    default_kwargs = {
+        "max_tokens": model_settings.default_max_tokens,
+        "temperature": model_settings.default_temperature,
+    }
+
+    openai_api_key = config.get_api_key("OPENAI_API_KEY")
+
     return {
         "openai": LLMConfig(
             provider="openai",
-            model="gpt-4o-mini",
+            model=model_settings.default_chat_model,
+            api_key=openai_api_key,
             api_key_env="OPENAI_API_KEY",
-            max_tokens=4000,
-            temperature=0.1
+            **default_kwargs,
         ),
         "ollama": LLMConfig(
             provider="ollama",
-            model="llama3",
-            base_url="http://localhost:11434",
-            max_tokens=4000,
-            temperature=0.1
-        )
+            model=model_settings.local_chat_model,
+            base_url=model_settings.ollama_base_url,
+            **default_kwargs,
+        ),
     }
 
 def model_config_to_llm_config(model_config, purpose: str, db: Session) -> LLMConfig:
@@ -285,7 +296,10 @@ def model_config_to_llm_config(model_config, purpose: str, db: Session) -> LLMCo
             models.APIKey.is_active == True
         ).first()
         if api_key_obj:
-            api_key = os.getenv(api_key_obj.environment_variable)
+            api_key = config.api.get(api_key_obj.environment_variable)
+
+    if not api_key and provider == "openai":
+        api_key = config.get_api_key("OPENAI_API_KEY")
     
     return LLMConfig(
         provider=provider,

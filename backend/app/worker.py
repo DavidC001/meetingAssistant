@@ -1,10 +1,7 @@
 from celery import Celery
-import os
 import logging
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+from .core.config import config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -32,8 +29,8 @@ except Exception as e:
 
 # It's good practice to have a default for local development
 # The values from docker-compose.yml will be used when running in Docker
-celery_broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
-celery_result_backend = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+celery_broker_url = config.celery.broker_url
+celery_result_backend = config.celery.result_backend
 
 # Initialize Celery
 celery_app = Celery(
