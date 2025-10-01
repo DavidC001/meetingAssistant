@@ -1,11 +1,9 @@
-"""
-Meeting transcript analysis module.
+"""Meeting transcript analysis module.
 
 This module provides functionality for analyzing meeting transcripts using
 various LLM providers (OpenAI, Ollama) with automatic fallback and error handling.
 """
 
-import os
 import logging
 import asyncio
 from typing import Dict, Any, Optional, Callable
@@ -48,22 +46,28 @@ class AnalysisConfigFactory:
     def get_default_config() -> LLMConfig:
         """Get default analysis configuration with intelligent provider selection."""
         # Prefer OpenAI if available, fallback to Ollama
-        if os.getenv("OPENAI_API_KEY"):
+        model_settings = config.model
+        default_kwargs = {
+            "max_tokens": model_settings.default_max_tokens,
+            "temperature": model_settings.default_temperature,
+        }
+
+        openai_api_key = config.get_api_key("OPENAI_API_KEY")
+
+        if openai_api_key:
             return LLMConfig(
                 provider="openai",
-                model=config.model.default_analysis_model,
-                api_key_env="OPENAI_API_KEY",
-                max_tokens=config.model.default_max_tokens,
-                temperature=config.model.default_temperature
+                model=model_settings.default_analysis_model,
+                api_key=openai_api_key,
+                **default_kwargs,
             )
-        else:
-            return LLMConfig(
-                provider="ollama",
-                model="llama3",
-                base_url=config.model.ollama_base_url,
-                max_tokens=config.model.default_max_tokens,
-                temperature=config.model.default_temperature
-            )
+
+        return LLMConfig(
+            provider="ollama",
+            model=model_settings.local_analysis_model,
+            base_url=model_settings.ollama_base_url,
+            **default_kwargs,
+        )
 
 
 @retry_api_call(max_retries=3, delay=5.0)
@@ -178,11 +182,13 @@ def analyse_meeting_legacy(
     """Legacy wrapper for analyse_meeting with old parameter format."""
     
     # Convert legacy parameters to new LLMConfig format
+    openai_api_key = config.get_api_key("OPENAI_API_KEY")
+
     if backend == "openai":
         llm_config = LLMConfig(
             provider="openai",
             model=openai_model,
-            api_key_env="OPENAI_API_KEY",
+            api_key=openai_api_key,
             max_tokens=config.model.default_max_tokens,
             temperature=config.model.default_temperature
         )
@@ -190,7 +196,7 @@ def analyse_meeting_legacy(
         llm_config = LLMConfig(
             provider="ollama",
             model=ollama_model,
-            base_url=ollama_url,
+            base_url=ollama_url or config.model.ollama_base_url,
             max_tokens=config.model.default_max_tokens,
             temperature=config.model.default_temperature
         )

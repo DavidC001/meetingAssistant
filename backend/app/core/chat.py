@@ -1,30 +1,35 @@
-import os
 import logging
 from typing import List, Dict, Optional
 from .providers import ProviderFactory, LLMConfig
+from .config import config
 
 logger = logging.getLogger(__name__)
 
 def get_default_chat_config() -> LLMConfig:
-    """Get default chat configuration from environment or fallback to OpenAI"""
-    # Try to determine the best available provider
-    if os.getenv("OPENAI_API_KEY"):
+    """Build a default chat configuration based on application settings."""
+
+    model_settings = config.model
+    default_kwargs = {
+        "max_tokens": model_settings.default_max_tokens,
+        "temperature": model_settings.default_temperature,
+    }
+
+    openai_api_key = config.get_api_key("OPENAI_API_KEY")
+
+    if openai_api_key:
         return LLMConfig(
             provider="openai",
-            model=os.getenv("CHAT_MODEL", "gpt-4o-mini"),
-            api_key_env="OPENAI_API_KEY",
-            max_tokens=2000,
-            temperature=0.7
+            model=model_settings.default_chat_model,
+            api_key=openai_api_key,
+            **default_kwargs,
         )
-    else:
-        # Fallback to Ollama (assumes local installation)
-        return LLMConfig(
-            provider="ollama",
-            model=os.getenv("CHAT_MODEL", "llama3"),
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            max_tokens=2000,
-            temperature=0.7
-        )
+
+    return LLMConfig(
+        provider="ollama",
+        model=model_settings.local_chat_model,
+        base_url=model_settings.ollama_base_url,
+        **default_kwargs,
+    )
 
 async def chat_with_meeting(
     query: str, 

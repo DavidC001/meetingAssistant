@@ -5,6 +5,7 @@ import logging
 from .utils import get_file_metadata
 from .cache import cache_result, get_file_hash
 from .retry import retry_gpu_operation
+from .config import config
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -80,9 +81,9 @@ def diarize_audio(audio_path: str, num_speakers: Optional[int] = None, progress_
     file_hash = get_file_hash(audio_path)
     logger.info(f"File hash: {file_hash}")
 
-    auth_token = os.getenv("HUGGINGFACE_TOKEN")
+    auth_token = config.api.get("HUGGINGFACE_TOKEN")
     if not auth_token:
-        raise RuntimeError("Hugging Face token not found. Please set HUGGINGFACE_TOKEN environment variable.")
+        raise RuntimeError("Hugging Face token not configured. Please set it in the application settings.")
 
     try:
         if progress_callback:
