@@ -7,6 +7,15 @@ from .core.config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Download NLTK data at startup
+try:
+    import nltk
+    nltk.download('punkt_tab', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    logger.info("NLTK data downloaded successfully")
+except Exception as e:
+    logger.warning(f"Could not download NLTK data: {e}")
+
 # Try to import torch and check for GPU availability
 try:
     import torch

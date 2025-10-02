@@ -19,19 +19,25 @@ COPY ./install_pytorch.py /app/install_pytorch.py
 # Install Python dependencies with smart CUDA detection
 RUN pip install --no-cache-dir --upgrade pip && \
     python /app/install_pytorch.py && \
-    pip install --no-cache-dir -r /app/requirements.txt
-
-# Set up cuDNN library paths and create necessary symlinks
-RUN if [ -d "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" ]; then \
+    pip install --no-cache-dir -r /app/requirements.txt && \
+    # Set up cuDNN library paths after installation \
+    if [ -d "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" ]; then \
         cd /usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib && \
         # Create versioned symlinks for cuDNN libraries \
-        for lib in libcudnn*.so.9; do \
-            ln -sf $lib ${lib}.1.0 2>/dev/null || true; \
-            ln -sf $lib ${lib}.1 2>/dev/null || true; \
+        for lib in libcudnn*.so.*; do \
+            base=$(echo $lib | sed 's/\.so\..*/\.so/'); \
+            ln -sf $lib ${base}.9.1.0 2>/dev/null || true; \
+            ln -sf $lib ${base}.9.1 2>/dev/null || true; \
+            ln -sf $lib ${base}.9 2>/dev/null || true; \
         done && \
         # Add cuDNN library path to system library path \
         echo "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && \
-        ldconfig; \
+        ldconfig && \
+        # Verify cuDNN libraries \
+        echo "cuDNN libraries found:" && \
+        ls -la /usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib/; \
+    else \
+        echo "Warning: cuDNN library directory not found"; \
     fi
 
 # Copy the rest of the application code

@@ -23,6 +23,9 @@ requests>=2.31.0
 # PyTorch with CUDA support (installed via Docker)
 torch>=2.0.0,<2.2.0
 torchaudio>=2.0.0,<2.2.0
+numpy<2.0.0  
+# cuDNN libraries for CUDA acceleration
+nvidia-cudnn-cu12>=9.1.0
 
 # Audio Processing
 faster-whisper>=0.9.0

@@ -249,8 +249,22 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 }
                 transcription_language = language_mapping.get(meeting.transcription_language, "en")
                 
-                # Create WhisperConfig with the specified language
-                whisper_config = transcription.WhisperConfig(language=transcription_language)
+                # Get model configuration for whisper model selection
+                model_config = None
+                if meeting.model_configuration_id:
+                    model_config = crud.get_model_configuration(db, meeting.model_configuration_id)
+                if not model_config:
+                    # Fall back to default configuration
+                    model_config = crud.get_default_model_configuration(db)
+                
+                # Determine whisper model size
+                whisper_model_size = model_config.whisper_model if model_config else "base"
+                
+                # Create WhisperConfig with the specified language and model
+                whisper_config = transcription.WhisperConfig(
+                    model_size=whisper_model_size,
+                    language=transcription_language
+                )
                 
                 full_transcript, dominant_language = transcription.compile_transcript(
                     str(wav_audio_path),
