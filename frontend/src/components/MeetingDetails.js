@@ -77,7 +77,7 @@ const MeetingDetails = () => {
   const [editingSpeaker, setEditingSpeaker] = useState(null);
   const [tags, setTags] = useState('');
   const [folder, setFolder] = useState('');
-  const [newActionItem, setNewActionItem] = useState({ task: '', owner: '', due_date: '' });
+  const [newActionItem, setNewActionItem] = useState({ task: '', owner: '', due_date: '', isAdding: false });
   const [editingActionItem, setEditingActionItem] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -198,21 +198,37 @@ const MeetingDetails = () => {
 
   // Action Item handlers
   const handleAddActionItem = async () => {
-    if (!newActionItem.task) return;
+    if (!newActionItem.task || !newActionItem.task.trim()) return;
     try {
-      const res = await api.addActionItem(meeting.transcription.id, newActionItem);
+      const itemData = {
+        task: newActionItem.task,
+        owner: newActionItem.owner,
+        due_date: newActionItem.due_date
+      };
+      const res = await api.addActionItem(meeting.transcription.id, itemData);
       setMeeting({ ...meeting, transcription: { ...meeting.transcription, action_items: [...meeting.transcription.action_items, res.data] } });
-      setNewActionItem({ task: '', owner: '', due_date: '' });
-    } catch (err) { setError('Failed to add action item'); }
+      setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false });
+    } catch (err) { 
+      setError('Failed to add action item'); 
+      console.error('Add action item error:', err);
+    }
   };
 
   const handleUpdateActionItem = async () => {
-    if (!editingActionItem) return;
+    if (!editingActionItem || !editingActionItem.task || !editingActionItem.task.trim()) return;
     try {
-      const res = await api.updateActionItem(editingActionItem.id, editingActionItem);
+      const itemData = {
+        task: editingActionItem.task,
+        owner: editingActionItem.owner,
+        due_date: editingActionItem.due_date
+      };
+      const res = await api.updateActionItem(editingActionItem.id, itemData);
       setMeeting({ ...meeting, transcription: { ...meeting.transcription, action_items: meeting.transcription.action_items.map(a => a.id === res.data.id ? res.data : a) } });
       setEditingActionItem(null);
-    } catch (err) { setError('Failed to update action item'); }
+    } catch (err) { 
+      setError('Failed to update action item'); 
+      console.error('Update action item error:', err);
+    }
   };
 
   const handleDeleteActionItem = async (id) => {
@@ -935,61 +951,230 @@ const MeetingDetails = () => {
           <Grid item xs={12}>
             <Card elevation={3}>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <AssignmentIcon sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="h5">Action Items</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <AssignmentIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h5">Action Items</Typography>
+                  </Box>
+                  <Button 
+                    variant="contained" 
+                    size="small" 
+                    startIcon={<AssignmentIcon />}
+                    onClick={() => setNewActionItem({ task: '', owner: '', due_date: '', isAdding: true })}
+                    disabled={newActionItem.isAdding}
+                  >
+                    Add New
+                  </Button>
                 </Box>
-                {meeting.transcription.action_items.length > 0 ? (
-                  <List>
-                    {meeting.transcription.action_items.map((item) => (
-                      <ListItem key={item.id} sx={{ bgcolor: 'success.lighter', mb: 1, borderRadius: 1 }} secondaryAction={
-                        <>
-                          <Button size="small" onClick={() => setEditingActionItem(item)}>Edit</Button>
-                          <Button size="small" color="error" onClick={() => handleDeleteActionItem(item.id)}>Delete</Button>
-                        </>
-                      }>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Typography variant="subtitle1" fontWeight="medium">
-                              {item.task}
-                            </Typography>
-                          }
-                          secondary={
-                            <Box>
-                              <Typography variant="body2" color="text.secondary">
-                                <PersonIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
-                                Owner: {item.owner || 'Unassigned'}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                <CalendarIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
-                                Due: {item.due_date || 'No deadline'}
-                              </Typography>
-                            </Box>
-                          }
+
+                {/* Add new action item form */}
+                {newActionItem.isAdding && (
+                  <Paper elevation={2} sx={{ p: 2, mb: 2, bgcolor: 'primary.light', border: '2px solid', borderColor: 'primary.main' }}>
+                    <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: 'primary.contrastText' }}>
+                      Add New Action Item
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Task Description"
+                          value={newActionItem.task}
+                          onChange={e => setNewActionItem({ ...newActionItem, task: e.target.value })}
+                          placeholder="Enter the task to be completed..."
+                          multiline
+                          rows={2}
+                          required
+                          autoFocus
+                          variant="outlined"
+                          sx={{ bgcolor: 'white' }}
                         />
-                      </ListItem>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Owner"
+                          value={newActionItem.owner}
+                          onChange={e => setNewActionItem({ ...newActionItem, owner: e.target.value })}
+                          placeholder="Who is responsible?"
+                          variant="outlined"
+                          sx={{ bgcolor: 'white' }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Due Date"
+                          type="date"
+                          value={newActionItem.due_date}
+                          onChange={e => setNewActionItem({ ...newActionItem, due_date: e.target.value })}
+                          InputLabelProps={{ shrink: true }}
+                          variant="outlined"
+                          sx={{ bgcolor: 'white' }}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                          <Button 
+                            onClick={handleAddActionItem} 
+                            variant="contained"
+                            disabled={!newActionItem.task || !newActionItem.task.trim()}
+                            startIcon={<CheckCircleIcon />}
+                          >
+                            Add Action Item
+                          </Button>
+                          <Button 
+                            onClick={() => setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false })} 
+                            variant="outlined"
+                            color="error"
+                          >
+                            Cancel
+                          </Button>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                )}
+
+                {/* Action items list */}
+                {meeting.transcription.action_items.length > 0 ? (
+                  <List sx={{ p: 0 }}>
+                    {meeting.transcription.action_items.map((item) => (
+                      <React.Fragment key={item.id}>
+                        {editingActionItem?.id === item.id ? (
+                          // Edit mode
+                          <Paper elevation={2} sx={{ p: 2, mb: 2, bgcolor: 'warning.light', border: '2px solid', borderColor: 'warning.main' }}>
+                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: 'warning.contrastText' }}>
+                              Edit Action Item
+                            </Typography>
+                            <Grid container spacing={2}>
+                              <Grid item xs={12}>
+                                <TextField
+                                  fullWidth
+                                  label="Task Description"
+                                  value={editingActionItem.task}
+                                  onChange={e => setEditingActionItem({ ...editingActionItem, task: e.target.value })}
+                                  multiline
+                                  rows={2}
+                                  required
+                                  autoFocus
+                                  variant="outlined"
+                                  sx={{ bgcolor: 'white' }}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <TextField
+                                  fullWidth
+                                  label="Owner"
+                                  value={editingActionItem.owner}
+                                  onChange={e => setEditingActionItem({ ...editingActionItem, owner: e.target.value })}
+                                  variant="outlined"
+                                  sx={{ bgcolor: 'white' }}
+                                />
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <TextField
+                                  fullWidth
+                                  label="Due Date"
+                                  type="date"
+                                  value={editingActionItem.due_date}
+                                  onChange={e => setEditingActionItem({ ...editingActionItem, due_date: e.target.value })}
+                                  InputLabelProps={{ shrink: true }}
+                                  variant="outlined"
+                                  sx={{ bgcolor: 'white' }}
+                                />
+                              </Grid>
+                              <Grid item xs={12}>
+                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                                  <Button 
+                                    onClick={handleUpdateActionItem} 
+                                    variant="contained"
+                                    disabled={!editingActionItem.task || !editingActionItem.task.trim()}
+                                    startIcon={<CheckCircleIcon />}
+                                  >
+                                    Save Changes
+                                  </Button>
+                                  <Button 
+                                    onClick={() => setEditingActionItem(null)} 
+                                    variant="outlined"
+                                    color="error"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </Box>
+                              </Grid>
+                            </Grid>
+                          </Paper>
+                        ) : (
+                          // Display mode
+                          <Paper 
+                            elevation={1} 
+                            sx={{ 
+                              p: 2, 
+                              mb: 2, 
+                              bgcolor: 'success.lighter',
+                              border: '1px solid',
+                              borderColor: 'success.light',
+                              transition: 'all 0.2s',
+                              '&:hover': {
+                                elevation: 3,
+                                borderColor: 'success.main'
+                              }
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                              <Box sx={{ display: 'flex', flex: 1, alignItems: 'flex-start' }}>
+                                <CheckCircleIcon color="success" sx={{ mt: 0.5, mr: 2 }} />
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography variant="subtitle1" fontWeight="medium" sx={{ mb: 1 }}>
+                                    {item.task}
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                    <Chip
+                                      icon={<PersonIcon />}
+                                      label={item.owner || 'Unassigned'}
+                                      size="small"
+                                      variant="outlined"
+                                      color={item.owner ? "default" : "warning"}
+                                    />
+                                    <Chip
+                                      icon={<CalendarIcon />}
+                                      label={item.due_date || 'No deadline'}
+                                      size="small"
+                                      variant="outlined"
+                                      color={item.due_date ? "default" : "warning"}
+                                    />
+                                  </Box>
+                                </Box>
+                              </Box>
+                              <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined"
+                                  startIcon={<EditIcon />}
+                                  onClick={() => setEditingActionItem({ ...item })}
+                                >
+                                  Edit
+                                </Button>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined"
+                                  color="error" 
+                                  startIcon={<DeleteIcon />}
+                                  onClick={() => handleDeleteActionItem(item.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </Box>
+                            </Box>
+                          </Paper>
+                        )}
+                      </React.Fragment>
                     ))}
                   </List>
                 ) : (
-                  <Alert severity="info">No action items identified in this meeting.</Alert>
-                )}
-                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                  <input type="text" value={newActionItem.task} onChange={e => setNewActionItem({ ...newActionItem, task: e.target.value })} placeholder="Task" />
-                  <input type="text" value={newActionItem.owner} onChange={e => setNewActionItem({ ...newActionItem, owner: e.target.value })} placeholder="Owner" />
-                  <input type="text" value={newActionItem.due_date} onChange={e => setNewActionItem({ ...newActionItem, due_date: e.target.value })} placeholder="Due Date" />
-                  <Button onClick={handleAddActionItem} size="small" variant="outlined">Add</Button>
-                </Box>
-                {editingActionItem && (
-                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                    <input type="text" value={editingActionItem.task} onChange={e => setEditingActionItem({ ...editingActionItem, task: e.target.value })} placeholder="Task" />
-                    <input type="text" value={editingActionItem.owner} onChange={e => setEditingActionItem({ ...editingActionItem, owner: e.target.value })} placeholder="Owner" />
-                    <input type="text" value={editingActionItem.due_date} onChange={e => setEditingActionItem({ ...editingActionItem, due_date: e.target.value })} placeholder="Due Date" />
-                    <Button onClick={handleUpdateActionItem} size="small" variant="outlined">Save</Button>
-                    <Button onClick={() => setEditingActionItem(null)} size="small" color="error">Cancel</Button>
-                  </Box>
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    No action items identified in this meeting. Click "Add New" to create one.
+                  </Alert>
                 )}
               </CardContent>
             </Card>
