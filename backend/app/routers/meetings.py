@@ -357,11 +357,20 @@ def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session 
                 
                 # Apply replacements for speaker names at beginning of lines (transcript format)
                 for pattern_text in patterns_to_replace:
-                    # Match speaker name at start of line or after whitespace, followed by colon
-                    pattern = rf'^(\s*){re.escape(pattern_text)}(\s*:)'
-                    updated_text = re.sub(pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
+                    # Match speaker name at start of line, followed by optional space and then either:
+                    # - Timestamp in parentheses followed by colon: "SPEAKER_00 (0.01s - 7.29s): text"
+                    # - Just a colon: "SPEAKER_00: text"
+                    # - Or in brackets/parentheses
                     
-                    # Also handle cases where speaker name appears in brackets or parentheses
+                    # Pattern 1: Speaker with timestamp format: "SPEAKER_00 (0.01s - 7.29s): text"
+                    timestamp_pattern = rf'^(\s*){re.escape(pattern_text)}(\s+\([^)]+\)\s*:)'
+                    updated_text = re.sub(timestamp_pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
+                    
+                    # Pattern 2: Speaker with simple colon: "SPEAKER_00: text"
+                    simple_pattern = rf'^(\s*){re.escape(pattern_text)}(\s*:)'
+                    updated_text = re.sub(simple_pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
+                    
+                    # Pattern 3: Speaker in brackets or parentheses
                     bracket_pattern = rf'(\[|\()\s*{re.escape(pattern_text)}\s*(\]|\))'
                     updated_text = re.sub(bracket_pattern, rf'\1{speaker.name}\2', updated_text)
                 
