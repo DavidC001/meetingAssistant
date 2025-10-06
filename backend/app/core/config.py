@@ -136,7 +136,7 @@ def get_model_config() -> ModelConfig:
         default_analysis_model=os.getenv("DEFAULT_ANALYSIS_MODEL", "gpt-4o-mini"),
         local_chat_model=os.getenv("DEFAULT_LOCAL_CHAT_MODEL", "llama3"),
         local_analysis_model=os.getenv("DEFAULT_LOCAL_ANALYSIS_MODEL", "llama3"),
-        default_max_tokens=int(os.getenv("DEFAULT_MAX_TOKENS", "4000")),
+        default_max_tokens=int(os.getenv("DEFAULT_MAX_TOKENS", "8000")),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
         preferred_provider=os.getenv("PREFERRED_PROVIDER", "openai"),
     )

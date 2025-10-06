@@ -157,8 +157,58 @@ class OpenAIProvider(LLMProvider):
                 timeout=self.config.timeout
             )
             
-            content = response.choices[0].message.content.strip()
-            return json.loads(content)
+            # Validate response structure
+            if not response or not response.choices:
+                self.logger.error(f"Invalid response structure from OpenAI: {response}")
+                raise ValueError("OpenAI returned invalid response structure (no choices)")
+            
+            if not response.choices[0].message:
+                self.logger.error(f"Invalid response structure from OpenAI: no message in choice")
+                raise ValueError("OpenAI returned invalid response structure (no message)")
+            
+            # Check finish reason
+            finish_reason = response.choices[0].finish_reason
+            if finish_reason == 'length':
+                usage = response.usage
+                self.logger.error(
+                    f"OpenAI response truncated due to token limit. "
+                    f"Used {usage.completion_tokens} completion tokens (max_tokens={self.config.max_tokens}). "
+                    f"Total: {usage.total_tokens} tokens. "
+                    f"Consider increasing max_tokens or reducing transcript length."
+                )
+                raise ValueError(
+                    f"Response truncated: hit max_tokens limit ({self.config.max_tokens}). "
+                    f"Increase max_tokens in model configuration or use a model with larger context."
+                )
+            
+            # Get the response content
+            content = response.choices[0].message.content
+            
+            # Log response details for debugging
+            self.logger.info(f"OpenAI response received. Content length: {len(content) if content else 0}, finish_reason: {finish_reason}")
+            
+            # Check if content is None or empty
+            if not content:
+                self.logger.error(f"OpenAI returned empty content. Full response: {response}")
+                raise ValueError("OpenAI returned an empty response")
+            
+            # Strip whitespace
+            content = content.strip()
+            
+            # Check if stripped content is empty
+            if not content:
+                self.logger.error("OpenAI returned only whitespace")
+                raise ValueError("OpenAI returned only whitespace")
+            
+            # Log the content we're about to parse
+            self.logger.debug(f"Attempting to parse JSON content: {content[:200]}...")
+            
+            # Parse JSON
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as je:
+                self.logger.error(f"Failed to parse JSON. Content: {content[:500]}")
+                raise ValueError(f"Invalid JSON response from OpenAI: {je}")
             
         except openai.APIConnectionError as e:
             self.logger.error(f"OpenAI connection error: {e}")

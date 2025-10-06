@@ -403,6 +403,10 @@ Duration: {estimated_duration_minutes:.1f} minutes
 Transcript:
 {full_transcript}"""
                 
+                # Log transcript metadata for monitoring
+                transcript_word_count = len(full_transcript.split())
+                logger.info(f"Transcript word count: {transcript_word_count}, Duration: {estimated_duration_minutes:.1f} minutes")
+                
                 # Create a progress callback for analysis
                 def analysis_progress_callback(progress: int, message: str):
                     crud.update_meeting_processing_details(
@@ -423,6 +427,7 @@ Transcript:
                 if model_config:
                     llm_config = analysis.model_config_to_llm_config(model_config, use_analysis=True)
                 
+                logger.info(f"Sending transcript to LLM for analysis. Length: {len(enhanced_transcript)} chars")
                 analysis_results = analysis.analyse_meeting(enhanced_transcript, llm_config=llm_config, progress_callback=analysis_progress_callback)
                 
                 # Check if analysis failed
