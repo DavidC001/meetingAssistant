@@ -165,10 +165,13 @@ class MeetingCreate(MeetingBase):
     number_of_speakers: Optional[str] = "auto"
     model_configuration_id: Optional[int] = None
 
-class MeetingUpdate(MeetingBase):
+class MeetingUpdate(BaseModel):
+    filename: Optional[str] = None
     transcription_language: Optional[str] = None
     number_of_speakers: Optional[str] = None
     model_configuration_id: Optional[int] = None
+    tags: Optional[str] = None
+    folder: Optional[str] = None
 
 class Meeting(MeetingBase):
     id: int

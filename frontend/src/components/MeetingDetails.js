@@ -30,7 +30,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  Autocomplete
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -84,6 +85,7 @@ const MeetingDetails = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  const [availableFolders, setAvailableFolders] = useState([]);
 
   // Add manual refresh function
   const handleManualRefresh = async () => {
@@ -280,6 +282,16 @@ const MeetingDetails = () => {
     }
   };
 
+  const fetchAvailableFolders = async () => {
+    try {
+      const response = await api.get('/api/v1/meetings/');
+      const folders = [...new Set(response.data.map(m => m.folder).filter(f => f && f !== 'Uncategorized'))];
+      setAvailableFolders(folders.sort());
+    } catch (err) {
+      console.error('Error fetching folders:', err);
+    }
+  };
+
   useEffect(() => {
   const fetchMeetingDetails = async (isInitial = false) => {
       try {
@@ -293,6 +305,10 @@ const MeetingDetails = () => {
   setTags(response.data.tags || '');
   setFolder(response.data.folder || '');
         setError(null);
+        
+        // Fetch available folders for autocomplete
+        await fetchAvailableFolders();
+        
         return response.data;
       } catch (err) {
         setError('Failed to fetch meeting details.');
@@ -467,16 +483,74 @@ const MeetingDetails = () => {
               />
             </Box>
           </Box>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             <CalendarIcon sx={{ fontSize: 16, mr: 1, verticalAlign: 'middle' }} />
             Uploaded on: {new Date(meeting.created_at).toLocaleString()}
           </Typography>
-          {/* Tags and Folder Edit */}
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-            <input type="text" value={tags} onChange={e => setTags(e.target.value)} placeholder="Tags (comma separated)" />
-            <input type="text" value={folder} onChange={e => setFolder(e.target.value)} placeholder="Folder" />
-            <Button onClick={handleUpdateTagsFolder} size="small" variant="outlined">Save</Button>
-          </Box>
+          
+          {/* Tags and Folder Edit - Improved UI */}
+          <Paper elevation={0} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom fontWeight="medium">
+              Organization
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
+              <Autocomplete
+                freeSolo
+                options={availableFolders}
+                value={folder}
+                onChange={(event, newValue) => {
+                  setFolder(newValue || '');
+                }}
+                onInputChange={(event, newInputValue) => {
+                  setFolder(newInputValue);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Folder"
+                    placeholder="e.g., Team Meetings, Q1 2024"
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <Box component="span" sx={{ mr: 1 }}>
+                            📁
+                          </Box>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                fullWidth
+              />
+              <TextField
+                label="Tags"
+                value={tags}
+                onChange={e => setTags(e.target.value)}
+                placeholder="e.g., urgent, planning, review"
+                helperText="Comma separated"
+                size="small"
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <Box component="span" sx={{ mr: 1 }}>
+                      🏷️
+                    </Box>
+                  ),
+                }}
+              />
+              <Button 
+                onClick={handleUpdateTagsFolder} 
+                size="medium" 
+                variant="contained"
+                sx={{ minWidth: 100, height: 40 }}
+              >
+                Save
+              </Button>
+            </Box>
+          </Paper>
           <Grid container spacing={2} sx={{ mt: 2 }}>
             {/* ...existing file info boxes... */}
           </Grid>

@@ -385,11 +385,24 @@ async def chat_with_meeting_endpoint(
     # Get the last 5 messages from the chat history
     chat_history = request.chat_history or []
 
+    # Get model configuration
+    model_config = None
+    if db_meeting.model_configuration_id:
+        model_config = crud.get_model_configuration(db, db_meeting.model_configuration_id)
+    if not model_config:
+        model_config = crud.get_default_model_configuration(db)
+    
+    # Convert to LLMConfig if we have a model configuration
+    llm_config = None
+    if model_config:
+        llm_config = chat.model_config_to_llm_config(model_config, use_analysis=False)
+
     # Call the chat logic
     response_text = await chat.chat_with_meeting(
         query=request.query,
         transcript=db_meeting.transcription.full_text,
-        chat_history=chat_history
+        chat_history=chat_history,
+        config=llm_config
     )
 
     # Save assistant response to database

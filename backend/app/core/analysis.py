@@ -17,6 +17,42 @@ from .config import config
 logger = logging.getLogger(__name__)
 
 
+def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMConfig:
+    """Convert database ModelConfiguration to LLMConfig for LLM operations.
+    
+    Args:
+        model_config: Database ModelConfiguration object
+        use_analysis: If True, use analysis settings; if False, use chat settings
+    
+    Returns:
+        LLMConfig object for the specified provider
+    """
+    if use_analysis:
+        provider = model_config.analysis_provider
+        model = model_config.analysis_model
+        base_url = model_config.analysis_base_url
+        api_key_id = model_config.analysis_api_key_id
+    else:
+        provider = model_config.chat_provider
+        model = model_config.chat_model
+        base_url = model_config.chat_base_url
+        api_key_id = model_config.chat_api_key_id
+    
+    # Get API key if needed
+    api_key = None
+    if provider == "openai":
+        api_key = config.get_api_key("OPENAI_API_KEY")
+    
+    return LLMConfig(
+        provider=provider,
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        max_tokens=model_config.max_tokens,
+        temperature=model_config.temperature
+    )
+
+
 @dataclass
 class AnalysisResult:
     """Structured result from transcript analysis."""
@@ -45,15 +81,32 @@ class AnalysisConfigFactory:
     @staticmethod
     def get_default_config() -> LLMConfig:
         """Get default analysis configuration with intelligent provider selection."""
-        # Prefer OpenAI if available, fallback to Ollama
         model_settings = config.model
         default_kwargs = {
             "max_tokens": model_settings.default_max_tokens,
             "temperature": model_settings.default_temperature,
         }
 
+        preferred_provider = model_settings.preferred_provider.lower()
         openai_api_key = config.get_api_key("OPENAI_API_KEY")
 
+        # Use preferred provider if available, otherwise fallback
+        if preferred_provider == "ollama":
+            return LLMConfig(
+                provider="ollama",
+                model=model_settings.local_analysis_model,
+                base_url=model_settings.ollama_base_url,
+                **default_kwargs,
+            )
+        elif preferred_provider == "openai" and openai_api_key:
+            return LLMConfig(
+                provider="openai",
+                model=model_settings.default_analysis_model,
+                api_key=openai_api_key,
+                **default_kwargs,
+            )
+        
+        # Fallback logic: try openai first if key exists, otherwise ollama
         if openai_api_key:
             return LLMConfig(
                 provider="openai",

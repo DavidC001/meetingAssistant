@@ -54,6 +54,10 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
             db_meeting.number_of_speakers = meeting.number_of_speakers
         if meeting.model_configuration_id is not None:
             db_meeting.model_configuration_id = meeting.model_configuration_id
+        if meeting.tags is not None:
+            db_meeting.tags = meeting.tags
+        if meeting.folder is not None:
+            db_meeting.folder = meeting.folder
         
         db.commit()
         db.refresh(db_meeting)

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, Fade } from '@mui/material';
 import UploadForm from './UploadForm';
-import MeetingsList from './MeetingsList';
+import MeetingsListImproved from './MeetingsListImproved';
 
 const MeetingsDashboard = () => {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -18,7 +18,7 @@ const MeetingsDashboard = () => {
           Meeting Dashboard
         </Typography>
         <UploadForm onUploadSuccess={handleMeetingsUpdate} />
-        <MeetingsList refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
+        <MeetingsListImproved refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
       </Box>
     </Fade>
   );

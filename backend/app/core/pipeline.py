@@ -360,7 +360,19 @@ Transcript:
                         processing_logs=[f'Analysis: {message}']
                     )
                 
-                analysis_results = analysis.analyse_meeting(enhanced_transcript, progress_callback=analysis_progress_callback)
+                # Get model configuration for analysis
+                model_config = None
+                if meeting.model_configuration_id:
+                    model_config = crud.get_model_configuration(db, meeting.model_configuration_id)
+                if not model_config:
+                    model_config = crud.get_default_model_configuration(db)
+                
+                # Convert to LLMConfig if we have a model configuration
+                llm_config = None
+                if model_config:
+                    llm_config = analysis.model_config_to_llm_config(model_config, use_analysis=True)
+                
+                analysis_results = analysis.analyse_meeting(enhanced_transcript, llm_config=llm_config, progress_callback=analysis_progress_callback)
                 
                 # Save analysis checkpoint
                 checkpoint_manager.save_checkpoint("analysis", analysis_results, metadata={

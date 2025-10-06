@@ -6,6 +6,7 @@ services:
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
+      - /var/run/docker.sock:/var/run/docker.sock  # Enable Docker socket access for Ollama management
     env_file:
       - ./backend/.env
     environment:
@@ -87,7 +88,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Ollama service (optional - can be started/stopped via UI)
+  # Uncomment to have it start automatically with docker-compose
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
 volumes:
   postgres_data:
   cache_data:
   uploads_data:
+  ollama_data:

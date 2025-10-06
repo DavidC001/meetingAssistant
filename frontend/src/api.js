@@ -31,7 +31,9 @@ const api = {
   deleteActionItem: (itemId) => client.delete(`/api/v1/meetings/action-items/${itemId}`),
 
   // Tags/Folder API
-  updateMeetingTagsFolder: (meetingId, tags, folder) => client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder }),
+  updateMeetingTagsFolder: (meetingId, tags, folder) => {
+    return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
+  },
 };
 
 

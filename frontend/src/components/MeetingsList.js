@@ -129,19 +129,18 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
     }
 
     try {
-      setIsLoading(true);
       const response = await api.renameMeeting(selectedMeeting.id, trimmedName);
       console.log('Rename response:', response);
       setError(null);
-      onMeetingUpdate();
       setRenameDialogOpen(false);
       setNewName('');
+      // Refresh the meetings list
+      await fetchMeetings();
+      if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
       console.error('Rename meeting error:', err);
       const errorMessage = err.response?.data?.detail || 'Failed to rename meeting. Please try again.';
       setError(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -152,18 +151,17 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
 
   const handleDeleteConfirm = async () => {
     try {
-      setIsLoading(true);
       await api.deleteMeeting(selectedMeeting.id);
       setError(null);
-      onMeetingUpdate();
       setDeleteDialogOpen(false);
+      // Refresh the meetings list
+      await fetchMeetings();
+      if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
       console.error('Delete meeting error:', err);
       const errorMessage = err.response?.data?.detail || 'Failed to delete meeting. Please try again.';
       setError(errorMessage);
       setDeleteDialogOpen(false);
-    } finally {
-      setIsLoading(false);
     }
   };
 

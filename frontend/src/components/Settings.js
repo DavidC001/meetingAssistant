@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import ModelConfigurations from './ModelConfigurations';
 import APIKeyManagement from './APIKeyManagement';
+import OllamaManager from './OllamaManager';
 import {
   Card,
   CardContent,
@@ -206,6 +207,7 @@ const Settings = () => {
           <Tab label="System" icon={<SettingsIcon />} />
           <Tab label="Model Configurations" icon={<TuneIcon />} />
           <Tab label="API Keys" icon={<KeyIcon />} />
+          <Tab label="Ollama" icon={<StorageIcon />} />
         </Tabs>
       </Box>
 
@@ -475,6 +477,11 @@ const Settings = () => {
       {/* API Keys Tab */}
       <TabPanel value={currentTab} index={2}>
         <APIKeyManagement />
+      </TabPanel>
+
+      {/* Ollama Tab */}
+      <TabPanel value={currentTab} index={3}>
+        <OllamaManager />
       </TabPanel>
 
       <Snackbar
