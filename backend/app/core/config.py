@@ -41,7 +41,6 @@ class ModelConfig:
     local_chat_model: str
     local_analysis_model: str
     default_max_tokens: int
-    default_temperature: float
     ollama_base_url: str
     preferred_provider: str
 
@@ -138,7 +137,6 @@ def get_model_config() -> ModelConfig:
         local_chat_model=os.getenv("DEFAULT_LOCAL_CHAT_MODEL", "llama3"),
         local_analysis_model=os.getenv("DEFAULT_LOCAL_ANALYSIS_MODEL", "llama3"),
         default_max_tokens=int(os.getenv("DEFAULT_MAX_TOKENS", "4000")),
-        default_temperature=float(os.getenv("DEFAULT_TEMPERATURE", "0.1")),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434"),
         preferred_provider=os.getenv("PREFERRED_PROVIDER", "openai"),
     )

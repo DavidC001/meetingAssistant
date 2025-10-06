@@ -42,16 +42,16 @@ def run_processing_pipeline(db: Session, meeting_id: int):
     if not meeting:
         raise ValueError(f"Meeting with ID {meeting_id} not found.")
 
-    # Check if processing is already complete
-    is_completed = (meeting.transcription and 
+    # Check if processing is already complete AND successful
+    is_completed = (meeting.status == MeetingStatus.COMPLETED.value and
+                   meeting.transcription and 
                    meeting.transcription.summary and 
                    meeting.transcription.full_text and 
                    meeting.transcription.action_items)
     
     if is_completed:
         logger.info(f"Meeting {meeting_id} already has transcription, processing complete")
-        # Ensure status is properly set to COMPLETED
-        crud.update_meeting_status(db, meeting_id, MeetingStatus.COMPLETED)
+        # Ensure progress is properly set
         crud.update_meeting_processing_details(
             db, meeting_id,
             overall_progress=100.0,
@@ -59,6 +59,27 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             current_stage=ProcessingStage.ANALYSIS.value
         )
         return True
+    
+    # If the meeting is in FAILED state, allow reprocessing
+    if meeting.status == MeetingStatus.FAILED.value:
+        logger.info(f"Meeting {meeting_id} previously failed, restarting processing...")
+        crud.update_meeting_status(db, meeting_id, MeetingStatus.PROCESSING)
+        
+        # Check if we have existing transcription - if so, we can skip straight to analysis
+        has_transcription = (meeting.transcription and 
+                            meeting.transcription.full_text)
+        
+        if has_transcription and not resume_stage:
+            logger.info(f"Meeting {meeting_id} has existing transcription, will retry from analysis stage")
+            resume_stage = "analysis"  # Force resume from analysis stage
+        
+        crud.update_meeting_processing_details(
+            db, meeting_id,
+            error_message=None,  # Clear previous error
+            processing_logs=['Restarting processing after previous failure'],
+            overall_progress=75.0 if has_transcription else 0.0,
+            stage_progress=0.0
+        )
 
     input_file_path = Path(meeting.filepath)
     meeting_filename = meeting.filename
@@ -187,18 +208,41 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     "num_speakers": num_speakers
                 })
                 
+                # Create Speaker records from diarization segments
+                unique_speakers = set(segment["speaker"] for segment in diarization_segments)
+                logger.info(f"Creating {len(unique_speakers)} speaker records...")
+                
+                # Clear existing speakers for this meeting (in case of reprocessing)
+                from .. import models
+                db.query(models.Speaker).filter(models.Speaker.meeting_id == meeting_id).delete()
+                
+                # Create a speaker record for each unique speaker detected
+                for speaker_label in sorted(unique_speakers):
+                    speaker = models.Speaker(
+                        meeting_id=meeting_id,
+                        name=speaker_label,  # Initially, name equals label
+                        label=speaker_label
+                    )
+                    db.add(speaker)
+                
+                db.commit()
+                logger.info(f"Created {len(unique_speakers)} speaker records")
+                
                 crud.update_meeting_processing_details(
                     db, meeting_id,
                     stage_progress=100.0,
                     overall_progress=50.0,
-                    processing_logs=[f'Diarization completed - {len(diarization_segments)} segments found']
+                    processing_logs=[f'Diarization completed - {len(diarization_segments)} segments found, {len(unique_speakers)} speakers identified']
                 )
                 logger.info(f"Diarization complete with {len(diarization_segments)} segments.")
         else:
             # Load diarization from checkpoint
             diarization_segments = checkpoint_manager.load_checkpoint("diarization")
             if not diarization_segments:
-                raise ValueError("Failed to load diarization checkpoint")
+                # If checkpoint doesn't exist, create a default segment for the whole transcript
+                # This can happen when retrying analysis after failure
+                logger.warning("Diarization checkpoint not available, using default segment")
+                diarization_segments = [{"speaker": "Speaker 1", "start": 0, "end": 0}]
             logger.info(f"Skipped diarization stage (using checkpoint with {len(diarization_segments)} segments)")
 
         # 3. Transcribe the audio based on diarization (with caching)
@@ -293,11 +337,18 @@ def run_processing_pipeline(db: Session, meeting_id: int):
         else:
             # Load transcription from checkpoint
             transcription_checkpoint = checkpoint_manager.load_checkpoint("transcription")
-            if not transcription_checkpoint:
-                raise ValueError("Failed to load transcription checkpoint")
-            full_transcript = transcription_checkpoint["full_transcript"]
-            dominant_language = transcription_checkpoint["dominant_language"]
-            logger.info("Skipped transcription stage (using checkpoint)")
+            if transcription_checkpoint:
+                full_transcript = transcription_checkpoint["full_transcript"]
+                dominant_language = transcription_checkpoint["dominant_language"]
+                logger.info("Skipped transcription stage (using checkpoint)")
+            else:
+                # Try to load from database if checkpoint doesn't exist (e.g., after analysis failure)
+                if meeting.transcription and meeting.transcription.full_text:
+                    logger.info("Loading transcription from database (checkpoint not available)")
+                    full_transcript = meeting.transcription.full_text
+                    dominant_language = "en"  # Default, will be overridden by checkpoint if available
+                else:
+                    raise ValueError("Failed to load transcription from checkpoint or database")
 
         # 4. Enhanced text analysis
         logger.info("Performing text analysis...")
@@ -373,6 +424,13 @@ Transcript:
                     llm_config = analysis.model_config_to_llm_config(model_config, use_analysis=True)
                 
                 analysis_results = analysis.analyse_meeting(enhanced_transcript, llm_config=llm_config, progress_callback=analysis_progress_callback)
+                
+                # Check if analysis failed
+                if not analysis_results.get("success", True):
+                    error_msg = analysis_results.get("error", "Unknown analysis error")
+                    logger.error(f"Analysis failed: {error_msg}")
+                    # Don't save checkpoint for failed analysis
+                    raise ValueError(f"Analysis failed: {error_msg}")
                 
                 # Save analysis checkpoint
                 checkpoint_manager.save_checkpoint("analysis", analysis_results, metadata={
@@ -468,12 +526,27 @@ Transcript:
 
         # 8. Save results to the database
         logger.info("Saving results to database...")
+        # Check if analysis was successful before marking as completed
+        analysis_success = analysis_results.get("success", True)
         crud.create_meeting_transcription(
             db=db,
             meeting_id=meeting_id,
             transcription=transcription_data,
-            action_items=action_items_data
+            action_items=action_items_data,
+            mark_completed=analysis_success
         )
+        
+        # Update status based on analysis success
+        if analysis_success:
+            crud.update_meeting_status(db, meeting_id, MeetingStatus.COMPLETED)
+        else:
+            crud.update_meeting_status(db, meeting_id, MeetingStatus.FAILED)
+            crud.update_meeting_processing_details(
+                db, meeting_id,
+                error_message=analysis_results.get("error", "Analysis failed"),
+                processing_logs=['Analysis failed - meeting can be reprocessed']
+            )
+            logger.warning(f"Meeting {meeting_id} saved with FAILED status due to analysis error")
         
         # Store export file paths in processing logs (for future retrieval)
         export_info = []

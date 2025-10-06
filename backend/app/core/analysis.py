@@ -49,7 +49,6 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
         base_url=base_url,
         api_key=api_key,
         max_tokens=model_config.max_tokens,
-        temperature=model_config.temperature
     )
 
 
@@ -84,7 +83,6 @@ class AnalysisConfigFactory:
         model_settings = config.model
         default_kwargs = {
             "max_tokens": model_settings.default_max_tokens,
-            "temperature": model_settings.default_temperature,
         }
 
         preferred_provider = model_settings.preferred_provider.lower()
@@ -242,16 +240,14 @@ def analyse_meeting_legacy(
             provider="openai",
             model=openai_model,
             api_key=openai_api_key,
-            max_tokens=config.model.default_max_tokens,
-            temperature=config.model.default_temperature
+            max_tokens=config.model.default_max_tokens
         )
     elif backend == "ollama":
         llm_config = LLMConfig(
             provider="ollama",
             model=ollama_model,
             base_url=ollama_url or config.model.ollama_base_url,
-            max_tokens=config.model.default_max_tokens,
-            temperature=config.model.default_temperature
+            max_tokens=config.model.default_max_tokens
         )
     else:  # auto mode
         llm_config = None  # Will use default detection

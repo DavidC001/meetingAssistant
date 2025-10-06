@@ -181,7 +181,12 @@ const MeetingDetails = () => {
       const res = await api.updateSpeaker(editingSpeaker.id, editingSpeaker);
       setSpeakers(speakers.map(s => s.id === res.data.id ? res.data : s));
       setEditingSpeaker(null);
-    } catch (err) { setError('Failed to update speaker'); }
+      // Refresh meeting data to show updated transcript and action items
+      await handleManualRefresh();
+    } catch (err) { 
+      setError('Failed to update speaker');
+      console.error('Update speaker error:', err);
+    }
   };
 
   const handleDeleteSpeaker = async (id) => {
@@ -554,35 +559,6 @@ const MeetingDetails = () => {
           <Grid container spacing={2} sx={{ mt: 2 }}>
             {/* ...existing file info boxes... */}
           </Grid>
-          {/* Speaker Management */}
-          <Box sx={{ mt: 3 }}>
-            <Typography variant="h6">Speakers</Typography>
-            <List>
-              {speakers.map(speaker => (
-                <ListItem key={speaker.id} secondaryAction={
-                  <>
-                    <Button size="small" onClick={() => setEditingSpeaker(speaker)}>Edit</Button>
-                    <Button size="small" color="error" onClick={() => handleDeleteSpeaker(speaker.id)}>Delete</Button>
-                  </>
-                }>
-                  <ListItemText primary={speaker.name} secondary={speaker.label} />
-                </ListItem>
-              ))}
-            </List>
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-              <input type="text" value={newSpeaker.name} onChange={e => setNewSpeaker({ ...newSpeaker, name: e.target.value })} placeholder="Speaker Name" />
-              <input type="text" value={newSpeaker.label} onChange={e => setNewSpeaker({ ...newSpeaker, label: e.target.value })} placeholder="Label" />
-              <Button onClick={handleAddSpeaker} size="small" variant="outlined">Add</Button>
-            </Box>
-            {editingSpeaker && (
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <input type="text" value={editingSpeaker.name} onChange={e => setEditingSpeaker({ ...editingSpeaker, name: e.target.value })} placeholder="Speaker Name" />
-                <input type="text" value={editingSpeaker.label} onChange={e => setEditingSpeaker({ ...editingSpeaker, label: e.target.value })} placeholder="Label" />
-                <Button onClick={handleUpdateSpeaker} size="small" variant="outlined">Save</Button>
-                <Button onClick={() => setEditingSpeaker(null)} size="small" color="error">Cancel</Button>
-              </Box>
-            )}
-          </Box>
         </CardContent>
       </Card>
 
@@ -804,6 +780,133 @@ const MeetingDetails = () => {
 
       {meeting.status === 'completed' && meeting.transcription ? (
         <Grid container spacing={3}>
+          {/* Speaker Management Section - Prominent at top */}
+          {speakers && speakers.length > 0 && (
+            <Grid item xs={12}>
+              <Card elevation={3}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h5">Speakers</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+                      Rename speakers to update them throughout the transcript and action items
+                    </Typography>
+                  </Box>
+                  <Grid container spacing={2}>
+                    {speakers.map(speaker => (
+                      <Grid item xs={12} sm={6} md={4} key={speaker.id}>
+                        <Paper 
+                          elevation={editingSpeaker?.id === speaker.id ? 3 : 1} 
+                          sx={{ 
+                            p: 2, 
+                            border: editingSpeaker?.id === speaker.id ? '2px solid' : '1px solid',
+                            borderColor: editingSpeaker?.id === speaker.id ? 'primary.main' : 'grey.300',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {editingSpeaker?.id === speaker.id ? (
+                            <Box>
+                              <Box sx={{ 
+                                mb: 2, 
+                                p: 1.5, 
+                                bgcolor: 'primary.light', 
+                                borderRadius: 1,
+                                textAlign: 'center'
+                              }}>
+                                <Typography variant="caption" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
+                                  DETECTED AS
+                                </Typography>
+                                <Typography variant="h6" sx={{ color: 'primary.contrastText', mt: 0.5 }}>
+                                  {editingSpeaker.label || 'Unknown'}
+                                </Typography>
+                              </Box>
+                              <TextField
+                                fullWidth
+                                label="Rename to"
+                                value={editingSpeaker.name}
+                                onChange={e => setEditingSpeaker({ ...editingSpeaker, name: e.target.value })}
+                                size="small"
+                                placeholder="Enter speaker's real name"
+                                autoFocus
+                                sx={{ mb: 2 }}
+                                helperText="This name will replace the speaker label throughout the transcript"
+                              />
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button 
+                                  onClick={handleUpdateSpeaker} 
+                                  size="small" 
+                                  variant="contained"
+                                  fullWidth
+                                  disabled={!editingSpeaker.name || !editingSpeaker.name.trim()}
+                                >
+                                  Save
+                                </Button>
+                                <Button 
+                                  onClick={() => setEditingSpeaker(null)} 
+                                  size="small" 
+                                  variant="outlined"
+                                  color="error"
+                                  fullWidth
+                                >
+                                  Cancel
+                                </Button>
+                              </Box>
+                            </Box>
+                          ) : (
+                            <Box>
+                              <Box sx={{ 
+                                mb: 2, 
+                                p: 1.5, 
+                                bgcolor: speaker.name === speaker.label ? 'warning.light' : 'success.light',
+                                borderRadius: 1,
+                                textAlign: 'center'
+                              }}>
+                                <Typography variant="caption" sx={{ 
+                                  color: speaker.name === speaker.label ? 'warning.contrastText' : 'success.contrastText',
+                                  fontWeight: 'bold' 
+                                }}>
+                                  {speaker.name === speaker.label ? 'NOT RENAMED YET' : 'RENAMED'}
+                                </Typography>
+                                <Typography variant="h6" sx={{ 
+                                  color: speaker.name === speaker.label ? 'warning.contrastText' : 'success.contrastText',
+                                  mt: 0.5 
+                                }}>
+                                  {speaker.label || 'Unknown'}
+                                </Typography>
+                              </Box>
+                              {speaker.name !== speaker.label && (
+                                <Box sx={{ mb: 2, textAlign: 'center' }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Currently showing as
+                                  </Typography>
+                                  <Typography variant="h6" color="primary">
+                                    {speaker.name}
+                                  </Typography>
+                                </Box>
+                              )}
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button 
+                                  size="small" 
+                                  onClick={() => setEditingSpeaker({ ...speaker })}
+                                  startIcon={<EditIcon />}
+                                  variant="contained"
+                                  color={speaker.name === speaker.label ? 'warning' : 'primary'}
+                                  fullWidth
+                                >
+                                  {speaker.name === speaker.label ? 'Set Name' : 'Rename'}
+                                </Button>
+                              </Box>
+                            </Box>
+                          )}
+                        </Paper>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
+
           <Grid item xs={12} lg={6}>
             <Card elevation={3} sx={{ height: '100%' }}>
               <CardContent>

@@ -212,6 +212,57 @@ def restart_meeting_processing(meeting_id: int, db: Session = Depends(get_db)):
     # Return updated meeting
     return crud.get_meeting(db, meeting_id=meeting_id)
 
+@router.post("/{meeting_id}/retry-analysis", response_model=schemas.Meeting)
+def retry_meeting_analysis(meeting_id: int, db: Session = Depends(get_db)):
+    """
+    Retry only the analysis phase for a meeting that has failed analysis but has valid transcription.
+    This is useful when the LLM connection failed but transcription/diarization completed successfully.
+    """
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Check if meeting has failed
+    if db_meeting.status != models.MeetingStatus.FAILED.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot retry analysis for meeting with status: {db_meeting.status}. Only FAILED meetings can be retried."
+        )
+    
+    # Check if meeting has transcription data (required for analysis)
+    if not db_meeting.transcription or not db_meeting.transcription.full_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Meeting has no transcription data. Use /restart-processing to reprocess the entire meeting."
+        )
+    
+    # Cancel existing task if it exists
+    if db_meeting.celery_task_id:
+        try:
+            from ..worker import celery_app
+            celery_app.control.revoke(db_meeting.celery_task_id, terminate=True)
+        except Exception as e:
+            print(f"Error cancelling existing task: {e}")
+    
+    # Update meeting status to allow reprocessing
+    crud.update_meeting_status(db, meeting_id, models.MeetingStatus.PROCESSING)
+    crud.update_meeting_processing_details(
+        db, meeting_id,
+        current_stage=models.ProcessingStage.ANALYSIS.value,
+        stage_progress=0.0,
+        overall_progress=75.0,
+        error_message=None,
+        processing_logs=["Retrying analysis after previous failure"]
+    )
+    
+    # Start new processing task (it will skip to analysis since transcription exists)
+    from ..tasks import process_meeting_task
+    task_result = process_meeting_task.delay(meeting_id)
+    crud.update_meeting_task_id(db, meeting_id, task_result.id)
+    
+    # Return updated meeting
+    return crud.get_meeting(db, meeting_id=meeting_id)
+
 @router.delete("/{meeting_id}", status_code=204)
 def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
     """

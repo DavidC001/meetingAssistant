@@ -35,7 +35,6 @@ class LLMConfig:
     api_key_env: Optional[str] = None  # Legacy: environment variable name
     api_key: Optional[str] = None  # New: actual API key value
     max_tokens: int = 4000
-    temperature: float = 0.1
     timeout: int = 300
 
 class LLMProvider(ABC):
@@ -83,14 +82,36 @@ class OpenAIProvider(LLMProvider):
             )
         
         # Initialize clients
-        self.client = openai.OpenAI(
-            api_key=api_key,
-            base_url=config.base_url
-        )
-        self.async_client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=config.base_url
-        )
+        # Only pass base_url if it's explicitly set (not None)
+        client_kwargs = {"api_key": api_key}
+        if config.base_url:
+            client_kwargs["base_url"] = config.base_url
+        
+        self.client = openai.OpenAI(**client_kwargs)
+        self.async_client = AsyncOpenAI(**client_kwargs)
+    
+    def _get_token_param(self) -> Dict[str, int]:
+        """
+        Get the appropriate token limit parameter based on the model.
+        Older models (gpt-3.5-turbo, gpt-4) use max_tokens.
+        All newer models (gpt-4o, gpt-4-turbo, gpt-5, etc.) use max_completion_tokens.
+        Defaults to max_completion_tokens for unknown/future models.
+        """
+        model = self.config.model.lower()
+        
+        # Only these specific older models use max_tokens
+        # All other models (including future models) use max_completion_tokens
+        old_models_exact = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-32k']
+        
+        # Check if it's exactly an old model (but not a variant like gpt-4o or gpt-4-turbo)
+        if model in old_models_exact or (model.startswith('gpt-3.5') or 
+                                         (model.startswith('gpt-4') and 
+                                          'gpt-4o' not in model and 
+                                          'gpt-4-turbo' not in model)):
+            return {"max_tokens": self.config.max_tokens}
+        
+        # Default to max_completion_tokens for all newer and future models
+        return {"max_completion_tokens": self.config.max_tokens}
     
     @retry_api_call(max_retries=3, delay=5.0)
     async def chat_completion(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> str:
@@ -102,11 +123,13 @@ class OpenAIProvider(LLMProvider):
                 formatted_messages.append({"role": "system", "content": system_prompt})
             formatted_messages.extend(messages)
             
+            # Get the appropriate token parameter for this model
+            token_param = self._get_token_param()
+            
             response = await self.async_client.chat.completions.create(
                 model=self.config.model,
                 messages=formatted_messages,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
+                **token_param,
                 timeout=self.config.timeout
             )
             
@@ -120,6 +143,9 @@ class OpenAIProvider(LLMProvider):
     async def analyze_transcript(self, transcript: str, system_prompt: str) -> Dict[str, Any]:
         """Analyze a transcript and return structured JSON data"""
         try:
+            # Get the appropriate token parameter for this model
+            token_param = self._get_token_param()
+            
             response = await self.async_client.chat.completions.create(
                 model=self.config.model,
                 response_format={"type": "json_object"},
@@ -127,14 +153,25 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": transcript}
                 ],
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
+                **token_param,
                 timeout=self.config.timeout
             )
             
             content = response.choices[0].message.content.strip()
             return json.loads(content)
             
+        except openai.APIConnectionError as e:
+            self.logger.error(f"OpenAI connection error: {e}")
+            raise ConnectionError(f"Failed to connect to OpenAI API. Please check your network connection and API configuration.")
+        except openai.APITimeoutError as e:
+            self.logger.error(f"OpenAI timeout error: {e}")
+            raise TimeoutError(f"Request to OpenAI API timed out. Please try again.")
+        except openai.RateLimitError as e:
+            self.logger.error(f"OpenAI rate limit error: {e}")
+            raise ValueError(f"OpenAI API rate limit exceeded. Please try again later.")
+        except openai.AuthenticationError as e:
+            self.logger.error(f"OpenAI authentication error: {e}")
+            raise ValueError(f"OpenAI API authentication failed. Please check your API key.")
         except Exception as e:
             self.logger.error(f"OpenAI transcript analysis failed: {e}")
             raise
@@ -169,7 +206,6 @@ class OllamaProvider(LLMProvider):
                 "stream": False,
                 "options": {
                     "num_ctx": self.config.max_tokens,
-                    "temperature": self.config.temperature
                 }
             }
             
@@ -203,8 +239,7 @@ class OllamaProvider(LLMProvider):
                 "format": "json",
                 "stream": False,
                 "options": {
-                    "num_ctx": self.config.max_tokens,
-                    "temperature": self.config.temperature
+                    "num_ctx": self.config.max_tokens
                 }
             }
             
@@ -247,7 +282,6 @@ def create_default_configs() -> Dict[str, LLMConfig]:
     model_settings = config.model
     default_kwargs = {
         "max_tokens": model_settings.default_max_tokens,
-        "temperature": model_settings.default_temperature,
     }
 
     openai_api_key = config.get_api_key("OPENAI_API_KEY")
@@ -306,6 +340,5 @@ def model_config_to_llm_config(model_config, purpose: str, db: Session) -> LLMCo
         model=model,
         base_url=base_url,
         api_key=api_key,
-        max_tokens=model_config.max_tokens,
-        temperature=model_config.temperature
+        max_tokens=model_config.max_tokens
     )

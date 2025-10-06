@@ -94,9 +94,14 @@ def update_meeting_task_id(db: Session, meeting_id: int, task_id: str):
     return db_meeting
 
 # Transcription CRUD operations
-def create_meeting_transcription(db: Session, meeting_id: int, transcription: schemas.TranscriptionCreate, action_items: list[schemas.ActionItemCreate]):
-    # First, update the meeting status to COMPLETED
-    db_meeting = update_meeting_status(db, meeting_id, models.MeetingStatus.COMPLETED)
+def create_meeting_transcription(db: Session, meeting_id: int, transcription: schemas.TranscriptionCreate, action_items: list[schemas.ActionItemCreate], mark_completed: bool = True):
+    # Update the meeting status to COMPLETED only if requested (i.e., processing succeeded)
+    db_meeting = None
+    if mark_completed:
+        db_meeting = update_meeting_status(db, meeting_id, models.MeetingStatus.COMPLETED)
+    else:
+        db_meeting = get_meeting(db, meeting_id)
+    
     if not db_meeting:
         return None
 

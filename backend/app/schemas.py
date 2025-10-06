@@ -45,7 +45,6 @@ class ModelConfigurationBase(BaseModel):
     analysis_base_url: Optional[str] = None
     analysis_api_key_id: Optional[int] = None
     max_tokens: int = 4000
-    temperature: float = 0.1
     is_default: bool = False
 
 class ModelConfigurationCreate(ModelConfigurationBase):
@@ -64,7 +63,6 @@ class ModelConfigurationUpdate(BaseModel):
     analysis_base_url: Optional[str] = None
     analysis_api_key_id: Optional[int] = None
     max_tokens: Optional[int] = None
-    temperature: Optional[float] = None
     is_default: Optional[bool] = None
 
 class ModelConfiguration(ModelConfigurationBase):

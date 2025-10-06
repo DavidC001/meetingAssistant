@@ -71,7 +71,6 @@ const ModelConfigurations = () => {
     analysis_base_url: '',
     analysis_api_key_id: null,
     max_tokens: 4000,
-    temperature: 0.1,
     is_default: false
   });
 
@@ -134,7 +133,6 @@ const ModelConfigurations = () => {
         analysis_base_url: '',
         analysis_api_key_id: null,
         max_tokens: 4000,
-        temperature: 0.1,
         is_default: false
       });
       setIsEditing(false);
@@ -159,7 +157,6 @@ const ModelConfigurations = () => {
       analysis_base_url: '',
       analysis_api_key_id: null,
       max_tokens: 4000,
-      temperature: 0.1,
       is_default: false
     });
   };
@@ -252,10 +249,6 @@ const ModelConfigurations = () => {
 
   const handleMaxTokensChange = useCallback((e) => {
     handleFormChange('max_tokens', parseInt(e.target.value));
-  }, [handleFormChange]);
-
-  const handleTemperatureChange = useCallback((e) => {
-    handleFormChange('temperature', parseFloat(e.target.value));
   }, [handleFormChange]);
 
   const handleChatModelChange = useCallback((e) => {
@@ -438,16 +431,6 @@ const ModelConfigurations = () => {
                   value={formData.max_tokens}
                   onChange={handleMaxTokensChange}
                   inputProps={{ min: 100, max: 32000 }}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Temperature"
-                  value={formData.temperature}
-                  onChange={handleTemperatureChange}
-                  inputProps={{ min: 0, max: 2, step: 0.1 }}
                 />
               </Grid>
             </Grid>

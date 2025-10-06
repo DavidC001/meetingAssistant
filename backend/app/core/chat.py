@@ -37,8 +37,7 @@ def model_config_to_llm_config(model_config, use_analysis: bool = False) -> LLMC
         model=model,
         base_url=base_url,
         api_key=api_key,
-        max_tokens=model_config.max_tokens,
-        temperature=model_config.temperature
+        max_tokens=model_config.max_tokens
     )
 
 def get_default_chat_config() -> LLMConfig:
@@ -47,7 +46,6 @@ def get_default_chat_config() -> LLMConfig:
     model_settings = config.model
     default_kwargs = {
         "max_tokens": model_settings.default_max_tokens,
-        "temperature": model_settings.default_temperature,
     }
 
     preferred_provider = model_settings.preferred_provider.lower()

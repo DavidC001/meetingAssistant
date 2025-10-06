@@ -147,7 +147,6 @@ class ModelConfiguration(Base):
     
     # Additional Configuration
     max_tokens = Column(Integer, default=4000)  # Maximum tokens for responses
-    temperature = Column(Float, default=0.1)  # Temperature for LLM responses
     
     # Metadata
     is_default = Column(Boolean, default=False)  # Whether this is the default configuration
