@@ -86,6 +86,14 @@ class ActionItem(Base):
     due_date = Column(String, nullable=True)
     # Manual edit tracking
     is_manual = Column(Boolean, default=False)  # True if manually added/edited
+    # Calendar sync fields
+    google_calendar_event_id = Column(String, nullable=True)  # Google Calendar event ID
+    synced_to_calendar = Column(Boolean, default=False)  # Whether synced to Google Calendar
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)  # Last sync timestamp
+    # Additional fields
+    status = Column(String, default="pending")  # pending, in_progress, completed, cancelled
+    priority = Column(String, nullable=True)  # low, medium, high
+    notes = Column(Text, nullable=True)  # Additional notes
 
     transcription = relationship("Transcription", back_populates="action_items")
 class Speaker(Base):
@@ -168,3 +176,14 @@ class ChatMessage(Base):
     
     # Relationships
     meeting = relationship("Meeting", back_populates="chat_messages")
+
+class GoogleCalendarCredentials(Base):
+    __tablename__ = "google_calendar_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, default="default")  # For multi-user support in the future
+    credentials_json = Column(Text)  # Encrypted credentials
+    calendar_id = Column(String, default="primary")  # Google Calendar ID to sync to
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

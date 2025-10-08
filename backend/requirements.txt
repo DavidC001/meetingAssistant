@@ -48,6 +48,12 @@ python-docx>=1.1.0
 reportlab>=4.0.7
 icalendar>=5.0.11
 
+# Google Calendar Integration
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+google-api-python-client>=2.100.0
+
 # Web Interface (Optional)
 gradio>=3.50.0
 

@@ -80,17 +80,47 @@ class ActionItemBase(BaseModel):
     task: str
     owner: Optional[str] = None
     due_date: Optional[str] = None
+    status: Optional[str] = "pending"
+    priority: Optional[str] = None
+    notes: Optional[str] = None
 
 class ActionItemCreate(ActionItemBase):
     pass
+
+class ActionItemUpdate(BaseModel):
+    task: Optional[str] = None
+    owner: Optional[str] = None
+    due_date: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    notes: Optional[str] = None
 
 class ActionItem(ActionItemBase):
     id: int
     transcription_id: int
     is_manual: bool = False
+    google_calendar_event_id: Optional[str] = None
+    synced_to_calendar: bool = False
+    last_synced_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+# Google Calendar Schemas
+class GoogleCalendarAuthUrl(BaseModel):
+    auth_url: str
+
+class GoogleCalendarAuthCode(BaseModel):
+    code: str
+
+class GoogleCalendarStatus(BaseModel):
+    is_connected: bool
+    calendar_id: Optional[str] = None
+    email: Optional[str] = None
+
+class CalendarEventSync(BaseModel):
+    action_item_id: int
+    sync: bool  # True to sync, False to unsync
 # Speaker Schemas
 class SpeakerBase(BaseModel):
     name: str

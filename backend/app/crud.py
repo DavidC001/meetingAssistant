@@ -139,13 +139,25 @@ def create_action_item(db: Session, transcription_id: int, action_item: schemas.
     db.refresh(db_item)
     return db_item
 
-def update_action_item(db: Session, item_id: int, action_item_update: schemas.ActionItemCreate):
+def update_action_item(db: Session, item_id: int, action_item_update: schemas.ActionItemUpdate):
     db_item = db.query(models.ActionItem).filter(models.ActionItem.id == item_id).first()
     if not db_item:
         return None
-    db_item.task = action_item_update.task
-    db_item.owner = action_item_update.owner
-    db_item.due_date = action_item_update.due_date
+    
+    # Update only provided fields
+    if action_item_update.task is not None:
+        db_item.task = action_item_update.task
+    if action_item_update.owner is not None:
+        db_item.owner = action_item_update.owner
+    if action_item_update.due_date is not None:
+        db_item.due_date = action_item_update.due_date
+    if action_item_update.status is not None:
+        db_item.status = action_item_update.status
+    if action_item_update.priority is not None:
+        db_item.priority = action_item_update.priority
+    if action_item_update.notes is not None:
+        db_item.notes = action_item_update.notes
+    
     db_item.is_manual = True
     db.commit()
     db.refresh(db_item)
@@ -396,5 +408,65 @@ def clear_chat_history(db: Session, meeting_id: int):
     """Clear all chat messages for a meeting"""
     db.query(models.ChatMessage).filter(
         models.ChatMessage.meeting_id == meeting_id
+    ).delete()
+    db.commit()
+
+# Action Items - Additional CRUD operations
+def get_action_item(db: Session, item_id: int):
+    """Get a single action item by ID"""
+    return db.query(models.ActionItem).filter(models.ActionItem.id == item_id).first()
+
+def get_all_action_items(db: Session, skip: int = 0, limit: int = 1000, status: str = None):
+    """Get all action items across all meetings with optional status filter"""
+    query = db.query(models.ActionItem)
+    if status:
+        query = query.filter(models.ActionItem.status == status)
+    return query.offset(skip).limit(limit).all()
+
+def update_action_item_calendar_sync(db: Session, item_id: int, event_id: str = None, synced: bool = False):
+    """Update action item calendar sync status"""
+    from datetime import datetime
+    db_item = get_action_item(db, item_id)
+    if not db_item:
+        return None
+    
+    db_item.google_calendar_event_id = event_id
+    db_item.synced_to_calendar = synced
+    db_item.last_synced_at = datetime.now()
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+# Google Calendar Credentials CRUD operations
+def get_google_calendar_credentials(db: Session, user_id: str = "default"):
+    """Get Google Calendar credentials for a user"""
+    return db.query(models.GoogleCalendarCredentials).filter(
+        models.GoogleCalendarCredentials.user_id == user_id,
+        models.GoogleCalendarCredentials.is_active == True
+    ).first()
+
+def save_google_calendar_credentials(db: Session, credentials_json: str, calendar_id: str = "primary", user_id: str = "default"):
+    """Save or update Google Calendar credentials"""
+    # Deactivate existing credentials
+    db.query(models.GoogleCalendarCredentials).filter(
+        models.GoogleCalendarCredentials.user_id == user_id
+    ).update({"is_active": False})
+    
+    # Create new credentials
+    db_creds = models.GoogleCalendarCredentials(
+        user_id=user_id,
+        credentials_json=credentials_json,
+        calendar_id=calendar_id,
+        is_active=True
+    )
+    db.add(db_creds)
+    db.commit()
+    db.refresh(db_creds)
+    return db_creds
+
+def delete_google_calendar_credentials(db: Session, user_id: str = "default"):
+    """Delete Google Calendar credentials"""
+    db.query(models.GoogleCalendarCredentials).filter(
+        models.GoogleCalendarCredentials.user_id == user_id
     ).delete()
     db.commit()

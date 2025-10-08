@@ -14,11 +14,13 @@ import {
 } from '@mui/material';
 import { 
   Dashboard as DashboardIcon,
-  Settings as SettingsIcon 
+  Settings as SettingsIcon,
+  CalendarMonth as CalendarIcon
 } from '@mui/icons-material';
 import MeetingsDashboard from './components/MeetingsDashboard';
 import MeetingDetails from './components/MeetingDetails';
 import Settings from './components/Settings';
+import Calendar from './components/Calendar';
 
 // Create a modern theme
 const theme = createTheme({
@@ -75,7 +77,8 @@ function NavigationTabs() {
 
   React.useEffect(() => {
     if (location.pathname === '/') setValue(0);
-    else if (location.pathname === '/settings') setValue(1);
+    else if (location.pathname === '/calendar') setValue(1);
+    else if (location.pathname === '/settings') setValue(2);
   }, [location.pathname]);
 
   return (
@@ -85,6 +88,12 @@ function NavigationTabs() {
         label="Dashboard" 
         component={Link} 
         to="/" 
+      />
+      <Tab 
+        icon={<CalendarIcon />} 
+        label="Calendar" 
+        component={Link} 
+        to="/calendar" 
       />
       <Tab 
         icon={<SettingsIcon />} 
@@ -113,10 +122,11 @@ function App() {
             </Toolbar>
           </AppBar>
           
-          <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <Container maxWidth="xl" sx={{ mt: 4, mb: 4, height: 'calc(100vh - 120px)' }}>
             <Routes>
               <Route path="/" element={<MeetingsDashboard />} />
               <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
+              <Route path="/calendar" element={<Calendar />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </Container>

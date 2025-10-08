@@ -402,10 +402,49 @@ def add_action_item(transcription_id: int, action_item: schemas.ActionItemCreate
 
 @router.put("/action-items/{item_id}", response_model=schemas.ActionItem)
 def update_action_item(item_id: int, action_item: schemas.ActionItemCreate, db: Session = Depends(get_db)):
-    return crud.update_action_item(db, item_id, action_item)
+    updated_item = crud.update_action_item(db, item_id, action_item)
+    
+    # If the item is synced to Google Calendar, update the event
+    if updated_item.synced_to_calendar and updated_item.google_calendar_event_id:
+        try:
+            from ..core.google_calendar import GoogleCalendarService
+            calendar_service = GoogleCalendarService(db)
+            if calendar_service.is_connected():
+                # Get meeting title for context
+                transcription = db.query(models.Transcription).filter(
+                    models.Transcription.id == updated_item.transcription_id
+                ).first()
+                meeting_title = None
+                if transcription and transcription.meeting:
+                    meeting_title = transcription.meeting.filename
+                
+                calendar_service.update_event(
+                    updated_item.google_calendar_event_id,
+                    updated_item,
+                    meeting_title
+                )
+        except Exception as e:
+            print(f"Error updating Google Calendar event: {e}")
+            # Don't fail the request if calendar sync fails
+    
+    return updated_item
 
 @router.delete("/action-items/{item_id}", status_code=204)
 def delete_action_item(item_id: int, db: Session = Depends(get_db)):
+    # Get the item before deletion to check if it's synced to Google Calendar
+    action_item = crud.get_action_item(db, item_id)
+    
+    # If synced to Google Calendar, delete the event first
+    if action_item and action_item.synced_to_calendar and action_item.google_calendar_event_id:
+        try:
+            from ..core.google_calendar import GoogleCalendarService
+            calendar_service = GoogleCalendarService(db)
+            if calendar_service.is_connected():
+                calendar_service.delete_event(action_item.google_calendar_event_id)
+        except Exception as e:
+            print(f"Error deleting Google Calendar event: {e}")
+            # Continue with database deletion even if calendar delete fails
+    
     crud.delete_action_item(db, item_id)
     return
 
