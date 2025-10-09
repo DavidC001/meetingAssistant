@@ -1,12 +1,19 @@
 """Utility helpers for retrieval-augmented conversations across meetings."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, joinedload
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+from .. import models
+from .embeddings import generate_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +125,153 @@ def build_meeting_documents(meetings: Iterable[Any]) -> List[Document]:
     return documents
 
 
+def has_vector_support(db: Session) -> bool:
+    """Return True when the current database connection can run vector searches."""
+
+    bind = db.get_bind()
+    return bool(bind and bind.dialect.name.startswith("postgresql"))
+
+
+def index_meeting_embeddings(db: Session, meeting: Any) -> int:
+    """Generate and persist embeddings for a meeting's content."""
+
+    if not has_vector_support(db):
+        return 0
+
+    meeting_id = getattr(meeting, "id", None)
+    if not meeting_id:
+        return 0
+
+    documents = build_meeting_documents([meeting])
+    if not documents:
+        try:
+            db.query(models.MeetingEmbedding).filter(models.MeetingEmbedding.meeting_id == meeting_id).delete(
+                synchronize_session=False
+            )
+            db.commit()
+        except Exception as exc:  # pragma: no cover - database failure
+            db.rollback()
+            logger.error("Failed to clear embeddings for meeting %s: %s", meeting_id, exc, exc_info=True)
+        return 0
+
+    entries: List[models.MeetingEmbedding] = []
+
+    for doc in documents:
+        embedding = generate_embedding(doc.content)
+        if embedding is None:
+            continue
+        metadata = doc.metadata
+        entries.append(
+            models.MeetingEmbedding(
+                meeting_id=meeting_id,
+                chunk_type=metadata.get("type", "context"),
+                chunk_index=metadata.get("chunk_index"),
+                content=doc.content,
+                embedding=embedding,
+            )
+        )
+
+    if not entries:
+        logger.warning(
+            "No embeddings generated for meeting %s; existing vectors will remain unchanged.",
+            meeting_id,
+        )
+        return 0
+
+    try:
+        db.query(models.MeetingEmbedding).filter(models.MeetingEmbedding.meeting_id == meeting_id).delete(
+            synchronize_session=False
+        )
+        if entries:
+            db.bulk_save_objects(entries)
+        db.commit()
+    except Exception as exc:  # pragma: no cover - database failure
+        db.rollback()
+        logger.error("Failed to index embeddings for meeting %s: %s", meeting_id, exc, exc_info=True)
+        return 0
+
+    return len(entries)
+
+
+def ensure_embeddings_for_meetings(db: Session, meetings: Sequence[Any]) -> None:
+    """Ensure each meeting in the sequence has stored embeddings."""
+
+    if not has_vector_support(db):
+        return
+
+    meeting_map = {
+        getattr(meeting, "id", None): meeting for meeting in meetings if getattr(meeting, "id", None)
+    }
+    if not meeting_map:
+        return
+
+    existing_ids = {
+        meeting_id
+        for meeting_id, _count in db.query(models.MeetingEmbedding.meeting_id, func.count(models.MeetingEmbedding.id))
+        .filter(models.MeetingEmbedding.meeting_id.in_(meeting_map.keys()))
+        .group_by(models.MeetingEmbedding.meeting_id)
+        .all()
+    }
+
+    for meeting_id, meeting in meeting_map.items():
+        if meeting_id not in existing_ids:
+            index_meeting_embeddings(db, meeting)
+
+
+def _vector_similarity_search(
+    db: Session,
+    query: str,
+    meeting_ids: Optional[List[int]],
+    top_k: int,
+) -> Optional[List[Dict[str, Any]]]:
+    """Search stored embeddings using cosine distance if available."""
+
+    if not query or not has_vector_support(db):
+        return None
+
+    query_embedding = generate_embedding(query)
+    if query_embedding is None:
+        return None
+
+    top_k = max(1, top_k)
+    distance_column = models.MeetingEmbedding.embedding.cosine_distance(query_embedding).label("distance")
+
+    stmt = (
+        select(models.MeetingEmbedding, distance_column)
+        .options(joinedload(models.MeetingEmbedding.meeting))
+        .order_by(distance_column)
+        .limit(top_k)
+    )
+    if meeting_ids:
+        stmt = stmt.where(models.MeetingEmbedding.meeting_id.in_(meeting_ids))
+
+    try:
+        rows = db.execute(stmt).all()
+    except Exception as exc:  # pragma: no cover - database failure
+        logger.error("Vector similarity search failed: %s", exc, exc_info=True)
+        return None
+
+    results: List[Dict[str, Any]] = []
+    for embedding_obj, distance in rows:
+        distance_value = float(distance)
+        similarity = max(0.0, 1.0 - distance_value)
+        metadata = {
+            "meeting_id": embedding_obj.meeting_id,
+            "meeting_filename": getattr(embedding_obj.meeting, "filename", "Unknown meeting"),
+            "type": embedding_obj.chunk_type,
+            "chunk_index": embedding_obj.chunk_index,
+        }
+        results.append({"content": embedding_obj.content, "metadata": metadata, "score": similarity})
+
+    return results
+
+
 def select_relevant_documents(
     query: str,
     documents: List[Document],
     top_k: int = 5,
 ) -> List[Dict[str, Any]]:
-    """Return the most relevant documents for the given query."""
+    """Return the most relevant documents for the given query using TF-IDF."""
 
     if not query or not documents:
         return []
@@ -168,3 +316,27 @@ def select_relevant_documents(
         )
 
     return selected
+
+
+def retrieve_relevant_documents(
+    db: Session,
+    query: str,
+    meetings: Sequence[Any],
+    top_k: int = 5,
+    meeting_ids: Optional[List[int]] = None,
+) -> List[Dict[str, Any]]:
+    """Return relevant meeting snippets, preferring stored vectors when available."""
+
+    top_k = max(1, top_k)
+    meeting_filter = None
+    if meeting_ids:
+        meeting_filter = [mid for mid in meeting_ids if mid is not None]
+    elif meetings:
+        meeting_filter = [getattr(meeting, "id", None) for meeting in meetings if getattr(meeting, "id", None)]
+
+    vector_results = _vector_similarity_search(db, query, meeting_filter, top_k)
+    if vector_results:
+        return vector_results
+
+    documents = build_meeting_documents(meetings)
+    return select_relevant_documents(query, documents, top_k=top_k)

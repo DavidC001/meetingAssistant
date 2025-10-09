@@ -428,6 +428,17 @@ def get_meetings_with_content(db: Session, meeting_ids: Optional[List[int]] = No
 
     return query.all()
 
+
+def get_meeting_with_content(db: Session, meeting_id: int):
+    """Fetch a single meeting with transcription and action items eagerly loaded."""
+
+    return (
+        db.query(models.Meeting)
+        .options(joinedload(models.Meeting.transcription).joinedload(models.Transcription.action_items))
+        .filter(models.Meeting.id == meeting_id)
+        .first()
+    )
+
 # Action Items - Additional CRUD operations
 def get_action_item(db: Session, item_id: int):
     """Get a single action item by ID"""

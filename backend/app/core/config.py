@@ -38,6 +38,7 @@ class ModelConfig:
     default_whisper_model: str
     default_chat_model: str
     default_analysis_model: str
+    default_embedding_model: str
     local_chat_model: str
     local_analysis_model: str
     default_max_tokens: int
@@ -134,6 +135,7 @@ def get_model_config() -> ModelConfig:
         default_whisper_model=os.getenv("DEFAULT_WHISPER_MODEL", "base"),
         default_chat_model=os.getenv("DEFAULT_CHAT_MODEL", "gpt-4o-mini"),
         default_analysis_model=os.getenv("DEFAULT_ANALYSIS_MODEL", "gpt-4o-mini"),
+        default_embedding_model=os.getenv("DEFAULT_EMBEDDING_MODEL", "text-embedding-3-small"),
         local_chat_model=os.getenv("DEFAULT_LOCAL_CHAT_MODEL", "llama3"),
         local_analysis_model=os.getenv("DEFAULT_LOCAL_ANALYSIS_MODEL", "llama3"),
         default_max_tokens=int(os.getenv("DEFAULT_MAX_TOKENS", "8000")),

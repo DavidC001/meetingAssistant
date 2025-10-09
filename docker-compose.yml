@@ -63,7 +63,7 @@ services:
           memory: 4G
 
   db:
-    image: postgres:15-alpine
+    image: ankane/pgvector:latest
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:

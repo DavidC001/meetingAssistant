@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import crud, schemas
 from ..models import ProcessingStage, MeetingStatus
-from . import diarization, transcription, analysis, utils
+from . import diarization, transcription, analysis, utils, rag
 from .export import export_meeting_data
 from .calendar import generate_ics_calendar
 from .text_analysis import detect_topic, extract_keywords, identify_speakers, analyze_meeting_sentiment
@@ -540,7 +540,23 @@ Transcript:
             action_items=action_items_data,
             mark_completed=analysis_success
         )
-        
+
+        if analysis_success:
+            try:
+                meeting_with_content = crud.get_meeting_with_content(db, meeting_id)
+                if meeting_with_content:
+                    indexed_count = rag.index_meeting_embeddings(db, meeting_with_content)
+                    if indexed_count:
+                        logger.info(
+                            "Indexed %s meeting content chunks for retrieval", indexed_count
+                        )
+                    else:
+                        logger.debug("No embeddings stored for meeting %s", meeting_id)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error(
+                    "Failed to refresh vector index for meeting %s: %s", meeting_id, exc, exc_info=True
+                )
+
         # Update status based on analysis success
         if analysis_success:
             crud.update_meeting_status(db, meeting_id, MeetingStatus.COMPLETED)

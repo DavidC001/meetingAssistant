@@ -525,13 +525,16 @@ async def chat_across_meetings_endpoint(
     if not meetings:
         raise HTTPException(status_code=404, detail="No completed meetings with transcripts available")
 
-    documents = rag.build_meeting_documents(meetings)
-    if not documents:
-        raise HTTPException(status_code=404, detail="No meeting content available for chat")
-
     top_k = request.top_k or 5
     top_k = max(1, min(top_k, 10))
-    relevant_docs = rag.select_relevant_documents(request.query, documents, top_k=top_k)
+    rag.ensure_embeddings_for_meetings(db, meetings)
+    relevant_docs = rag.retrieve_relevant_documents(
+        db,
+        request.query,
+        meetings,
+        top_k=top_k,
+        meeting_ids=meeting_ids,
+    )
 
     context_sections = []
     for doc in relevant_docs:
@@ -569,6 +572,7 @@ async def chat_across_meetings_endpoint(
             meeting_id=doc.get("metadata", {}).get("meeting_id"),
             meeting_filename=doc.get("metadata", {}).get("meeting_filename"),
             type=doc.get("metadata", {}).get("type"),
+            chunk_index=doc.get("metadata", {}).get("chunk_index"),
             score=doc.get("score", 0.0),
             content=doc.get("content", ""),
         )

@@ -8,10 +8,12 @@ from sqlalchemy import (
     Text,
     Enum,
     Float,
-    Boolean
+    Boolean,
+    Index,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 from .database import Base
 
 class MeetingStatus(enum.Enum):
@@ -57,6 +59,7 @@ class Meeting(Base):
     transcription = relationship("Transcription", back_populates="meeting", uselist=False, cascade="all, delete-orphan")
     model_configuration = relationship("ModelConfiguration", backref="meetings")
     chat_messages = relationship("ChatMessage", back_populates="meeting", cascade="all, delete-orphan")
+    embeddings = relationship("MeetingEmbedding", back_populates="meeting", cascade="all, delete-orphan")
 
     # New fields for tags and folders
     tags = Column(String, nullable=True)  # Comma-separated tags
@@ -187,3 +190,20 @@ class GoogleCalendarCredentials(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MeetingEmbedding(Base):
+    __tablename__ = "meeting_embeddings"
+    __table_args__ = (
+        Index("ix_meeting_embeddings_meeting_chunk", "meeting_id", "chunk_type", "chunk_index"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_type = Column(String, nullable=False)
+    chunk_index = Column(Integer, nullable=True)
+    content = Column(Text, nullable=False)
+    embedding = Column(Vector())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    meeting = relationship("Meeting", back_populates="embeddings")

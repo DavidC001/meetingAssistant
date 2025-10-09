@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Box, Typography, Fade } from '@mui/material';
+import { Box, Typography, Fade, Tabs, Tab } from '@mui/material';
 import UploadForm from './UploadForm';
 import MeetingsListImproved from './MeetingsListImproved';
 import MultiMeetingChat from './MultiMeetingChat';
 
 const MeetingsDashboard = () => {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState('meetings');
 
   const handleMeetingsUpdate = () => {
     // Increment the key to force a re-render and re-fetch in MeetingsList
@@ -18,11 +19,36 @@ const MeetingsDashboard = () => {
         <Typography variant="h4" component="h1" gutterBottom>
           Meeting Dashboard
         </Typography>
-        <UploadForm onUploadSuccess={handleMeetingsUpdate} />
-        <Box sx={{ mt: 4 }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs
+            value={activeTab}
+            onChange={(_, value) => setActiveTab(value)}
+            aria-label="Meeting dashboard tabs"
+          >
+            <Tab label="Meetings" value="meetings" />
+            <Tab label="Cross-Meeting Chat" value="chat" />
+          </Tabs>
+        </Box>
+        <Box
+          role="tabpanel"
+          hidden={activeTab !== 'meetings'}
+          sx={{ display: activeTab === 'meetings' ? 'block' : 'none' }}
+        >
+          <UploadForm onUploadSuccess={handleMeetingsUpdate} />
+          <Box sx={{ mt: 4 }}>
+            <MeetingsListImproved
+              refreshKey={refreshKey}
+              onMeetingUpdate={handleMeetingsUpdate}
+            />
+          </Box>
+        </Box>
+        <Box
+          role="tabpanel"
+          hidden={activeTab !== 'chat'}
+          sx={{ display: activeTab === 'chat' ? 'block' : 'none', mt: 4 }}
+        >
           <MultiMeetingChat />
         </Box>
-        <MeetingsListImproved refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
       </Box>
     </Fade>
   );

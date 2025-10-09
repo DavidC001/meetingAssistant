@@ -157,6 +157,7 @@ class RAGContextSection(BaseModel):
     meeting_id: Optional[int] = None
     meeting_filename: Optional[str] = None
     type: Optional[str] = None
+    chunk_index: Optional[int] = None
     score: float
     content: str
 

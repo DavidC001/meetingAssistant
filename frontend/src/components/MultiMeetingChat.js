@@ -130,7 +130,17 @@ const MultiMeetingChat = () => {
   };
 
   return (
-    <Paper elevation={3} className="chat-container" sx={{ mb: 4 }}>
+    <Paper
+      elevation={3}
+      className="chat-container"
+      sx={{
+        mb: 4,
+        minHeight: 520,
+        height: { xs: 'auto', md: '65vh' },
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <Box className="chat-header">
         <Box>
           <Typography variant="h5">Cross-Meeting Chat</Typography>
@@ -247,6 +257,14 @@ const MultiMeetingChat = () => {
                           Context used
                         </Typography>
                         {msg.contexts.map((ctx, ctxIndex) => {
+                          const typeLabel = ctx.type
+                            ? ctx.type.replace(/_/g, ' ')
+                            : 'Context';
+                          const detailParts = [typeLabel];
+                          if (ctx.chunk_index) {
+                            detailParts.push(`Chunk ${ctx.chunk_index}`);
+                          }
+                          const detailLabel = detailParts.filter(Boolean).join(' · ');
                           const contextPreview = ctx.content && ctx.content.length > MAX_CONTEXT_PREVIEW
                             ? `${ctx.content.slice(0, MAX_CONTEXT_PREVIEW)}…`
                             : ctx.content;
@@ -261,7 +279,7 @@ const MultiMeetingChat = () => {
                                 {ctx.meeting_filename || `Meeting ${ctx.meeting_id || 'N/A'}`}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {ctx.type ? ctx.type.replace(/_/g, ' ') : 'Context'} · Relevance: {scoreText}
+                                {detailLabel} · Relevance: {scoreText}
                               </Typography>
                               {contextPreview && (
                                 <Typography variant="body2" sx={{ mt: 0.5 }}>
