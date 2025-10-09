@@ -8,15 +8,18 @@ processing management, and meeting data retrieval.
 import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Body
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import crud, models, schemas
 from ..core import chat
 from ..core.config import config
+from ..core.export import export_to_json, export_to_txt, export_to_docx, export_to_pdf
 from ..database import get_db
 
 router = APIRouter(
@@ -538,3 +541,128 @@ def clear_chat_history_endpoint(
 
     crud.clear_chat_history(db, meeting_id)
     return {"message": "Chat history cleared successfully"}
+
+@router.get("/{meeting_id}/download/{format}")
+def download_meeting(
+    meeting_id: int,
+    format: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Download meeting data in the specified format (json, txt, docx, pdf).
+    """
+    # Validate format
+    allowed_formats = ["json", "txt", "docx", "pdf"]
+    if format.lower() not in allowed_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid format. Allowed formats: {', '.join(allowed_formats)}"
+        )
+    
+    # Get meeting data
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Check if meeting has transcription
+    if not db_meeting.transcription:
+        raise HTTPException(
+            status_code=404,
+            detail="Meeting transcription not available. Processing may still be in progress."
+        )
+    
+    # Prepare the data dictionary
+    data = {
+        "filename": db_meeting.filename,
+        "created_at": db_meeting.created_at,
+        "status": db_meeting.status,
+        "summary": db_meeting.transcription.summary or "No summary available",
+        "transcript": db_meeting.transcription.full_text or "No transcript available",
+        "action_items": []
+    }
+    
+    # Add action items with detailed information
+    if db_meeting.transcription.action_items:
+        for item in db_meeting.transcription.action_items:
+            action_item_data = {
+                "task": item.task,
+                "owner": item.owner or "Unassigned",
+                "due_date": item.due_date or "No due date",
+                "status": item.status or "pending",
+                "priority": item.priority or "medium",
+                "notes": item.notes or ""
+            }
+            data["action_items"].append(action_item_data)
+    
+    # Add speakers information if available
+    if db_meeting.speakers:
+        data["speakers"] = [
+            {"name": speaker.name, "label": speaker.label or ""}
+            for speaker in db_meeting.speakers
+        ]
+    
+    # Add tags and folder if available
+    if db_meeting.tags:
+        data["tags"] = db_meeting.tags
+    if db_meeting.folder:
+        data["folder"] = db_meeting.folder
+    
+    # Add model configuration info if available
+    if db_meeting.model_configuration:
+        data["model_info"] = {
+            "name": db_meeting.model_configuration.name,
+            "transcription_language": db_meeting.transcription_language,
+            "number_of_speakers": db_meeting.number_of_speakers
+        }
+    
+    # Create a temporary file for export
+    temp_dir = tempfile.mkdtemp()
+    base_name = db_meeting.filename.replace(" ", "_")
+    # Remove extension from filename if present
+    base_name = Path(base_name).stem
+    
+    try:
+        # Export to the specified format
+        export_path = None
+        if format.lower() == "json":
+            export_path = export_to_json(data, os.path.join(temp_dir, f"{base_name}.json"))
+        elif format.lower() == "txt":
+            export_path = export_to_txt(data, os.path.join(temp_dir, f"{base_name}.txt"))
+        elif format.lower() == "docx":
+            export_path = export_to_docx(data, os.path.join(temp_dir, f"{base_name}.docx"))
+            if export_path is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="DOCX export not available. python-docx library may not be installed."
+                )
+        elif format.lower() == "pdf":
+            export_path = export_to_pdf(data, os.path.join(temp_dir, f"{base_name}.pdf"))
+            if export_path is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="PDF export not available. reportlab library may not be installed."
+                )
+        
+        if not export_path or not os.path.exists(export_path):
+            raise HTTPException(status_code=500, detail="Failed to generate export file")
+        
+        # Determine media type
+        media_types = {
+            "json": "application/json",
+            "txt": "text/plain",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "pdf": "application/pdf"
+        }
+        
+        # Return the file as a download
+        return FileResponse(
+            path=str(export_path),
+            media_type=media_types[format.lower()],
+            filename=f"{base_name}.{format.lower()}",
+            background=None  # Don't clean up immediately
+        )
+    
+    except Exception as e:
+        # Clean up temporary directory on error
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Error generating export: {str(e)}")

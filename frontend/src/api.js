@@ -34,6 +34,13 @@ const api = {
   updateMeetingTagsFolder: (meetingId, tags, folder) => {
     return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
   },
+
+  // Download API
+  downloadMeeting: (meetingId, format) => {
+    return client.get(`/api/v1/meetings/${meetingId}/download/${format}`, {
+      responseType: 'blob' // Important for downloading files
+    });
+  },
 };
 
 

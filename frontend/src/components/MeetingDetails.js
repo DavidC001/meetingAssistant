@@ -31,7 +31,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Autocomplete
+  Autocomplete,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -51,7 +53,8 @@ import {
   Refresh as RefreshIcon,
   RestartAlt as RestartAltIcon,
   Delete as DeleteIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -86,6 +89,7 @@ const MeetingDetails = () => {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [availableFolders, setAvailableFolders] = useState([]);
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
 
   // Add manual refresh function
   const handleManualRefresh = async () => {
@@ -303,6 +307,51 @@ const MeetingDetails = () => {
     }
   };
 
+  // Download meeting handlers
+  const handleDownloadMenuOpen = (event) => {
+    setDownloadMenuAnchor(event.currentTarget);
+  };
+
+  const handleDownloadMenuClose = () => {
+    setDownloadMenuAnchor(null);
+  };
+
+  const handleDownloadMeeting = async (format) => {
+    handleDownloadMenuClose();
+    
+    try {
+      setIsUpdating(true);
+      const response = await api.downloadMeeting(meetingId, format);
+      
+      // Create a blob from the response data
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      
+      // Create a link element and trigger download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from meeting name
+      const baseName = meeting.filename.replace(/\.[^/.]+$/, ""); // Remove extension
+      link.download = `${baseName}.${format}`;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      setError(null);
+    } catch (err) {
+      console.error('Download meeting error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to download meeting. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const fetchAvailableFolders = async () => {
     try {
       const response = await api.get('/api/v1/meetings/');
@@ -476,6 +525,37 @@ const MeetingDetails = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {isUpdating && (
                 <CircularProgress size={16} sx={{ mr: 1 }} />
+              )}
+              {meeting.transcription && (
+                <>
+                  <Button 
+                    variant="contained" 
+                    size="small"
+                    startIcon={<DownloadIcon />}
+                    onClick={handleDownloadMenuOpen}
+                    sx={{ mr: 1 }}
+                  >
+                    Download
+                  </Button>
+                  <Menu
+                    anchorEl={downloadMenuAnchor}
+                    open={Boolean(downloadMenuAnchor)}
+                    onClose={handleDownloadMenuClose}
+                  >
+                    <MenuItem onClick={() => handleDownloadMeeting('txt')}>
+                      Text (.txt)
+                    </MenuItem>
+                    <MenuItem onClick={() => handleDownloadMeeting('json')}>
+                      JSON (.json)
+                    </MenuItem>
+                    <MenuItem onClick={() => handleDownloadMeeting('docx')}>
+                      Word Document (.docx)
+                    </MenuItem>
+                    <MenuItem onClick={() => handleDownloadMeeting('pdf')}>
+                      PDF (.pdf)
+                    </MenuItem>
+                  </Menu>
+                </>
               )}
               <Button 
                 variant="outlined" 
