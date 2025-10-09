@@ -57,7 +57,8 @@ import {
   Download as DownloadIcon,
   AttachFile as AttachFileIcon,
   CloudUpload as CloudUploadIcon,
-  Description as DescriptionIcon
+  Description as DescriptionIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -428,6 +429,12 @@ const MeetingDetails = () => {
       console.error('Download attachment error:', err);
       setError('Failed to download attachment.');
     }
+  };
+
+  const handlePreviewAttachment = (attachmentId) => {
+    // Open preview in new tab
+    const previewUrl = api.previewAttachment(attachmentId);
+    window.open(previewUrl, '_blank');
   };
 
   const handleDeleteAttachment = async (attachmentId) => {
@@ -1438,6 +1445,16 @@ const MeetingDetails = () => {
                                 </Typography>
                               </Box>
                               <Box sx={{ display: 'flex', gap: 1 }}>
+                                {attachment.mime_type === 'application/pdf' && (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    startIcon={<VisibilityIcon />}
+                                    onClick={() => handlePreviewAttachment(attachment.id)}
+                                  >
+                                    Preview
+                                  </Button>
+                                )}
                                 <Button
                                   size="small"
                                   startIcon={<DownloadIcon />}

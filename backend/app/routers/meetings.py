@@ -791,6 +791,42 @@ async def download_attachment(
     )
 
 
+@router.get("/attachments/{attachment_id}/preview")
+async def preview_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Preview an attachment file in-browser (for PDFs and other previewable types).
+    
+    Args:
+        attachment_id: ID of the attachment to preview
+        db: Database session
+    
+    Returns:
+        The attachment file with inline content disposition for browser preview
+    """
+    # Get attachment record
+    attachment = crud.get_attachment(db, attachment_id=attachment_id)
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Verify file exists
+    file_path = Path(attachment.filepath)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Attachment file not found on disk")
+    
+    # Return file with inline disposition for browser preview
+    return FileResponse(
+        path=str(file_path),
+        media_type=attachment.mime_type,
+        filename=attachment.filename,
+        headers={
+            "Content-Disposition": f'inline; filename="{attachment.filename}"'
+        }
+    )
+
+
 @router.put("/attachments/{attachment_id}", response_model=schemas.Attachment)
 def update_attachment_description(
     attachment_id: int,

@@ -63,6 +63,10 @@ const api = {
       responseType: 'blob'
     });
   },
+  previewAttachment: (attachmentId) => {
+    // Returns the URL for previewing in browser (opens in new tab)
+    return `/api/v1/meetings/attachments/${attachmentId}/preview`;
+  },
   updateAttachment: (attachmentId, description) => {
     return client.put(`/api/v1/meetings/attachments/${attachmentId}`, { description });
   },
