@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Typography, Fade } from '@mui/material';
 import UploadForm from './UploadForm';
 import MeetingsListImproved from './MeetingsListImproved';
+import MultiMeetingChat from './MultiMeetingChat';
 
 const MeetingsDashboard = () => {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -18,6 +19,9 @@ const MeetingsDashboard = () => {
           Meeting Dashboard
         </Typography>
         <UploadForm onUploadSuccess={handleMeetingsUpdate} />
+        <Box sx={{ mt: 4 }}>
+          <MultiMeetingChat />
+        </Box>
         <MeetingsListImproved refreshKey={refreshKey} onMeetingUpdate={handleMeetingsUpdate} />
       </Box>
     </Fade>

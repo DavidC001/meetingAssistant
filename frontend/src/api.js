@@ -34,6 +34,9 @@ const api = {
   updateMeetingTagsFolder: (meetingId, tags, folder) => {
     return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
   },
+
+  // Multi-meeting chat API
+  chatAcrossMeetings: (payload) => client.post('/api/v1/meetings/chat/rag', payload),
 };
 
 

@@ -127,3 +127,23 @@
 .send-button {
     margin-left: 16px;
 }
+
+.rag-context {
+    margin-top: 12px;
+    background-color: #eef4ff;
+    border-left: 3px solid #1976d2;
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+
+.rag-context-item {
+    margin-top: 8px;
+}
+
+.rag-context-item:first-of-type {
+    margin-top: 12px;
+}
+
+.rag-context-item p {
+    margin: 4px 0;
+}

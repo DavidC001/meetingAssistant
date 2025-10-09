@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Sequence
 from .providers import ProviderFactory, LLMConfig
 from .config import config
 
@@ -83,43 +83,47 @@ def get_default_chat_config() -> LLMConfig:
         **default_kwargs,
     )
 
-async def chat_with_meeting(
-    query: str, 
-    transcript: str, 
-    chat_history: List[Dict[str, str]], 
-    config: Optional[LLMConfig] = None
+async def chat_with_context(
+    query: str,
+    context_sections: Sequence[Dict[str, str]],
+    chat_history: List[Dict[str, str]],
+    config: Optional[LLMConfig] = None,
+    system_prompt: Optional[str] = None,
 ) -> str:
-    """
-    Generates a response to a query using the meeting transcript and chat history.
-    
-    Args:
-        query: User's question
-        transcript: Meeting transcript text
-        chat_history: Previous chat messages
-        config: LLM configuration (if None, uses default)
-    """
+    """Generate a response for a query using structured context snippets."""
     try:
         # Use provided config or get default
         if config is None:
             config = get_default_chat_config()
-        
+
         # Create provider instance
         provider = ProviderFactory.create_provider(config)
-        
+
         # Prepare system prompt
-        system_prompt = (
-            "You are an AI assistant that helps users understand and analyze meeting transcripts. "
-            "Use the provided transcript to answer questions accurately and helpfully. "
-            "If a question cannot be answered from the transcript, say so clearly. "
-            "Be concise but thorough in your responses."
-        )
-        
+        if system_prompt is None:
+            system_prompt = (
+                "You are an AI assistant that helps users understand and analyze meetings. "
+                "Use only the provided meeting context when answering the user's question. "
+                "If the answer cannot be found in the context, respond that the information is not available. "
+                "Be concise but thorough, and cite the meeting name in your explanation when relevant."
+            )
+
         # Prepare context message with transcript
-        context_message = f"Meeting Transcript:\n\n{transcript}\n\nUser Question: {query}"
-        
+        if context_sections:
+            sections_text = []
+            for section in context_sections:
+                title = section.get("title", "Context")
+                content = section.get("content", "")
+                sections_text.append(f"{title}:\n{content}")
+            context_body = "\n\n".join(sections_text)
+        else:
+            context_body = "No meeting context was found for this question."
+
+        context_message = f"{context_body}\n\nUser Question: {query}"
+
         # Prepare messages for the provider
         messages = []
-        
+
         # Add recent chat history (last 5 messages to avoid context overflow)
         for msg in chat_history[-5:]:
             messages.append({
@@ -135,10 +139,35 @@ async def chat_with_meeting(
         
         # Get response from provider
         response = await provider.chat_completion(messages, system_prompt)
-        
+
         logger.info(f"Chat response generated using {config.provider} provider")
         return response
 
     except Exception as e:
         logger.error(f"Chat completion failed: {e}", exc_info=True)
         return f"Error: Could not get a response from the AI. {str(e)}"
+
+
+async def chat_with_meeting(
+    query: str,
+    transcript: str,
+    chat_history: List[Dict[str, str]],
+    config: Optional[LLMConfig] = None
+) -> str:
+    """
+    Generates a response to a query using the meeting transcript and chat history.
+
+    Args:
+        query: User's question
+        transcript: Meeting transcript text
+        chat_history: Previous chat messages
+        config: LLM configuration (if None, uses default)
+    """
+
+    context_sections = [{"title": "Meeting Transcript", "content": transcript}]
+    return await chat_with_context(
+        query=query,
+        context_sections=context_sections,
+        chat_history=chat_history,
+        config=config,
+    )

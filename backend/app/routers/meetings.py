@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from sqlalchemy.orm import Session
 
 from .. import crud, models, schemas
-from ..core import chat
+from ..core import chat, rag
 from ..core.config import config
 from ..database import get_db
 
@@ -508,6 +508,74 @@ async def chat_with_meeting_endpoint(
     crud.create_chat_message(db, meeting_id, "assistant", response_text)
 
     return schemas.ChatResponse(response=response_text)
+
+
+@router.post("/chat/rag", response_model=schemas.ChatResponse)
+async def chat_across_meetings_endpoint(
+    request: schemas.MultiMeetingChatRequest,
+    db: Session = Depends(get_db),
+):
+    """Chat across multiple meetings using retrieval-augmented generation."""
+
+    if not request.query or not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    meeting_ids = request.meeting_ids or None
+    meetings = crud.get_meetings_with_content(db, meeting_ids)
+    if not meetings:
+        raise HTTPException(status_code=404, detail="No completed meetings with transcripts available")
+
+    documents = rag.build_meeting_documents(meetings)
+    if not documents:
+        raise HTTPException(status_code=404, detail="No meeting content available for chat")
+
+    top_k = request.top_k or 5
+    top_k = max(1, min(top_k, 10))
+    relevant_docs = rag.select_relevant_documents(request.query, documents, top_k=top_k)
+
+    context_sections = []
+    for doc in relevant_docs:
+        metadata = doc.get("metadata", {})
+        meeting_name = metadata.get("meeting_filename", "Meeting")
+        section_type = metadata.get("type", "Context").replace("_", " ").title()
+        chunk_index = metadata.get("chunk_index")
+        title_parts = [meeting_name, section_type]
+        if chunk_index:
+            title_parts.append(f"Chunk {chunk_index}")
+        title = " - ".join(title_parts)
+        context_sections.append({"title": title, "content": doc.get("content", "")})
+
+    if not context_sections:
+        context_sections = [{"title": "Context", "content": "No high-confidence context was found."}]
+
+    model_config = crud.get_default_model_configuration(db)
+    llm_config = None
+    if model_config:
+        llm_config = chat.model_config_to_llm_config(model_config, use_analysis=False)
+
+    response_text = await chat.chat_with_context(
+        query=request.query,
+        context_sections=context_sections,
+        chat_history=request.chat_history or [],
+        config=llm_config,
+        system_prompt=(
+            "You are an assistant that answers questions about past meetings using the provided context. "
+            "Do not fabricate details and explicitly mention when information is not available in the context."
+        ),
+    )
+
+    contexts = [
+        schemas.RAGContextSection(
+            meeting_id=doc.get("metadata", {}).get("meeting_id"),
+            meeting_filename=doc.get("metadata", {}).get("meeting_filename"),
+            type=doc.get("metadata", {}).get("type"),
+            score=doc.get("score", 0.0),
+            content=doc.get("content", ""),
+        )
+        for doc in relevant_docs
+    ] or None
+
+    return schemas.ChatResponse(response=response_text, contexts=contexts)
 
 @router.get("/{meeting_id}/chat/history", response_model=schemas.ChatHistoryResponse)
 def get_chat_history_endpoint(

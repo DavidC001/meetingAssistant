@@ -1,4 +1,6 @@
-from sqlalchemy.orm import Session
+from typing import List, Optional
+
+from sqlalchemy.orm import Session, joinedload
 from . import models, schemas
 
 # Meeting CRUD operations
@@ -410,6 +412,21 @@ def clear_chat_history(db: Session, meeting_id: int):
         models.ChatMessage.meeting_id == meeting_id
     ).delete()
     db.commit()
+
+
+def get_meetings_with_content(db: Session, meeting_ids: Optional[List[int]] = None):
+    """Fetch completed meetings with their transcription data eagerly loaded."""
+
+    query = db.query(models.Meeting).options(
+        joinedload(models.Meeting.transcription).joinedload(models.Transcription.action_items)
+    ).filter(
+        models.Meeting.status == models.MeetingStatus.COMPLETED.value
+    )
+
+    if meeting_ids:
+        query = query.filter(models.Meeting.id.in_(meeting_ids))
+
+    return query.all()
 
 # Action Items - Additional CRUD operations
 def get_action_item(db: Session, item_id: int):

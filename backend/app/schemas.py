@@ -153,8 +153,22 @@ class ChatRequest(BaseModel):
     query: str
     chat_history: Optional[List[dict]] = None
 
+class RAGContextSection(BaseModel):
+    meeting_id: Optional[int] = None
+    meeting_filename: Optional[str] = None
+    type: Optional[str] = None
+    score: float
+    content: str
+
+
 class ChatResponse(BaseModel):
     response: str
+    contexts: Optional[List[RAGContextSection]] = None
+
+
+class MultiMeetingChatRequest(ChatRequest):
+    meeting_ids: Optional[List[int]] = None
+    top_k: Optional[int] = 5
 
 # Transcription Schemas
 class TranscriptionBase(BaseModel):
