@@ -54,7 +54,10 @@ import {
   RestartAlt as RestartAltIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  AttachFile as AttachFileIcon,
+  CloudUpload as CloudUploadIcon,
+  Description as DescriptionIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -90,6 +93,12 @@ const MeetingDetails = () => {
   const [newName, setNewName] = useState('');
   const [availableFolders, setAvailableFolders] = useState([]);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
+  const [attachments, setAttachments] = useState([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [attachmentDescription, setAttachmentDescription] = useState('');
+  const [editingAttachment, setEditingAttachment] = useState(null);
 
   // Add manual refresh function
   const handleManualRefresh = async () => {
@@ -352,6 +361,108 @@ const MeetingDetails = () => {
     }
   };
 
+  // Attachment handlers
+  const fetchAttachments = async () => {
+    try {
+      const response = await api.getMeetingAttachments(meetingId);
+      setAttachments(response.data);
+    } catch (err) {
+      console.error('Error fetching attachments:', err);
+    }
+  };
+
+  const handleAttachmentDialogOpen = () => {
+    setAttachmentDialogOpen(true);
+    setSelectedFile(null);
+    setAttachmentDescription('');
+  };
+
+  const handleAttachmentDialogClose = () => {
+    setAttachmentDialogOpen(false);
+    setSelectedFile(null);
+    setAttachmentDescription('');
+  };
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUploadAttachment = async () => {
+    if (!selectedFile) return;
+    
+    try {
+      setUploadingAttachment(true);
+      await api.uploadAttachment(meetingId, selectedFile, attachmentDescription);
+      await fetchAttachments();
+      handleAttachmentDialogClose();
+      setError(null);
+    } catch (err) {
+      console.error('Upload attachment error:', err);
+      setError('Failed to upload attachment. Please try again.');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleDownloadAttachment = async (attachmentId, filename) => {
+    try {
+      const response = await api.downloadAttachment(attachmentId);
+      
+      // Create a blob and download
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download attachment error:', err);
+      setError('Failed to download attachment.');
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (!window.confirm('Are you sure you want to delete this attachment?')) {
+      return;
+    }
+    
+    try {
+      await api.deleteAttachment(attachmentId);
+      await fetchAttachments();
+      setError(null);
+    } catch (err) {
+      console.error('Delete attachment error:', err);
+      setError('Failed to delete attachment.');
+    }
+  };
+
+  const handleEditAttachmentDescription = (attachment) => {
+    setEditingAttachment(attachment);
+  };
+
+  const handleUpdateAttachmentDescription = async () => {
+    if (!editingAttachment) return;
+    
+    try {
+      await api.updateAttachment(editingAttachment.id, editingAttachment.description);
+      await fetchAttachments();
+      setEditingAttachment(null);
+      setError(null);
+    } catch (err) {
+      console.error('Update attachment error:', err);
+      setError('Failed to update attachment description.');
+    }
+  };
+
   const fetchAvailableFolders = async () => {
     try {
       const response = await api.get('/api/v1/meetings/');
@@ -378,6 +489,9 @@ const MeetingDetails = () => {
         
         // Fetch available folders for autocomplete
         await fetchAvailableFolders();
+        
+        // Fetch attachments
+        await fetchAttachments();
         
         return response.data;
       } catch (err) {
@@ -1260,6 +1374,124 @@ const MeetingDetails = () => {
             </Card>
           </Grid>
 
+          {/* Attachments Section */}
+          <Grid item xs={12}>
+            <Card elevation={3}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <AttachFileIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h5">Attachments</Typography>
+                    {attachments.length > 0 && (
+                      <Chip label={attachments.length} size="small" sx={{ ml: 1 }} />
+                    )}
+                  </Box>
+                  <Button 
+                    variant="contained" 
+                    size="small" 
+                    startIcon={<CloudUploadIcon />}
+                    onClick={handleAttachmentDialogOpen}
+                  >
+                    Upload File
+                  </Button>
+                </Box>
+
+                {attachments.length > 0 ? (
+                  <List>
+                    {attachments.map((attachment) => (
+                      <Paper key={attachment.id} elevation={1} sx={{ mb: 2, p: 2 }}>
+                        {editingAttachment?.id === attachment.id ? (
+                          <Box>
+                            <TextField
+                              fullWidth
+                              label="Description"
+                              value={editingAttachment.description || ''}
+                              onChange={(e) => setEditingAttachment({ ...editingAttachment, description: e.target.value })}
+                              sx={{ mb: 2 }}
+                              multiline
+                              rows={2}
+                            />
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={handleUpdateAttachmentDescription}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => setEditingAttachment(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                                <DescriptionIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                                <Typography variant="subtitle1" fontWeight="bold">
+                                  {attachment.filename}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  size="small"
+                                  startIcon={<DownloadIcon />}
+                                  onClick={() => handleDownloadAttachment(attachment.id, attachment.filename)}
+                                >
+                                  Download
+                                </Button>
+                                <Button
+                                  size="small"
+                                  startIcon={<EditIcon />}
+                                  onClick={() => handleEditAttachmentDescription(attachment)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  startIcon={<DeleteIcon />}
+                                  onClick={() => handleDeleteAttachment(attachment.id)}
+                                >
+                                  Delete
+                                </Button>
+                              </Box>
+                            </Box>
+                            {attachment.description && (
+                              <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 1 }}>
+                                {attachment.description}
+                              </Typography>
+                            )}
+                            <Box sx={{ display: 'flex', gap: 2, ml: 4 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Size: {(attachment.file_size / 1024).toFixed(2)} KB
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Type: {attachment.mime_type}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Uploaded: {new Date(attachment.uploaded_at).toLocaleString()}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
+                      </Paper>
+                    ))}
+                  </List>
+                ) : (
+                  <Alert severity="info" icon={<AttachFileIcon />}>
+                    No attachments yet. Upload supporting documents, images, or other files related to this meeting.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
           <Grid item xs={12}>
             <Card elevation={3}>
               <CardContent>
@@ -1453,6 +1685,62 @@ const MeetingDetails = () => {
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleDeleteMeetingConfirm} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Upload Attachment Dialog */}
+      <Dialog open={attachmentDialogOpen} onClose={handleAttachmentDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Upload Attachment</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <input
+              accept="*/*"
+              style={{ display: 'none' }}
+              id="attachment-file-input"
+              type="file"
+              onChange={handleFileSelect}
+            />
+            <label htmlFor="attachment-file-input">
+              <Button
+                variant="outlined"
+                component="span"
+                fullWidth
+                startIcon={<CloudUploadIcon />}
+                sx={{ mb: 2 }}
+              >
+                {selectedFile ? selectedFile.name : 'Choose File'}
+              </Button>
+            </label>
+            
+            {selectedFile && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
+              </Alert>
+            )}
+            
+            <TextField
+              fullWidth
+              label="Description (optional)"
+              value={attachmentDescription}
+              onChange={(e) => setAttachmentDescription(e.target.value)}
+              multiline
+              rows={3}
+              placeholder="Add a description for this attachment..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleAttachmentDialogClose} disabled={uploadingAttachment}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUploadAttachment}
+            variant="contained"
+            disabled={!selectedFile || uploadingAttachment}
+            startIcon={uploadingAttachment ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+          >
+            {uploadingAttachment ? 'Uploading...' : 'Upload'}
           </Button>
         </DialogActions>
       </Dialog>

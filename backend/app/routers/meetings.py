@@ -666,3 +666,193 @@ def download_meeting(
         # Clean up temporary directory on error
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=f"Error generating export: {str(e)}")
+
+
+# ============================================================================
+# Attachment Endpoints
+# ============================================================================
+
+@router.post("/{meeting_id}/attachments", response_model=schemas.Attachment)
+async def upload_attachment(
+    meeting_id: int,
+    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload an attachment file for a meeting.
+    
+    Args:
+        meeting_id: ID of the meeting to attach the file to
+        file: File to upload
+        description: Optional description of the attachment
+        db: Database session
+    
+    Returns:
+        The created attachment record
+    """
+    # Verify meeting exists
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Create attachments directory if it doesn't exist
+    attachments_dir = Path(config.upload.upload_dir) / "attachments"
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Sanitize filename
+    original_filename = file.filename or "attachment"
+    safe_filename = re.sub(r'[^\w\s.-]', '', original_filename)
+    
+    # Create unique filename with meeting_id prefix
+    timestamp = str(int(os.path.getmtime(__file__) * 1000))  # Simple timestamp
+    unique_filename = f"{meeting_id}_{timestamp}_{safe_filename}"
+    file_path = attachments_dir / unique_filename
+    
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+    
+    # Get file size and mime type
+    file_size = os.path.getsize(file_path)
+    mime_type = file.content_type or "application/octet-stream"
+    
+    # Create attachment record
+    attachment = crud.create_attachment(
+        db=db,
+        meeting_id=meeting_id,
+        filename=original_filename,
+        filepath=str(file_path),
+        file_size=file_size,
+        mime_type=mime_type,
+        description=description
+    )
+    
+    return attachment
+
+
+@router.get("/{meeting_id}/attachments", response_model=List[schemas.Attachment])
+def get_meeting_attachments(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all attachments for a meeting.
+    
+    Args:
+        meeting_id: ID of the meeting
+        db: Database session
+    
+    Returns:
+        List of attachments for the meeting
+    """
+    # Verify meeting exists
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if db_meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    attachments = crud.get_meeting_attachments(db, meeting_id=meeting_id)
+    return attachments
+
+
+@router.get("/attachments/{attachment_id}/download")
+async def download_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Download an attachment file.
+    
+    Args:
+        attachment_id: ID of the attachment to download
+        db: Database session
+    
+    Returns:
+        The attachment file
+    """
+    # Get attachment record
+    attachment = crud.get_attachment(db, attachment_id=attachment_id)
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Verify file exists
+    file_path = Path(attachment.filepath)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Attachment file not found on disk")
+    
+    # Return file
+    return FileResponse(
+        path=str(file_path),
+        media_type=attachment.mime_type,
+        filename=attachment.filename
+    )
+
+
+@router.put("/attachments/{attachment_id}", response_model=schemas.Attachment)
+def update_attachment_description(
+    attachment_id: int,
+    description: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the description of an attachment.
+    
+    Args:
+        attachment_id: ID of the attachment to update
+        description: New description
+        db: Database session
+    
+    Returns:
+        The updated attachment record
+    """
+    # Get attachment
+    attachment = crud.get_attachment(db, attachment_id=attachment_id)
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Update description
+    updated_attachment = crud.update_attachment(
+        db=db,
+        attachment_id=attachment_id,
+        description=description
+    )
+    
+    return updated_attachment
+
+
+@router.delete("/attachments/{attachment_id}", status_code=204)
+def delete_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an attachment and its file.
+    
+    Args:
+        attachment_id: ID of the attachment to delete
+        db: Database session
+    
+    Returns:
+        No content on success
+    """
+    # Get attachment
+    attachment = crud.get_attachment(db, attachment_id=attachment_id)
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    # Delete file from disk
+    file_path = Path(attachment.filepath)
+    if file_path.exists():
+        try:
+            file_path.unlink()
+        except Exception as e:
+            # Log error but continue with database deletion
+            print(f"Warning: Failed to delete attachment file: {str(e)}")
+    
+    # Delete database record
+    crud.delete_attachment(db=db, attachment_id=attachment_id)
+    
+    return None

@@ -136,6 +136,25 @@ class Speaker(SpeakerBase):
     class Config:
         from_attributes = True
 
+# Attachment Schemas
+class AttachmentBase(BaseModel):
+    filename: str
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    description: Optional[str] = None
+
+class AttachmentCreate(AttachmentBase):
+    pass
+
+class Attachment(AttachmentBase):
+    id: int
+    meeting_id: int
+    filepath: str
+    uploaded_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # Chat Schemas
 class ChatMessage(BaseModel):
     id: int
@@ -224,6 +243,7 @@ class Meeting(MeetingBase):
     tags: Optional[str] = None
     folder: Optional[str] = None
     speakers: List[Speaker] = []
+    attachments: List[Attachment] = []
     transcription: Optional[Transcription] = None
     model_configuration: Optional[ModelConfiguration] = None
 

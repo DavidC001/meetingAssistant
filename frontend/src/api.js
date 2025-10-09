@@ -41,6 +41,34 @@ const api = {
       responseType: 'blob' // Important for downloading files
     });
   },
+
+  // Attachment API
+  uploadAttachment: (meetingId, file, description) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description) {
+      formData.append('description', description);
+    }
+    return client.post(`/api/v1/meetings/${meetingId}/attachments`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  getMeetingAttachments: (meetingId) => {
+    return client.get(`/api/v1/meetings/${meetingId}/attachments`);
+  },
+  downloadAttachment: (attachmentId) => {
+    return client.get(`/api/v1/meetings/attachments/${attachmentId}/download`, {
+      responseType: 'blob'
+    });
+  },
+  updateAttachment: (attachmentId, description) => {
+    return client.put(`/api/v1/meetings/attachments/${attachmentId}`, { description });
+  },
+  deleteAttachment: (attachmentId) => {
+    return client.delete(`/api/v1/meetings/attachments/${attachmentId}`);
+  },
 };
 
 

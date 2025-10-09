@@ -64,6 +64,23 @@ class Meeting(Base):
 
     # Relationship for speakers
     speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")
+    
+    # Relationship for attachments
+    attachments = relationship("Attachment", back_populates="meeting", cascade="all, delete-orphan")
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    filename = Column(String, nullable=False)  # Original filename
+    filepath = Column(String, nullable=False)  # Stored file path
+    file_size = Column(Integer, nullable=True)  # File size in bytes
+    mime_type = Column(String, nullable=True)  # MIME type
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    description = Column(Text, nullable=True)  # Optional description
+
+    meeting = relationship("Meeting", back_populates="attachments")
 
 class Transcription(Base):
     __tablename__ = "transcriptions"

@@ -470,3 +470,44 @@ def delete_google_calendar_credentials(db: Session, user_id: str = "default"):
         models.GoogleCalendarCredentials.user_id == user_id
     ).delete()
     db.commit()
+
+# Attachment CRUD operations
+def get_attachment(db: Session, attachment_id: int):
+    """Get a single attachment by ID"""
+    return db.query(models.Attachment).filter(models.Attachment.id == attachment_id).first()
+
+def get_meeting_attachments(db: Session, meeting_id: int):
+    """Get all attachments for a meeting"""
+    return db.query(models.Attachment).filter(models.Attachment.meeting_id == meeting_id).all()
+
+def create_attachment(db: Session, meeting_id: int, filename: str, filepath: str, file_size: int = None, mime_type: str = None, description: str = None):
+    """Create a new attachment"""
+    db_attachment = models.Attachment(
+        meeting_id=meeting_id,
+        filename=filename,
+        filepath=filepath,
+        file_size=file_size,
+        mime_type=mime_type,
+        description=description
+    )
+    db.add(db_attachment)
+    db.commit()
+    db.refresh(db_attachment)
+    return db_attachment
+
+def update_attachment(db: Session, attachment_id: int, description: str = None):
+    """Update attachment description"""
+    db_attachment = get_attachment(db, attachment_id)
+    if db_attachment and description is not None:
+        db_attachment.description = description
+        db.commit()
+        db.refresh(db_attachment)
+    return db_attachment
+
+def delete_attachment(db: Session, attachment_id: int):
+    """Delete an attachment"""
+    db_attachment = get_attachment(db, attachment_id)
+    if db_attachment:
+        db.delete(db_attachment)
+        db.commit()
+    return db_attachment
