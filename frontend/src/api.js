@@ -35,6 +35,11 @@ const api = {
     return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
   },
 
+  // Notes API
+  updateMeetingNotes: (meetingId, notes) => {
+    return client.put(`/api/v1/meetings/${meetingId}/notes`, { notes });
+  },
+
   // Download API
   downloadMeeting: (meetingId, format) => {
     return client.get(`/api/v1/meetings/${meetingId}/download/${format}`, {

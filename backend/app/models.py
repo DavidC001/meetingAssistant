@@ -62,6 +62,7 @@ class Meeting(Base):
     # New fields for tags and folders
     tags = Column(String, nullable=True)  # Comma-separated tags
     folder = Column(String, nullable=True)  # Folder name or path
+    notes = Column(Text, nullable=True)  # User notes for the meeting
 
     # Relationship for speakers
     speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")

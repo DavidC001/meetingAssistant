@@ -219,6 +219,7 @@ class MeetingUpdate(BaseModel):
     model_configuration_id: Optional[int] = None
     tags: Optional[str] = None
     folder: Optional[str] = None
+    notes: Optional[str] = None
 
 class Meeting(MeetingBase):
     id: int
@@ -243,6 +244,7 @@ class Meeting(MeetingBase):
     
     tags: Optional[str] = None
     folder: Optional[str] = None
+    notes: Optional[str] = None
     speakers: List[Speaker] = []
     attachments: List[Attachment] = []
     transcription: Optional[Transcription] = None

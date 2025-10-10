@@ -84,6 +84,7 @@ const MeetingDetails = () => {
   const [editingSpeaker, setEditingSpeaker] = useState(null);
   const [tags, setTags] = useState('');
   const [folder, setFolder] = useState('');
+  const [notes, setNotes] = useState('');
   const [newActionItem, setNewActionItem] = useState({ task: '', owner: '', due_date: '', isAdding: false });
   const [editingActionItem, setEditingActionItem] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -258,6 +259,14 @@ const MeetingDetails = () => {
       const res = await api.updateMeetingTagsFolder(meetingId, tags, folder);
       setMeeting(res.data);
     } catch (err) { setError('Failed to update tags/folder'); }
+  };
+
+  // Notes handler
+  const handleUpdateNotes = async () => {
+    try {
+      const res = await api.updateMeetingNotes(meetingId, notes);
+      setMeeting(res.data);
+    } catch (err) { setError('Failed to update notes'); }
   };
 
   // Delete meeting handlers
@@ -492,6 +501,7 @@ const MeetingDetails = () => {
   setMeeting(response.data);
   setTags(response.data.tags || '');
   setFolder(response.data.folder || '');
+  setNotes(response.data.notes || '');
         setError(null);
         
         // Fetch available folders for autocomplete
@@ -771,6 +781,40 @@ const MeetingDetails = () => {
               >
                 Save
               </Button>
+            </Box>
+          </Paper>
+
+          {/* Notes Section */}
+          <Paper elevation={0} sx={{ p: 2, bgcolor: 'info.lighter', borderRadius: 2, mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom fontWeight="medium">
+              Meeting Notes
+            </Typography>
+            <Box>
+              <TextField
+                label="Notes"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Add notes about this meeting..."
+                multiline
+                rows={4}
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <Box component="span" sx={{ mr: 1, alignSelf: 'flex-start', mt: 1 }}>
+                      📝
+                    </Box>
+                  ),
+                }}
+              />
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                <Button 
+                  onClick={handleUpdateNotes} 
+                  size="medium" 
+                  variant="contained"
+                >
+                  Save Notes
+                </Button>
+              </Box>
             </Box>
           </Paper>
           <Grid container spacing={2} sx={{ mt: 2 }}>

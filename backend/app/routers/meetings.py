@@ -468,6 +468,17 @@ def update_meeting_tags_folder(meeting_id: int, tags: Optional[str] = Body(None)
     db.refresh(db_meeting)
     return db_meeting
 
+@router.put("/{meeting_id}/notes", response_model=schemas.Meeting)
+def update_meeting_notes(meeting_id: int, notes: Optional[str] = Body(None, embed=True), db: Session = Depends(get_db)):
+    """Update notes for a meeting."""
+    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if not db_meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    db_meeting.notes = notes
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
+
 @router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
 async def chat_with_meeting_endpoint(
     meeting_id: int,
