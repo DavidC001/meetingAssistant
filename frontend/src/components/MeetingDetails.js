@@ -1203,15 +1203,23 @@ const MeetingDetails = () => {
             </Grid>
           )}
 
-          <Grid item xs={12} lg={6}>
-            <Card elevation={3} sx={{ height: '100%' }}>
+          <Grid item xs={12}>
+            <Card elevation={3}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <SummarizeIcon sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="h5">Meeting Summary</Typography>
+                  <SummarizeIcon sx={{ mr: 1, color: 'primary.main', fontSize: 32 }} />
+                  <Typography variant="h4" fontWeight="600">Meeting Summary</Typography>
                 </Box>
-                <Paper elevation={1} sx={{ p: 3, bgcolor: 'grey.50', maxHeight: '400px', overflow: 'auto' }}>
-                  <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 4, 
+                    bgcolor: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+                    border: '2px solid #e0e0e0',
+                    borderRadius: 3
+                  }}
+                >
+                  <Typography variant="body1" sx={{ lineHeight: 2, fontSize: '1.1rem', color: 'text.primary' }}>
                     {meeting.transcription.summary.split('\n').map((line, index) => (
                       <React.Fragment key={index}>
                         {line}
@@ -1224,26 +1232,37 @@ const MeetingDetails = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} lg={6}>
-            <Chat meetingId={meetingId} />
+          {/* Chat Section - Full Width Card */}
+          <Grid item xs={12}>
+            <Card elevation={3} sx={{ minHeight: '700px' }}>
+              <Chat meetingId={meetingId} />
+            </Card>
           </Grid>
 
           <Grid item xs={12}>
             <Card elevation={3}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <CardContent sx={{ p: 4 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <AssignmentIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h5">Action Items</Typography>
+                    <AssignmentIcon sx={{ mr: 1, color: 'primary.main', fontSize: 32 }} />
+                    <Typography variant="h4" fontWeight="600">Action Items</Typography>
+                    {meeting.transcription.action_items.length > 0 && (
+                      <Chip 
+                        label={`${meeting.transcription.action_items.length} total`} 
+                        color="primary" 
+                        sx={{ ml: 2 }} 
+                      />
+                    )}
                   </Box>
                   <Button 
                     variant="contained" 
-                    size="small" 
+                    size="large" 
                     startIcon={<AssignmentIcon />}
                     onClick={() => setNewActionItem({ task: '', owner: '', due_date: '', isAdding: true })}
                     disabled={newActionItem.isAdding}
+                    sx={{ borderRadius: 2, px: 3, py: 1.5 }}
                   >
-                    Add New
+                    Add New Action Item
                   </Button>
                 </Box>
 
@@ -1387,60 +1406,70 @@ const MeetingDetails = () => {
                         ) : (
                           // Display mode
                           <Paper 
-                            elevation={1} 
+                            elevation={2} 
                             sx={{ 
-                              p: 2, 
-                              mb: 2, 
-                              bgcolor: 'success.lighter',
-                              border: '1px solid',
-                              borderColor: 'success.light',
-                              transition: 'all 0.2s',
+                              p: 3, 
+                              mb: 3, 
+                              bgcolor: '#f8f9fa',
+                              border: '2px solid',
+                              borderColor: '#e0e0e0',
+                              borderRadius: 3,
+                              transition: 'all 0.3s',
                               '&:hover': {
-                                elevation: 3,
-                                borderColor: 'success.main'
+                                elevation: 4,
+                                borderColor: 'primary.main',
+                                transform: 'translateY(-2px)',
+                                boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
                               }
                             }}
                           >
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                              <Box sx={{ display: 'flex', flex: 1, alignItems: 'flex-start' }}>
-                                <CheckCircleIcon color="success" sx={{ mt: 0.5, mr: 2 }} />
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 }}>
+                              <Box sx={{ display: 'flex', flex: 1, alignItems: 'flex-start', gap: 2 }}>
+                                <CheckCircleIcon 
+                                  color="success" 
+                                  sx={{ mt: 0.5, fontSize: 28 }} 
+                                />
                                 <Box sx={{ flex: 1 }}>
-                                  <Typography variant="subtitle1" fontWeight="medium" sx={{ mb: 1 }}>
+                                  <Typography variant="h6" fontWeight="500" sx={{ mb: 2, lineHeight: 1.5 }}>
                                     {item.task}
                                   </Typography>
                                   <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                                     <Chip
                                       icon={<PersonIcon />}
                                       label={item.owner || 'Unassigned'}
-                                      size="small"
-                                      variant="outlined"
-                                      color={item.owner ? "default" : "warning"}
+                                      size="medium"
+                                      variant={item.owner ? "filled" : "outlined"}
+                                      color={item.owner ? "primary" : "warning"}
+                                      sx={{ fontWeight: 500 }}
                                     />
                                     <Chip
                                       icon={<CalendarIcon />}
-                                      label={item.due_date || 'No deadline'}
-                                      size="small"
-                                      variant="outlined"
-                                      color={item.due_date ? "default" : "warning"}
+                                      label={item.due_date ? new Date(item.due_date).toLocaleDateString() : 'No deadline'}
+                                      size="medium"
+                                      variant={item.due_date ? "filled" : "outlined"}
+                                      color={item.due_date ? "primary" : "warning"}
+                                      sx={{ fontWeight: 500 }}
                                     />
                                   </Box>
                                 </Box>
                               </Box>
-                              <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+                              <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
                                 <Button 
-                                  size="small" 
+                                  size="medium" 
                                   variant="outlined"
                                   startIcon={<EditIcon />}
                                   onClick={() => setEditingActionItem({ ...item })}
+                                  sx={{ borderRadius: 2 }}
                                 >
                                   Edit
                                 </Button>
                                 <Button 
-                                  size="small" 
+                                  size="medium" 
                                   variant="outlined"
                                   color="error" 
                                   startIcon={<DeleteIcon />}
                                   onClick={() => handleDeleteActionItem(item.id)}
+                                  sx={{ borderRadius: 2 }}
                                 >
                                   Delete
                                 </Button>

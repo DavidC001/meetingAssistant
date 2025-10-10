@@ -197,122 +197,220 @@ const Settings = () => {
   );
 
   return (
-    <Box>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Settings
-      </Typography>
-
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={currentTab} onChange={(e, newValue) => setCurrentTab(newValue)}>
-          <Tab label="System" icon={<SettingsIcon />} />
-          <Tab label="Model Configurations" icon={<TuneIcon />} />
-          <Tab label="API Keys" icon={<KeyIcon />} />
-          <Tab label="Ollama" icon={<StorageIcon />} />
-        </Tabs>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h3" component="h1" fontWeight="700" gutterBottom>
+          ⚙️ Settings
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Configure your Meeting Assistant preferences and integrations
+        </Typography>
       </Box>
+
+      <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
+        <Box sx={{ borderBottom: 2, borderColor: 'divider' }}>
+          <Tabs 
+            value={currentTab} 
+            onChange={(e, newValue) => setCurrentTab(newValue)}
+            variant="fullWidth"
+            sx={{
+              '& .MuiTab-root': {
+                py: 2,
+                fontSize: '1rem',
+                fontWeight: 600
+              }
+            }}
+          >
+            <Tab label="System Settings" icon={<SettingsIcon />} iconPosition="start" />
+            <Tab label="AI Models" icon={<TuneIcon />} iconPosition="start" />
+            <Tab label="API Keys" icon={<KeyIcon />} iconPosition="start" />
+            <Tab label="Ollama" icon={<StorageIcon />} iconPosition="start" />
+          </Tabs>
+        </Box>
 
       {/* System Settings Tab */}
       <TabPanel value={currentTab} index={0}>
-        <Grid container spacing={3}>
-          {/* System Status */}
-          <Grid item xs={12}>
-            <Card elevation={3}>
-              <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <SettingsIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h5">System Status</Typography>
-                <Button
-                  startIcon={<RefreshIcon />}
-                  onClick={fetchSystemStatus}
-                  sx={{ ml: 'auto' }}
-                  size="small"
-                >
-                  Refresh
-                </Button>
-              </Box>
+        <Box sx={{ p: 4 }}>
+          <Grid container spacing={4}>
+            {/* System Status */}
+            <Grid item xs={12}>
+              <Card elevation={2} sx={{ borderRadius: 3 }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <SettingsIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
+                    <Typography variant="h5" fontWeight="600">System Health Status</Typography>
+                    <Button
+                      startIcon={<RefreshIcon />}
+                      onClick={fetchSystemStatus}
+                      sx={{ ml: 'auto', borderRadius: 2 }}
+                      size="medium"
+                      variant="outlined"
+                    >
+                      Refresh Status
+                    </Button>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Monitor the status of all system services and components
+                  </Typography>
               
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
-                      <MicIcon sx={{ mr: 1 }} />
-                      {getStatusIcon(systemStatus.transcriptionService)}
-                    </Box>
-                    <Typography variant="body2" gutterBottom>
-                      Transcription Service
-                    </Typography>
-                    <Chip
-                      label={systemStatus.transcriptionService}
-                      color={getStatusColor(systemStatus.transcriptionService)}
-                      size="small"
-                    />
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
-                      <PsychologyIcon sx={{ mr: 1 }} />
-                      {getStatusIcon(systemStatus.aiService)}
-                    </Box>
-                    <Typography variant="body2" gutterBottom>
-                      AI Analysis Service
-                    </Typography>
-                    <Chip
-                      label={systemStatus.aiService}
-                      color={getStatusColor(systemStatus.aiService)}
-                      size="small"
-                    />
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
-                      <StorageIcon sx={{ mr: 1 }} />
-                      {getStatusIcon(systemStatus.storageService)}
-                    </Box>
-                    <Typography variant="body2" gutterBottom>
-                      Storage Service
-                    </Typography>
-                    <Chip
-                      label={systemStatus.storageService}
-                      color={getStatusColor(systemStatus.storageService)}
-                      size="small"
-                    />
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
-                      <SettingsIcon sx={{ mr: 1 }} />
-                      {getStatusIcon(systemStatus.queueStatus)}
-                    </Box>
-                    <Typography variant="body2" gutterBottom>
-                      Processing Queue
-                    </Typography>
-                    <Chip
-                      label={systemStatus.queueStatus}
-                      color={getStatusColor(systemStatus.queueStatus)}
-                      size="small"
-                    />
-                  </Paper>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Paper 
+                        elevation={2} 
+                        sx={{ 
+                          p: 3, 
+                          textAlign: 'center',
+                          borderRadius: 3,
+                          border: '2px solid',
+                          borderColor: `${getStatusColor(systemStatus.transcriptionService)}.light`,
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
+                          }
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                          <MicIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+                        </Box>
+                        <Typography variant="h6" fontWeight="600" gutterBottom>
+                          Transcription
+                        </Typography>
+                        <Box sx={{ mt: 2 }}>
+                          {getStatusIcon(systemStatus.transcriptionService)}
+                        </Box>
+                        <Chip
+                          label={systemStatus.transcriptionService}
+                          color={getStatusColor(systemStatus.transcriptionService)}
+                          size="medium"
+                          sx={{ mt: 2, fontWeight: 600 }}
+                        />
+                      </Paper>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Paper 
+                        elevation={2} 
+                        sx={{ 
+                          p: 3, 
+                          textAlign: 'center',
+                          borderRadius: 3,
+                          border: '2px solid',
+                          borderColor: `${getStatusColor(systemStatus.aiService)}.light`,
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
+                          }
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                          <PsychologyIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+                        </Box>
+                        <Typography variant="h6" fontWeight="600" gutterBottom>
+                          AI Analysis
+                        </Typography>
+                        <Box sx={{ mt: 2 }}>
+                          {getStatusIcon(systemStatus.aiService)}
+                        </Box>
+                        <Chip
+                          label={systemStatus.aiService}
+                          color={getStatusColor(systemStatus.aiService)}
+                          size="medium"
+                          sx={{ mt: 2, fontWeight: 600 }}
+                        />
+                      </Paper>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Paper 
+                        elevation={2} 
+                        sx={{ 
+                          p: 3, 
+                          textAlign: 'center',
+                          borderRadius: 3,
+                          border: '2px solid',
+                          borderColor: `${getStatusColor(systemStatus.storageService)}.light`,
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
+                          }
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                          <StorageIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+                        </Box>
+                        <Typography variant="h6" fontWeight="600" gutterBottom>
+                          Storage
+                        </Typography>
+                        <Box sx={{ mt: 2 }}>
+                          {getStatusIcon(systemStatus.storageService)}
+                        </Box>
+                        <Chip
+                          label={systemStatus.storageService}
+                          color={getStatusColor(systemStatus.storageService)}
+                          size="medium"
+                          sx={{ mt: 2, fontWeight: 600 }}
+                        />
+                      </Paper>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Paper 
+                        elevation={2} 
+                        sx={{ 
+                          p: 3, 
+                          textAlign: 'center',
+                          borderRadius: 3,
+                          border: '2px solid',
+                          borderColor: `${getStatusColor(systemStatus.queueStatus)}.light`,
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
+                          }
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+                          <SettingsIcon sx={{ fontSize: 40, color: 'primary.main' }} />
+                        </Box>
+                        <Typography variant="h6" fontWeight="600" gutterBottom>
+                          Queue
+                        </Typography>
+                        <Box sx={{ mt: 2 }}>
+                          {getStatusIcon(systemStatus.queueStatus)}
+                        </Box>
+                        <Chip
+                          label={systemStatus.queueStatus}
+                          color={getStatusColor(systemStatus.queueStatus)}
+                          size="medium"
+                          sx={{ mt: 2, fontWeight: 600 }}
+                        />
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
 
-        {/* Processing Settings */}
-        <Grid item xs={12} md={6}>
-          <Card elevation={3}>
-            <CardContent>
-              <Typography variant="h5" gutterBottom>
-                Processing Settings
-              </Typography>
-              
-              <List>
+            {/* Processing Settings */}
+            <Grid item xs={12} md={6}>
+              <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <MicIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
+                    <Box>
+                      <Typography variant="h5" fontWeight="600" gutterBottom>
+                        Processing Settings
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Configure audio transcription and analysis
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2, p: 2 }}>
                 <ListItem>
                   <ListItemIcon>
                     <LanguageIcon />
@@ -377,15 +475,23 @@ const Settings = () => {
           </Card>
         </Grid>
 
-        {/* System Settings */}
-        <Grid item xs={12} md={6}>
-          <Card elevation={3}>
-            <CardContent>
-              <Typography variant="h5" gutterBottom>
-                System Settings
-              </Typography>
-              
-              <List>
+            {/* System Settings */}
+            <Grid item xs={12} md={6}>
+              <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <SecurityIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
+                    <Box>
+                      <Typography variant="h5" fontWeight="600" gutterBottom>
+                        System Settings
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Manage storage and system preferences
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2, p: 2 }}>
                 <ListItem>
                   <ListItemIcon>
                     <NotificationsIcon />
@@ -452,21 +558,28 @@ const Settings = () => {
           </Card>
         </Grid>
 
-        {/* Save Button */}
-        <Grid item xs={12}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
-              onClick={handleSaveSettings}
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save Settings'}
-            </Button>
-          </Box>
-        </Grid>
-        </Grid>
+            {/* Save Button */}
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
+                  onClick={handleSaveSettings}
+                  disabled={isSaving}
+                  sx={{ 
+                    borderRadius: 2,
+                    px: 4,
+                    py: 1.5,
+                    fontSize: '1.1rem'
+                  }}
+                >
+                  {isSaving ? 'Saving...' : 'Save Settings'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
       </TabPanel>
 
       {/* Model Configurations Tab */}
@@ -483,6 +596,8 @@ const Settings = () => {
       <TabPanel value={currentTab} index={3}>
         <OllamaManager />
       </TabPanel>
+
+      </Paper>
 
       <Snackbar
         open={snackbar.open}

@@ -287,28 +287,42 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
 
   return (
     <>
-      <Card elevation={3}>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5" component="h2">
-              All Meetings
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {meetings.length} meeting{meetings.length !== 1 ? 's' : ''}
-            </Typography>
+      <Card elevation={3} sx={{ borderRadius: 3 }}>
+        <CardContent sx={{ p: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Typography variant="h4" component="h2" fontWeight="600">
+                📚 All Meetings
+              </Typography>
+              <Chip 
+                label={`${meetings.length} total`} 
+                color="primary" 
+                variant="outlined" 
+                size="medium"
+              />
+            </Box>
           </Box>
 
           {/* Search Bar */}
           <TextField
             fullWidth
-            placeholder="Search meetings, folders, or tags..."
+            placeholder="🔍 Search meetings, folders, or tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 3,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+                backgroundColor: '#f8f9fa',
+                '&:hover': {
+                  backgroundColor: '#e9ecef'
+                }
+              }
+            }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon />
+                  <SearchIcon color="action" />
                 </InputAdornment>
               ),
             }}
@@ -342,122 +356,170 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
                   key={folder}
                   expanded={expandedFolders[folder] !== false}
                   onChange={() => toggleFolder(folder)}
-                  elevation={1}
-                  sx={{ mb: 1 }}
+                  elevation={2}
+                  sx={{ 
+                    mb: 2,
+                    borderRadius: 2,
+                    '&:before': { display: 'none' },
+                    overflow: 'hidden'
+                  }}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreIcon />}
                     sx={{
-                      backgroundColor: 'action.hover',
+                      backgroundColor: 'primary.light',
+                      color: 'primary.contrastText',
+                      minHeight: 64,
                       '&:hover': {
-                        backgroundColor: 'action.selected',
+                        backgroundColor: 'primary.main',
                       },
+                      '& .MuiAccordionSummary-content': {
+                        my: 2
+                      }
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      {expandedFolders[folder] !== false ? <FolderOpenIcon color="primary" /> : <FolderIcon color="primary" />}
-                      <Typography variant="subtitle1" fontWeight="medium">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                      {expandedFolders[folder] !== false ? 
+                        <FolderOpenIcon sx={{ fontSize: 28, color: 'inherit' }} /> : 
+                        <FolderIcon sx={{ fontSize: 28, color: 'inherit' }} />
+                      }
+                      <Typography variant="h6" fontWeight="600">
                         {folder}
                       </Typography>
                       <Chip 
-                        label={groupedMeetings[folder].length} 
-                        size="small" 
-                        color="primary" 
-                        variant="outlined"
-                        sx={{ ml: 1 }}
+                        label={`${groupedMeetings[folder].length} meeting${groupedMeetings[folder].length !== 1 ? 's' : ''}`}
+                        size="medium" 
+                        sx={{ 
+                          ml: 'auto',
+                          bgcolor: 'white',
+                          color: 'primary.main',
+                          fontWeight: 600
+                        }}
                       />
                     </Box>
                   </AccordionSummary>
-                  <AccordionDetails sx={{ p: 0 }}>
+                  <AccordionDetails sx={{ p: 2, bgcolor: '#f8f9fa' }}>
                     <List disablePadding>
                       {groupedMeetings[folder].map((meeting, index) => (
                         <React.Fragment key={meeting.id}>
-                          {index > 0 && <Divider />}
-                          <ListItem
+                          <Paper
+                            elevation={1}
                             sx={{
-                              py: 2,
-                              position: 'relative',
+                              mb: 2,
+                              borderRadius: 2,
+                              overflow: 'hidden',
+                              transition: 'all 0.3s',
                               '&:hover': {
-                                backgroundColor: 'action.hover',
-                              },
+                                elevation: 3,
+                                transform: 'translateY(-2px)',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                              }
                             }}
-                            secondaryAction={
-                              <Tooltip title="More options">
-                                <IconButton
-                                  edge="end"
-                                  onClick={(e) => handleMenuOpen(e, meeting)}
-                                  size="small"
-                                >
-                                  <MoreVertIcon />
-                                </IconButton>
-                              </Tooltip>
-                            }
                           >
-                            <Box 
-                              component={Link}
-                              to={`/meetings/${meeting.id}`}
+                            <ListItem
                               sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                width: '100%',
-                                textDecoration: 'none',
-                                color: 'inherit',
-                                pr: 6,
+                                py: 3,
+                                px: 3,
+                                position: 'relative',
+                                bgcolor: 'white'
                               }}
+                              secondaryAction={
+                                <Tooltip title="More options">
+                                  <IconButton
+                                    edge="end"
+                                    onClick={(e) => handleMenuOpen(e, meeting)}
+                                    size="medium"
+                                  >
+                                    <MoreVertIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              }
                             >
-                              <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
-                                {getStatusIcon(meeting.status)}
-                              </Box>
-                              
-                              <ListItemText
-                                primary={
-                                  <Typography variant="subtitle1" fontWeight="medium">
-                                    {meeting.filename}
-                                  </Typography>
-                                }
-                                secondary={
-                                  <Box>
-                                    <Typography variant="body2" color="text.secondary">
-                                      {formatDate(meeting.created_at)}
+                              <Box 
+                                component={Link}
+                                to={`/meetings/${meeting.id}`}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  textDecoration: 'none',
+                                  color: 'inherit',
+                                  pr: 6,
+                                  gap: 2
+                                }}
+                              >
+                                <Box sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: 2,
+                                  bgcolor: `${getStatusColor(meeting.status)}.lighter`
+                                }}>
+                                  {getStatusIcon(meeting.status)}
+                                </Box>
+                                
+                                <ListItemText
+                                  primary={
+                                    <Typography variant="h6" fontWeight="600" sx={{ mb: 0.5 }}>
+                                      {meeting.filename}
                                     </Typography>
-                                    {meeting.tags && (
-                                      <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
-                                        {meeting.tags.split(',').map((tag, i) => (
-                                          <Chip
-                                            key={i}
-                                            icon={<LabelIcon />}
-                                            label={tag.trim()}
-                                            size="small"
-                                            variant="outlined"
+                                  }
+                                  secondary={
+                                    <Box>
+                                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        📅 {formatDate(meeting.created_at)}
+                                      </Typography>
+                                      {meeting.tags && (
+                                        <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
+                                          {meeting.tags.split(',').map((tag, i) => (
+                                            <Chip
+                                              key={i}
+                                              icon={<LabelIcon />}
+                                              label={tag.trim()}
+                                              size="small"
+                                              variant="filled"
+                                              color="primary"
+                                              sx={{ bgcolor: 'primary.lighter' }}
+                                            />
+                                          ))}
+                                        </Stack>
+                                      )}
+                                      {meeting.status === 'processing' && (
+                                        <Box sx={{ mt: 2, width: '250px' }}>
+                                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                            <Typography variant="caption" fontWeight="600" color="primary">
+                                              Processing...
+                                            </Typography>
+                                            <Typography variant="caption" fontWeight="600" color="primary">
+                                              {Math.round(meeting.overall_progress || 0)}%
+                                            </Typography>
+                                          </Box>
+                                          <LinearProgress
+                                            variant="determinate"
+                                            value={meeting.overall_progress || 0}
+                                            sx={{ height: 8, borderRadius: 2 }}
                                           />
-                                        ))}
-                                      </Stack>
-                                    )}
-                                    {meeting.status === 'processing' && (
-                                      <Box sx={{ mt: 1, width: '200px' }}>
-                                        <LinearProgress
-                                          variant="determinate"
-                                          value={meeting.overall_progress || 0}
-                                          sx={{ height: 6, borderRadius: 3 }}
-                                        />
-                                        <Typography variant="caption" color="text.secondary">
-                                          {Math.round(meeting.overall_progress || 0)}% complete
-                                        </Typography>
-                                      </Box>
-                                    )}
-                                  </Box>
-                                }
-                              />
-                              
-                              <Chip
-                                label={meeting.status}
-                                color={getStatusColor(meeting.status)}
-                                size="small"
-                                variant="outlined"
-                                sx={{ ml: 1 }}
-                              />
-                            </Box>
-                          </ListItem>
+                                        </Box>
+                                      )}
+                                    </Box>
+                                  }
+                                />
+                                
+                                <Chip
+                                  label={meeting.status.toUpperCase()}
+                                  color={getStatusColor(meeting.status)}
+                                  size="medium"
+                                  sx={{ 
+                                    ml: 1,
+                                    fontWeight: 600,
+                                    minWidth: 100
+                                  }}
+                                />
+                              </Box>
+                            </ListItem>
+                          </Paper>
                         </React.Fragment>
                       ))}
                     </List>

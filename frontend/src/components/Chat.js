@@ -97,15 +97,15 @@ const Chat = ({ meetingId }) => {
     };
 
     return (
-        <Paper elevation={3} className="chat-container">
+        <Paper elevation={3} className="chat-container" sx={{ height: '100%' }}>
             <Box className="chat-header">
                 <Typography variant="h5">
-                    Chat with Meeting
+                    💬 Ask Questions About This Meeting
                 </Typography>
                 <Tooltip title="Clear chat history">
                     <IconButton 
                         onClick={clearChatHistory}
-                        color="secondary"
+                        sx={{ color: 'white' }}
                         disabled={isLoading || messages.length === 0}
                     >
                         <ClearAllIcon />
@@ -181,17 +181,31 @@ const Chat = ({ meetingId }) => {
                     placeholder="Ask a question about the meeting..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                     disabled={isLoading}
+                    multiline
+                    maxRows={4}
+                    sx={{
+                        '& .MuiOutlinedInput-root': {
+                            borderRadius: '12px',
+                            backgroundColor: '#f8f9fa'
+                        }
+                    }}
                 />
                 <Button
                     variant="contained"
                     color="primary"
                     onClick={handleSend}
-                    disabled={isLoading}
+                    disabled={isLoading || !input.trim()}
                     className="send-button"
+                    sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        '&:hover': {
+                            background: 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)',
+                        }
+                    }}
                 >
-                    {isLoading ? <CircularProgress size={24} /> : <SendIcon />}
+                    {isLoading ? <CircularProgress size={24} sx={{ color: 'white' }} /> : <SendIcon />}
                 </Button>
             </Box>
         </Paper>
