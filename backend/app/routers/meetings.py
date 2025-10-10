@@ -381,8 +381,11 @@ def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session 
                 
             # Update action items owner field
             for action_item in meeting.transcription.action_items:
-                # Update if action item owner matches old speaker name or label
-                if action_item.owner == old_name or action_item.owner == old_label:
+                # Update if action item owner matches old speaker name or label (case-insensitive)
+                if action_item.owner and (
+                    (old_name and action_item.owner.lower() == old_name.lower()) or 
+                    (old_label and action_item.owner.lower() == old_label.lower())
+                ):
                     action_item.owner = speaker.name
     
     db.commit()
