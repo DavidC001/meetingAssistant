@@ -239,6 +239,7 @@ class Meeting(MeetingBase):
     error_message: Optional[str] = None
     processing_logs: Optional[str] = None
     celery_task_id: Optional[str] = None
+    audio_filepath: Optional[str] = None  # Path to playback audio file
     
     tags: Optional[str] = None
     folder: Optional[str] = None

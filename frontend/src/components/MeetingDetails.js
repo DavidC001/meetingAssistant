@@ -779,6 +779,41 @@ const MeetingDetails = () => {
         </CardContent>
       </Card>
 
+      {/* Audio Player Section */}
+      {meeting.audio_filepath && (
+        <Card elevation={3} sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <PlayCircleIcon sx={{ mr: 1, color: 'primary.main' }} />
+              <Typography variant="h5">Audio Playback</Typography>
+            </Box>
+            <Box sx={{ 
+              bgcolor: 'grey.100', 
+              p: 2, 
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1
+            }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Listen to the meeting audio
+              </Typography>
+              <audio 
+                controls 
+                style={{ width: '100%' }}
+                preload="metadata"
+              >
+                <source 
+                  src={`/api/v1/meetings/${meeting.id}/audio`} 
+                  type="audio/mpeg" 
+                />
+                Your browser does not support the audio element.
+              </audio>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Processing Information Section */}
       {(meeting.status === 'processing' || meeting.status === 'pending') && (
         <Card elevation={3} sx={{ mb: 3 }}>

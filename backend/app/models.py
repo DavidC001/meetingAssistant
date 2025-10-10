@@ -32,6 +32,7 @@ class Meeting(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, index=True)
     filepath = Column(String, unique=True)
+    audio_filepath = Column(String, nullable=True)  # Path to playback audio file (MP3)
     status = Column(String, default=MeetingStatus.PENDING.value)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

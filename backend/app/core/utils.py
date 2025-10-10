@@ -79,6 +79,42 @@ def convert_to_audio(input_path: str | Path, output_path: str | Path) -> Path:
 
     return output_path
 
+def convert_to_mp3(input_path: str | Path, output_path: str | Path) -> Path:
+    """
+    Convert audio/video file to MP3 format for efficient storage and streaming.
+    Extracts only audio from video files and converts to MP3 at 128kbps.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+
+    # Validate that input file exists
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file does not exist: {input_path}")
+    
+    # Create output directory if it doesn't exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Log the conversion for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Converting {input_path} to MP3 at {output_path}")
+
+    # Use ffmpeg to convert to MP3 at 128kbps (good quality, efficient size)
+    # -vn ensures no video is included (audio only)
+    # -b:a 128k sets audio bitrate to 128kbps
+    cmd = [
+        "ffmpeg", "-y", "-i", str(input_path),
+        "-vn",  # No video
+        "-codec:a", "libmp3lame",  # MP3 codec
+        "-b:a", "128k",  # Audio bitrate
+        "-loglevel", "error",
+        str(output_path),
+    ]
+    _run_ffmpeg(cmd)
+
+    logger.info(f"Successfully converted to MP3: {output_path}")
+    return output_path
+
 def get_file_metadata(file_path: str | Path) -> MeetingMetadata:
     """Extract metadata from the file."""
     path = _assert_file(file_path)

@@ -892,3 +892,44 @@ def delete_attachment(
     crud.delete_attachment(db=db, attachment_id=attachment_id)
     
     return None
+
+
+@router.get("/{meeting_id}/audio")
+def stream_meeting_audio(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Stream the meeting audio file for playback.
+    Returns the MP3 audio file that can be streamed to the frontend.
+    
+    Args:
+        meeting_id: ID of the meeting
+        db: Database session
+    
+    Returns:
+        FileResponse with the audio file
+    """
+    # Get meeting record
+    meeting = crud.get_meeting(db, meeting_id=meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Check if audio file exists
+    if not meeting.audio_filepath:
+        raise HTTPException(status_code=404, detail="Audio file not available for this meeting")
+    
+    audio_path = Path(meeting.audio_filepath)
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+    
+    # Return audio file with streaming support
+    return FileResponse(
+        path=str(audio_path),
+        media_type="audio/mpeg",
+        filename=f"{meeting.filename}_audio.mp3",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Disposition": f'inline; filename="{meeting.filename}_audio.mp3"'
+        }
+    )

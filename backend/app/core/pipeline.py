@@ -134,6 +134,25 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             
             utils.convert_to_audio(input_file_path, wav_audio_path)
             
+            # Also create MP3 for playback (storage-efficient, streamable format)
+            try:
+                from .config import config
+                audio_dir = Path(config.upload.upload_dir) / "audio"
+                audio_dir.mkdir(parents=True, exist_ok=True)
+                mp3_filename = f"{input_file_path.stem}_audio.mp3"
+                mp3_path = audio_dir / mp3_filename
+                
+                logger.info(f"Creating MP3 for playback: {mp3_path}")
+                utils.convert_to_mp3(input_file_path, mp3_path)
+                
+                # Update meeting with audio filepath
+                meeting.audio_filepath = str(mp3_path)
+                db.commit()
+                logger.info(f"MP3 playback file created: {mp3_path}")
+            except Exception as e:
+                logger.warning(f"Failed to create MP3 playback file: {e}")
+                # Don't fail the entire process if MP3 creation fails
+            
             # Save conversion checkpoint
             checkpoint_manager.save_checkpoint("conversion", {
                 "wav_audio_path": str(wav_audio_path),
