@@ -1,13 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Dict, List
+from typing import Any, Dict, List
 import os
 from pathlib import Path
 import re
 
 from ..database import get_db
 from .. import crud, schemas
+from ..core.embeddings import validate_embedding_model
 from ..models import ModelConfiguration
+from ..tasks import compute_embeddings_for_meeting, recompute_all_embeddings
 
 router = APIRouter(
     prefix="/settings",
@@ -501,3 +503,89 @@ def get_api_keys_by_provider(provider: str, db: Session = Depends(get_db)):
         ))
     
     return result_keys
+
+
+@router.get("/embedding-config")
+def get_embedding_configuration_settings(db: Session = Depends(get_db)):
+    """Return all embedding configurations with the active configuration highlighted."""
+    configs = crud.list_embedding_configurations(db)
+    active = crud.get_active_embedding_configuration(db)
+    return {
+        "configurations": [schemas.EmbeddingConfiguration.from_orm(cfg) for cfg in configs],
+        "activeConfigurationId": active.id if active else None,
+    }
+
+
+@router.post("/embedding-config", response_model=schemas.EmbeddingConfiguration)
+def create_embedding_configuration(config: schemas.EmbeddingConfigurationCreate, db: Session = Depends(get_db)):
+    valid, message = validate_embedding_model(config.provider, config.model_name)
+    if not valid:
+        raise HTTPException(status_code=400, detail=message or "Invalid embedding model")
+    return crud.create_embedding_configuration(db, config)
+
+
+@router.put("/embedding-config/{config_id}", response_model=schemas.EmbeddingConfiguration)
+def update_embedding_configuration(config_id: int, payload: schemas.EmbeddingConfigurationUpdate, db: Session = Depends(get_db)):
+    existing = crud.get_embedding_configuration(db, config_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Embedding configuration not found")
+
+    provider = payload.provider or existing.provider
+    model_name = payload.model_name or existing.model_name
+    valid, message = validate_embedding_model(provider, model_name)
+    if not valid:
+        raise HTTPException(status_code=400, detail=message or "Invalid embedding model")
+
+    config = crud.update_embedding_configuration(db, config_id, payload)
+    if not config:
+        raise HTTPException(status_code=404, detail="Embedding configuration not found")
+    return config
+
+
+@router.post("/embedding-config/{config_id}/activate")
+def activate_embedding_configuration(config_id: int, db: Session = Depends(get_db)):
+    config = crud.update_embedding_configuration(db, config_id, schemas.EmbeddingConfigurationUpdate(is_active=True))
+    if not config:
+        raise HTTPException(status_code=404, detail="Embedding configuration not found")
+    return schemas.EmbeddingConfiguration.from_orm(config)
+
+
+@router.delete("/embedding-config/{config_id}")
+def delete_embedding_configuration(config_id: int, db: Session = Depends(get_db)):
+    config = crud.delete_embedding_configuration(db, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Embedding configuration not found")
+    return {"status": "deleted", "config_id": config_id}
+
+
+@router.get("/embedding-config/validate-model")
+def validate_embedding_model_endpoint(
+    provider: str = Query(..., description="Embedding provider identifier"),
+    model_name: str = Query(..., description="Model name or repository to validate"),
+):
+    valid, message = validate_embedding_model(provider, model_name)
+    return {"valid": valid, "message": message}
+
+
+@router.post("/embedding-config/recompute")
+def trigger_recompute_embeddings():
+    task = recompute_all_embeddings.delay()
+    return {"status": "queued", "task_id": task.id}
+
+
+@router.post("/embedding-config/{meeting_id}/recompute")
+def trigger_recompute_for_meeting(meeting_id: int):
+    task = compute_embeddings_for_meeting.delay(meeting_id)
+    return {"status": "queued", "meeting_id": meeting_id, "task_id": task.id}
+
+
+@router.get("/worker-scaling", response_model=schemas.WorkerConfiguration)
+def get_worker_scaling(db: Session = Depends(get_db)):
+    return crud.get_worker_configuration(db)
+
+
+@router.put("/worker-scaling", response_model=schemas.WorkerConfiguration)
+def update_worker_scaling(payload: schemas.WorkerConfigurationUpdate, db: Session = Depends(get_db)):
+    if payload.max_workers < 1 or payload.max_workers > 10:
+        raise HTTPException(status_code=400, detail="Worker count must be between 1 and 10")
+    return crud.set_worker_configuration(db, payload.max_workers)

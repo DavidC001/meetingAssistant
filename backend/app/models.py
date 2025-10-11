@@ -8,11 +8,13 @@ from sqlalchemy import (
     Text,
     Enum,
     Float,
-    Boolean
+    Boolean,
+    JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
+from pgvector.sqlalchemy import Vector
 
 class MeetingStatus(enum.Enum):
     PENDING = "pending"
@@ -54,10 +56,14 @@ class Meeting(Base):
     error_message = Column(Text, nullable=True)  # Store error details if processing fails
     processing_logs = Column(Text, nullable=True)  # Store processing logs
     celery_task_id = Column(String, nullable=True)  # Track Celery task ID for cancellation
+    embeddings_computed = Column(Boolean, default=False, nullable=False)
+    embeddings_updated_at = Column(DateTime(timezone=True), nullable=True)
+    embedding_config_id = Column(Integer, ForeignKey("embedding_configurations.id"), nullable=True)
 
     transcription = relationship("Transcription", back_populates="meeting", uselist=False, cascade="all, delete-orphan")
     model_configuration = relationship("ModelConfiguration", backref="meetings")
     chat_messages = relationship("ChatMessage", back_populates="meeting", cascade="all, delete-orphan")
+    embedding_config = relationship("EmbeddingConfiguration", back_populates="meetings")
 
     # New fields for tags and folders
     tags = Column(String, nullable=True)  # Comma-separated tags
@@ -66,9 +72,10 @@ class Meeting(Base):
 
     # Relationship for speakers
     speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")
-    
+
     # Relationship for attachments
     attachments = relationship("Attachment", back_populates="meeting", cascade="all, delete-orphan")
+    document_chunks = relationship("DocumentChunk", back_populates="meeting", cascade="all, delete-orphan")
 
 class Attachment(Base):
     __tablename__ = "attachments"
@@ -192,9 +199,75 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     meeting = relationship("Meeting", back_populates="chat_messages")
+
+class EmbeddingConfiguration(Base):
+    __tablename__ = "embedding_configurations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    dimension = Column(Integer, nullable=False)
+    base_url = Column(String, nullable=True)
+    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)
+    settings = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    api_key = relationship("APIKey")
+    meetings = relationship("Meeting", back_populates="embedding_config")
+    document_chunks = relationship("DocumentChunk", back_populates="embedding_config", cascade="all, delete-orphan")
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
+    attachment_id = Column(Integer, ForeignKey("attachments.id"), nullable=True, index=True)
+    content = Column(Text, nullable=False)
+    content_type = Column(String, nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    metadata = Column(JSON, nullable=True)
+    embedding = Column(Vector(), nullable=False)
+    embedding_config_id = Column(Integer, ForeignKey("embedding_configurations.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    meeting = relationship("Meeting", back_populates="document_chunks")
+    embedding_config = relationship("EmbeddingConfiguration", back_populates="document_chunks")
+    attachment = relationship("Attachment")
+
+class GlobalChatSession(Base):
+    __tablename__ = "global_chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False, default="New chat")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    messages = relationship("GlobalChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+class GlobalChatMessage(Base):
+    __tablename__ = "global_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("global_chat_sessions.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    sources = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    session = relationship("GlobalChatSession", back_populates="messages")
+
+class WorkerConfiguration(Base):
+    __tablename__ = "worker_configuration"
+
+    id = Column(Integer, primary_key=True, index=True)
+    max_workers = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class GoogleCalendarCredentials(Base):
     __tablename__ = "google_calendar_credentials"

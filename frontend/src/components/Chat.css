@@ -87,6 +87,20 @@
     border: 1px solid #e0e0e0;
 }
 
+.source-container {
+    margin-top: 12px;
+}
+
+.source-card {
+    padding: 12px;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.source-stack {
+    margin-top: 4px;
+}
+
 /* Markdown styling for assistant messages */
 .message.assistant .message-text h1,
 .message.assistant .message-text h2,
