@@ -29,7 +29,8 @@ import {
   CircularProgress,
   Paper,
   Tabs,
-  Tab
+  Tab,
+  Slider
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -57,6 +58,22 @@ const Settings = () => {
     autoDeleteAfterDays: 30,
     maxFileSize: 3000, // MB (3GB default)
   });
+
+  const [embeddingConfigs, setEmbeddingConfigs] = useState([]);
+  const [activeEmbeddingId, setActiveEmbeddingId] = useState(null);
+  const [embeddingForm, setEmbeddingForm] = useState({
+    provider: 'sentence-transformers',
+    model_name: 'sentence-transformers/all-MiniLM-L6-v2',
+    dimension: 384,
+    base_url: '',
+    settings: '',
+    is_active: false
+  });
+  const [modelValidation, setModelValidation] = useState({ status: 'idle', message: '' });
+  const [embeddingLoading, setEmbeddingLoading] = useState(false);
+  const [workerConfig, setWorkerConfig] = useState({ max_workers: 1 });
+  const [workerSaving, setWorkerSaving] = useState(false);
+  const [recomputeLoading, setRecomputeLoading] = useState(false);
   
   const [systemStatus, setSystemStatus] = useState({
     transcriptionService: 'operational',
@@ -82,6 +99,8 @@ const Settings = () => {
   useEffect(() => {
     fetchSettings();
     fetchSystemStatus();
+    fetchEmbeddingConfig();
+    fetchWorkerConfig();
   }, []);
 
   const fetchSettings = async () => {
@@ -120,6 +139,33 @@ const Settings = () => {
     }
   };
 
+  const fetchEmbeddingConfig = async () => {
+    setEmbeddingLoading(true);
+    try {
+      const response = await api.embeddingSettings.getConfig();
+      setEmbeddingConfigs(response.data.configurations || []);
+      setActiveEmbeddingId(response.data.activeConfigurationId || null);
+    } catch (error) {
+      console.error('Failed to load embedding configuration', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load embedding configuration',
+        severity: 'warning'
+      });
+    } finally {
+      setEmbeddingLoading(false);
+    }
+  };
+
+  const fetchWorkerConfig = async () => {
+    try {
+      const response = await api.workerSettings.get();
+      setWorkerConfig(response.data || { max_workers: 1 });
+    } catch (error) {
+      console.error('Failed to load worker configuration', error);
+    }
+  };
+
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
@@ -150,6 +196,136 @@ const Settings = () => {
       ...prev,
       [key]: value
     }));
+  };
+
+  const handleEmbeddingFormChange = (key, value) => {
+    setModelValidation({ status: 'idle', message: '' });
+    setEmbeddingForm(prev => {
+      const updated = { ...prev, [key]: value };
+      if (key === 'provider') {
+        if (value === 'sentence-transformers') {
+          updated.dimension = 384;
+          updated.base_url = '';
+          updated.model_name = 'sentence-transformers/all-MiniLM-L6-v2';
+        } else if (value === 'openai') {
+          updated.dimension = 1536;
+          updated.base_url = '';
+          updated.model_name = 'text-embedding-3-small';
+        } else if (value === 'ollama') {
+          updated.dimension = 768;
+          updated.model_name = 'nomic-embed-text';
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleCreateEmbeddingConfig = async () => {
+    try {
+      const payload = {
+        provider: embeddingForm.provider,
+        model_name: embeddingForm.model_name,
+        dimension: Number(embeddingForm.dimension),
+        base_url: embeddingForm.base_url || undefined,
+        is_active: embeddingForm.is_active,
+      };
+      if (embeddingForm.settings) {
+        try {
+          payload.settings = JSON.parse(embeddingForm.settings);
+        } catch (error) {
+          setSnackbar({
+            open: true,
+            message: 'Settings must be valid JSON',
+            severity: 'error'
+          });
+          return;
+        }
+      }
+      await api.embeddingSettings.createConfig(payload);
+      setSnackbar({ open: true, message: 'Embedding configuration saved', severity: 'success' });
+      setEmbeddingForm(prev => ({ ...prev, is_active: false }));
+      fetchEmbeddingConfig();
+    } catch (error) {
+      console.error('Failed to create embedding configuration', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Failed to create embedding configuration',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleValidateModel = async () => {
+    if (!embeddingForm.model_name) {
+      setModelValidation({ status: 'invalid', message: 'Model name is required.' });
+      return;
+    }
+
+    setModelValidation({ status: 'checking', message: 'Validating model...' });
+    try {
+      const response = await api.embeddingSettings.validateModel(embeddingForm.provider, embeddingForm.model_name);
+      const { valid, message } = response.data || {};
+      if (valid) {
+        setModelValidation({ status: 'valid', message: message || 'Model is available.' });
+      } else {
+        setModelValidation({ status: 'invalid', message: message || 'Model could not be validated.' });
+      }
+    } catch (error) {
+      console.error('Failed to validate model', error);
+      setModelValidation({
+        status: 'invalid',
+        message: error.response?.data?.detail || 'Failed to validate model',
+      });
+    }
+  };
+
+  const handleActivateEmbeddingConfig = async (configId) => {
+    try {
+      await api.embeddingSettings.activateConfig(configId);
+      setSnackbar({ open: true, message: 'Embedding configuration activated', severity: 'success' });
+      fetchEmbeddingConfig();
+    } catch (error) {
+      console.error('Failed to activate configuration', error);
+      setSnackbar({ open: true, message: 'Failed to activate configuration', severity: 'error' });
+    }
+  };
+
+  const handleDeleteEmbeddingConfig = async (configId) => {
+    try {
+      await api.embeddingSettings.deleteConfig(configId);
+      setSnackbar({ open: true, message: 'Embedding configuration removed', severity: 'success' });
+      fetchEmbeddingConfig();
+    } catch (error) {
+      console.error('Failed to delete configuration', error);
+      setSnackbar({ open: true, message: 'Failed to delete configuration', severity: 'error' });
+    }
+  };
+
+  const handleRecomputeEmbeddings = async () => {
+    setRecomputeLoading(true);
+    try {
+      await api.embeddingSettings.recomputeAll();
+      setSnackbar({ open: true, message: 'Embedding recomputation triggered', severity: 'info' });
+    } catch (error) {
+      console.error('Failed to trigger recompute', error);
+      setSnackbar({ open: true, message: 'Failed to trigger recompute', severity: 'error' });
+    } finally {
+      setRecomputeLoading(false);
+    }
+  };
+
+  const handleWorkerSave = async () => {
+    setWorkerSaving(true);
+    try {
+      await api.workerSettings.update(workerConfig.max_workers);
+      setSnackbar({ open: true, message: 'Worker configuration updated', severity: 'success' });
+      fetchWorkerConfig();
+    } catch (error) {
+      console.error('Failed to update worker configuration', error);
+      setSnackbar({ open: true, message: 'Failed to update worker configuration', severity: 'error' });
+    } finally {
+      setWorkerSaving(false);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -470,10 +646,256 @@ const Settings = () => {
                     />
                   </ListItemSecondaryAction>
                 </ListItem>
-              </List>
-            </CardContent>
-          </Card>
-        </Grid>
+            </List>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      {/* Embedding Configuration */}
+      <Grid item xs={12}>
+        <Card elevation={2} sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+              <PsychologyIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
+              <Box>
+                <Typography variant="h5" fontWeight="600" gutterBottom>
+                  Embedding Configuration
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Manage embedding models used for retrieval augmented generation
+                </Typography>
+              </Box>
+              <Box sx={{ ml: 'auto' }}>
+                <Button
+                  variant="outlined"
+                  startIcon={recomputeLoading ? <CircularProgress size={18} /> : <RefreshIcon />}
+                  onClick={handleRecomputeEmbeddings}
+                  disabled={recomputeLoading}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {recomputeLoading ? 'Recomputing...' : 'Recompute All Embeddings'}
+                </Button>
+              </Box>
+            </Box>
+
+            {embeddingLoading ? (
+              <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>
+                    Existing configurations
+                  </Typography>
+                  <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                    {embeddingConfigs.length === 0 && (
+                      <ListItem>
+                        <ListItemText primary="No embedding configurations yet" secondary="Create a configuration to get started" />
+                      </ListItem>
+                    )}
+                    {embeddingConfigs.map((config) => (
+                      <ListItem key={config.id} alignItems="flex-start" divider>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="subtitle1" fontWeight={600}>
+                                {config.model_name}
+                              </Typography>
+                              {config.id === activeEmbeddingId && <Chip label="Active" color="success" size="small" />}
+                            </Box>
+                          }
+                          secondary={
+                            <>
+                              <Typography variant="body2" color="text.secondary">
+                                Provider: {config.provider} • Dimension: {config.dimension}
+                              </Typography>
+                              {config.base_url && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  Base URL: {config.base_url}
+                                </Typography>
+                              )}
+                            </>
+                          }
+                        />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={config.id === activeEmbeddingId}
+                            onClick={() => handleActivateEmbeddingConfig(config.id)}
+                          >
+                            Activate
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="text"
+                            color="error"
+                            onClick={() => handleDeleteEmbeddingConfig(config.id)}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>
+                    Create configuration
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="embedding-provider-label">Provider</InputLabel>
+                        <Select
+                          labelId="embedding-provider-label"
+                          label="Provider"
+                          value={embeddingForm.provider}
+                          onChange={(e) => handleEmbeddingFormChange('provider', e.target.value)}
+                        >
+                          <MenuItem value="sentence-transformers">Sentence Transformers</MenuItem>
+                          <MenuItem value="openai">OpenAI</MenuItem>
+                          <MenuItem value="ollama">Ollama</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Vector dimension"
+                        type="number"
+                        fullWidth
+                        size="small"
+                        value={embeddingForm.dimension}
+                        onChange={(e) => handleEmbeddingFormChange('dimension', e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <TextField
+                          label="Model name"
+                          fullWidth
+                          size="small"
+                          value={embeddingForm.model_name}
+                          onChange={(e) => handleEmbeddingFormChange('model_name', e.target.value)}
+                        />
+                        {embeddingForm.provider === 'sentence-transformers' && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleValidateModel}
+                            disabled={modelValidation.status === 'checking'}
+                          >
+                            {modelValidation.status === 'checking' ? 'Validating…' : 'Validate model'}
+                          </Button>
+                        )}
+                      </Box>
+                      {embeddingForm.provider === 'sentence-transformers' && modelValidation.status !== 'idle' && (
+                        <Typography
+                          variant="caption"
+                          sx={{ display: 'block', mt: 0.5 }}
+                          color={
+                            modelValidation.status === 'valid'
+                              ? 'success.main'
+                              : modelValidation.status === 'checking'
+                              ? 'text.secondary'
+                              : 'error.main'
+                          }
+                        >
+                          {modelValidation.message}
+                        </Typography>
+                      )}
+                    </Grid>
+                    {embeddingForm.provider === 'ollama' && (
+                      <Grid item xs={12}>
+                        <TextField
+                          label="Base URL"
+                          fullWidth
+                          size="small"
+                          value={embeddingForm.base_url}
+                          onChange={(e) => handleEmbeddingFormChange('base_url', e.target.value)}
+                          placeholder="http://worker:11434"
+                        />
+                      </Grid>
+                    )}
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Extra settings (JSON)"
+                        fullWidth
+                        size="small"
+                        multiline
+                        minRows={2}
+                        value={embeddingForm.settings}
+                        onChange={(e) => handleEmbeddingFormChange('settings', e.target.value)}
+                        placeholder='{ "device": "cpu" }'
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={embeddingForm.is_active}
+                            onChange={(e) => handleEmbeddingFormChange('is_active', e.target.checked)}
+                          />
+                        }
+                        label="Activate immediately"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button variant="contained" onClick={handleCreateEmbeddingConfig} sx={{ borderRadius: 2 }}>
+                        Save configuration
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </Grid>
+            )}
+          </CardContent>
+        </Card>
+      </Grid>
+
+      {/* Worker scaling */}
+      <Grid item xs={12}>
+        <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+          <CardContent sx={{ p: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+              <StorageIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
+              <Box>
+                <Typography variant="h5" fontWeight="600" gutterBottom>
+                  Worker Scaling
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Control how many embedding workers run in parallel
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ px: 1 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Current workers: {workerConfig.max_workers}
+              </Typography>
+              <Slider
+                value={workerConfig.max_workers}
+                min={1}
+                max={10}
+                step={1}
+                marks
+                valueLabelDisplay="auto"
+                onChange={(_, value) => setWorkerConfig({ max_workers: Array.isArray(value) ? value[0] : value })}
+              />
+              <Button
+                variant="contained"
+                sx={{ mt: 2, borderRadius: 2 }}
+                onClick={handleWorkerSave}
+                disabled={workerSaving}
+                startIcon={workerSaving ? <CircularProgress size={18} /> : <SaveIcon />}
+              >
+                {workerSaving ? 'Updating...' : 'Apply worker limit'}
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
 
             {/* System Settings */}
             <Grid item xs={12} md={6}>

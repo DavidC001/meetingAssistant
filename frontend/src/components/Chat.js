@@ -6,12 +6,15 @@ import {
     Paper, 
     Typography, 
     CircularProgress, 
-    List, 
-    ListItem, 
-    ListItemText, 
+    List,
+    ListItem,
+    ListItemText,
     Avatar,
     IconButton,
-    Tooltip
+    Tooltip,
+    Chip,
+    Stack,
+    Divider
 } from '@mui/material';
 import { 
     Send as SendIcon, 
@@ -45,7 +48,11 @@ const Chat = ({ meetingId }) => {
             try {
                 const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history`);
                 if (response.data.history && response.data.history.length > 0) {
-                    setMessages(response.data.history);
+                    const hydratedHistory = response.data.history.map(msg => ({
+                        ...msg,
+                        sources: msg.sources || []
+                    }));
+                    setMessages(hydratedHistory);
                 }
                 setHistoryLoaded(true);
             } catch (error) {
@@ -86,14 +93,44 @@ const Chat = ({ meetingId }) => {
                     chat_history: chat_history
                 });
 
-                setMessages([...newMessages, { role: 'assistant', content: response.data.response }]);
+                setMessages([...newMessages, { role: 'assistant', content: response.data.response, sources: response.data.sources || [] }]);
             } catch (error) {
                 console.error('Error sending message:', error);
-                setMessages([...newMessages, { role: 'assistant', content: 'Sorry, I had trouble getting a response. Please try again.' }]);
+                setMessages([...newMessages, { role: 'assistant', content: 'Sorry, I had trouble getting a response. Please try again.', sources: [] }]);
             } finally {
                 setIsLoading(false);
             }
         }
+    };
+
+    const renderSources = (sources) => {
+        if (!sources || sources.length === 0) {
+            return null;
+        }
+
+        return (
+            <Box className="source-container">
+                <Divider textAlign="left" sx={{ mt: 1, mb: 1 }}>Sources</Divider>
+                <Stack spacing={1} className="source-stack">
+                    {sources.map((source, index) => (
+                        <Paper key={index} variant="outlined" className="source-card">
+                            <Typography variant="subtitle2" color="primary">
+                                {source.meeting_name || `Meeting ${source.meeting_id}`}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                                {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                {source.snippet}
+                            </Typography>
+                            {source.metadata && source.metadata.attachment_name && (
+                                <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
+                            )}
+                        </Paper>
+                    ))}
+                </Stack>
+            </Box>
+        );
     };
 
     return (
@@ -119,55 +156,57 @@ const Chat = ({ meetingId }) => {
                             <Avatar className={`avatar ${msg.role}`}>
                                 {msg.role === 'user' ? <PersonIcon /> : <AssistantIcon />}
                             </Avatar>
-                            <ListItemText
+                            <ListItemText className="message-text"
                                 primary={
                                     msg.role === 'assistant' ? (
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
-                                                ul: ({ children }) => <ul style={{ marginLeft: '20px' }}>{children}</ul>,
-                                                ol: ({ children }) => <ol style={{ marginLeft: '20px' }}>{children}</ol>,
-                                                code: ({ inline, children, ...props }) => (
-                                                    inline ? (
-                                                        <code style={{ 
-                                                            backgroundColor: '#f5f5f5', 
-                                                            padding: '2px 4px', 
-                                                            borderRadius: '3px',
-                                                            fontSize: '0.9em'
-                                                        }}>{children}</code>
-                                                    ) : (
-                                                        <pre style={{ 
-                                                            backgroundColor: '#f5f5f5', 
-                                                            padding: '12px', 
-                                                            borderRadius: '5px',
-                                                            overflow: 'auto',
-                                                            fontSize: '0.9em'
+                                        <>
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
+                                                    ul: ({ children }) => <ul style={{ marginLeft: '20px' }}>{children}</ul>,
+                                                    ol: ({ children }) => <ol style={{ marginLeft: '20px' }}>{children}</ol>,
+                                                    code: ({ inline, children, ...props }) => (
+                                                        inline ? (
+                                                            <code style={{
+                                                                backgroundColor: '#f5f5f5',
+                                                                padding: '2px 4px',
+                                                                borderRadius: '3px',
+                                                                fontSize: '0.9em'
+                                                            }}>{children}</code>
+                                                        ) : (
+                                                            <pre style={{
+                                                                backgroundColor: '#f5f5f5',
+                                                                padding: '12px',
+                                                                borderRadius: '5px',
+                                                                overflow: 'auto',
+                                                                fontSize: '0.9em'
+                                                            }}>
+                                                                <code {...props}>{children}</code>
+                                                            </pre>
+                                                        )
+                                                    ),
+                                                    blockquote: ({ children }) => (
+                                                        <blockquote style={{
+                                                            borderLeft: '4px solid #ddd',
+                                                            margin: '16px 0',
+                                                            paddingLeft: '16px',
+                                                            fontStyle: 'italic',
+                                                            color: '#666'
                                                         }}>
-                                                            <code {...props}>{children}</code>
-                                                        </pre>
+                                                            {children}
+                                                        </blockquote>
                                                     )
-                                                ),
-                                                blockquote: ({ children }) => (
-                                                    <blockquote style={{
-                                                        borderLeft: '4px solid #ddd',
-                                                        margin: '16px 0',
-                                                        paddingLeft: '16px',
-                                                        fontStyle: 'italic',
-                                                        color: '#666'
-                                                    }}>
-                                                        {children}
-                                                    </blockquote>
-                                                )
-                                            }}
-                                        >
-                                            {msg.content}
-                                        </ReactMarkdown>
+                                                }}
+                                            >
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                            {renderSources(msg.sources)}
+                                        </>
                                     ) : (
                                         msg.content
                                     )
                                 }
-                                className="message-text"
                             />
                         </ListItem>
                     ))}

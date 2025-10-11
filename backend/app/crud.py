@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 from . import models, schemas
+from sqlalchemy import asc
+from sqlalchemy.sql import func
 
 # Meeting CRUD operations
 def get_meeting(db: Session, meeting_id: int):
@@ -58,7 +60,9 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
             db_meeting.tags = meeting.tags
         if meeting.folder is not None:
             db_meeting.folder = meeting.folder
-        
+        if meeting.notes is not None:
+            db_meeting.notes = meeting.notes
+
         db.commit()
         db.refresh(db_meeting)
     return db_meeting
@@ -92,6 +96,21 @@ def update_meeting_task_id(db: Session, meeting_id: int, task_id: str):
         db.commit()
         db.refresh(db_meeting)
     return db_meeting
+
+def mark_meeting_embeddings(db: Session, meeting_id: int, *, computed: bool, config_id: int | None = None):
+    meeting = get_meeting(db, meeting_id)
+    if not meeting:
+        return None
+    meeting.embeddings_computed = computed
+    meeting.embedding_config_id = config_id
+    if computed:
+        from sqlalchemy.sql import func as sql_func
+        meeting.embeddings_updated_at = sql_func.now()
+    else:
+        meeting.embeddings_updated_at = None
+    db.commit()
+    db.refresh(meeting)
+    return meeting
 
 # Transcription CRUD operations
 def create_meeting_transcription(db: Session, meeting_id: int, transcription: schemas.TranscriptionCreate, action_items: list[schemas.ActionItemCreate], mark_completed: bool = True):
@@ -511,3 +530,130 @@ def delete_attachment(db: Session, attachment_id: int):
         db.delete(db_attachment)
         db.commit()
     return db_attachment
+
+# Embedding configuration CRUD
+def list_embedding_configurations(db: Session):
+    return db.query(models.EmbeddingConfiguration).order_by(models.EmbeddingConfiguration.created_at.desc()).all()
+
+def get_embedding_configuration(db: Session, config_id: int):
+    return db.query(models.EmbeddingConfiguration).filter(models.EmbeddingConfiguration.id == config_id).first()
+
+def get_active_embedding_configuration(db: Session):
+    return (
+        db.query(models.EmbeddingConfiguration)
+        .filter(models.EmbeddingConfiguration.is_active == True)
+        .order_by(models.EmbeddingConfiguration.updated_at.desc())
+        .first()
+    )
+
+def create_embedding_configuration(db: Session, config: schemas.EmbeddingConfigurationCreate):
+    if config.is_active:
+        db.query(models.EmbeddingConfiguration).update({models.EmbeddingConfiguration.is_active: False})
+    db_config = models.EmbeddingConfiguration(**config.dict())
+    db.add(db_config)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+def update_embedding_configuration(db: Session, config_id: int, config_update: schemas.EmbeddingConfigurationUpdate):
+    db_config = get_embedding_configuration(db, config_id)
+    if not db_config:
+        return None
+    update_data = config_update.dict(exclude_unset=True)
+    if update_data.get("is_active"):
+        db.query(models.EmbeddingConfiguration).update({models.EmbeddingConfiguration.is_active: False})
+    for field, value in update_data.items():
+        setattr(db_config, field, value)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+def delete_embedding_configuration(db: Session, config_id: int):
+    db_config = get_embedding_configuration(db, config_id)
+    if not db_config:
+        return None
+    db.delete(db_config)
+    db.commit()
+    return db_config
+
+def clear_meeting_chunks(db: Session, meeting_id: int):
+    db.query(models.DocumentChunk).filter(models.DocumentChunk.meeting_id == meeting_id).delete()
+    db.commit()
+
+def add_document_chunks(db: Session, chunks: list[models.DocumentChunk]):
+    if not chunks:
+        return []
+    db.add_all(chunks)
+    db.commit()
+    for chunk in chunks:
+        db.refresh(chunk)
+    return chunks
+
+def get_document_chunks(db: Session, meeting_id: int | None = None):
+    query = db.query(models.DocumentChunk)
+    if meeting_id is not None:
+        query = query.filter(models.DocumentChunk.meeting_id == meeting_id)
+    return query.order_by(asc(models.DocumentChunk.chunk_index)).all()
+
+# Worker configuration helpers
+def get_worker_configuration(db: Session):
+    config = db.query(models.WorkerConfiguration).order_by(models.WorkerConfiguration.created_at.desc()).first()
+    if config:
+        return config
+    config = models.WorkerConfiguration(max_workers=1)
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    return config
+
+def set_worker_configuration(db: Session, max_workers: int):
+    config = get_worker_configuration(db)
+    config.max_workers = max_workers
+    db.commit()
+    db.refresh(config)
+    return config
+
+# Global chat helpers
+def list_global_chat_sessions(db: Session):
+    return db.query(models.GlobalChatSession).order_by(models.GlobalChatSession.updated_at.desc()).all()
+
+def create_global_chat_session(db: Session, title: str | None = None):
+    session = models.GlobalChatSession(title=title or "New chat")
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+def get_global_chat_session(db: Session, session_id: int):
+    return db.query(models.GlobalChatSession).filter(models.GlobalChatSession.id == session_id).first()
+
+def delete_global_chat_session(db: Session, session_id: int):
+    session = get_global_chat_session(db, session_id)
+    if not session:
+        return None
+    db.delete(session)
+    db.commit()
+    return session
+
+def add_global_chat_message(db: Session, session_id: int, role: str, content: str, sources: list | None = None):
+    message = models.GlobalChatMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+        sources=sources or []
+    )
+    db.add(message)
+    session = get_global_chat_session(db, session_id)
+    if session:
+        session.updated_at = func.now()
+    db.commit()
+    db.refresh(message)
+    return message
+
+def get_global_chat_messages(db: Session, session_id: int):
+    return (
+        db.query(models.GlobalChatMessage)
+        .filter(models.GlobalChatMessage.session_id == session_id)
+        .order_by(models.GlobalChatMessage.created_at.asc())
+        .all()
+    )

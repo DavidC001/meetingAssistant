@@ -8,9 +8,10 @@ database initialization, and route registration.
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .database import engine, Base
-from .routers import meetings, settings, admin, ollama, calendar
+from .routers import meetings, settings, admin, ollama, calendar, global_chat
 from .startup import startup_recovery
 from .core.config import config
 
@@ -20,6 +21,13 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Ensure pgvector extension is available before creating tables
+try:
+    with engine.connect() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+except Exception as exc:  # pragma: no cover - best effort for non-Postgres setups
+    logger.warning("Could not ensure pgvector extension: %s", exc)
 
 # Create all tables in the database
 Base.metadata.create_all(bind=engine)
@@ -50,6 +58,7 @@ app.include_router(settings.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(ollama.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
+app.include_router(global_chat.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():
