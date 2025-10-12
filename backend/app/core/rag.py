@@ -19,7 +19,7 @@ def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
     parts: List[str] = []
     for result in chunks:
         chunk = result.chunk
-        metadata = chunk.metadata or {}
+        metadata = chunk.chunk_metadata or {}
         descriptor = metadata.get("source", chunk.content_type)
         header = f"Source: {descriptor} (Meeting {chunk.meeting_id}, Chunk {chunk.chunk_index})"
         if attachment := metadata.get("attachment_name"):
@@ -32,7 +32,7 @@ def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
 
 
 def _chunk_to_source(chunk: RetrievedChunk) -> Dict:
-    metadata = chunk.chunk.metadata or {}
+    metadata = chunk.chunk.chunk_metadata or {}
     meeting = chunk.chunk.meeting
     meeting_name = getattr(meeting, "filename", f"Meeting {chunk.chunk.meeting_id}") if meeting else None
     source = {
@@ -60,8 +60,18 @@ async def generate_rag_response(
 ) -> Tuple[str, List[Dict]]:
     """Generate a response using retrieval-augmented generation."""
 
-    provider, _ = get_embedding_provider(db)
-    query_embedding = provider.embed_query(query)
+    try:
+        provider, _ = get_embedding_provider(db)
+    except Exception as e:
+        LOGGER.error(f"Failed to get embedding provider: {e}", exc_info=True)
+        return f"Error: Could not initialize embedding provider. {str(e)}", []
+    
+    try:
+        query_embedding = provider.embed_query(query)
+    except Exception as e:
+        LOGGER.error(f"Failed to generate query embedding: {e}", exc_info=True)
+        return f"Error: Could not generate embeddings for your query. {str(e)}", []
+        
     if not query_embedding:
         return "I'm sorry, I could not generate embeddings for that query.", []
 
@@ -116,14 +126,19 @@ def retrieve_relevant_chunks(
     meeting_id: Optional[int] = None,
     top_k: int = 5,
 ) -> List[RetrievedChunk]:
-    provider, _ = get_embedding_provider(db)
-    query_embedding = provider.embed_query(query)
-    if not query_embedding:
+    try:
+        provider, _ = get_embedding_provider(db)
+        query_embedding = provider.embed_query(query)
+        if not query_embedding:
+            LOGGER.warning("Empty query embedding returned")
+            return []
+        return DEFAULT_VECTOR_STORE.similarity_search(
+            db,
+            query_embedding,
+            meeting_id=meeting_id,
+            top_k=top_k,
+        )
+    except Exception as e:
+        LOGGER.error(f"Failed to retrieve relevant chunks: {e}", exc_info=True)
         return []
-    return DEFAULT_VECTOR_STORE.similarity_search(
-        db,
-        query_embedding,
-        meeting_id=meeting_id,
-        top_k=top_k,
-    )
 

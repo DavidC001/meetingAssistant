@@ -166,21 +166,42 @@ def compute_embeddings_for_meeting(meeting_id: int) -> Dict[str, Any]:
 
     db = SessionLocal()
     try:
+        logger.info(f"Starting embedding computation for meeting {meeting_id}")
         meeting = crud.get_meeting(db, meeting_id)
         if not meeting:
             raise ValueError(f"Meeting {meeting_id} not found")
 
-        provider, config = get_embedding_provider(db)
+        logger.info(f"Getting embedding provider for meeting {meeting_id}")
+        try:
+            provider, config = get_embedding_provider(db)
+            logger.info(f"Using embedding provider: {config.provider}, model: {config.model_name}, dimension: {config.dimension}")
+        except Exception as e:
+            logger.error(f"Failed to get embedding provider: {e}", exc_info=True)
+            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            return {"status": "error", "meeting_id": meeting_id, "error": str(e)}
+        
+        logger.info(f"Building chunk payloads for meeting {meeting_id}")
         payloads = _build_chunk_payloads(meeting)
         if not payloads:
+            logger.warning(f"No content to embed for meeting {meeting_id}")
             crud.clear_meeting_chunks(db, meeting_id)
             crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
             return {"status": "no-content", "meeting_id": meeting_id}
 
+        logger.info(f"Generated {len(payloads)} chunks for meeting {meeting_id}")
         crud.clear_meeting_chunks(db, meeting_id)
 
         texts = [payload["content"] for payload in payloads]
-        embeddings = batched_embeddings(provider, texts, batch_size=16)
+        logger.info(f"Computing embeddings for {len(texts)} text chunks")
+        try:
+            embeddings = batched_embeddings(provider, texts, batch_size=16)
+            logger.info(f"Successfully computed {len(embeddings)} embeddings")
+        except Exception as e:
+            logger.error(f"Failed to compute embeddings: {e}", exc_info=True)
+            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            return {"status": "error", "meeting_id": meeting_id, "error": str(e)}
+        
+        logger.info(f"Storing embeddings in vector store")
         DEFAULT_VECTOR_STORE.add_documents(
             db,
             meeting_id=meeting_id,
@@ -189,11 +210,14 @@ def compute_embeddings_for_meeting(meeting_id: int) -> Dict[str, Any]:
             embedding_config_id=config.id,
         )
         crud.mark_meeting_embeddings(db, meeting_id, computed=True, config_id=config.id)
-        logger.info("Stored %s chunks for meeting %s", len(payloads), meeting_id)
+        logger.info("Successfully stored %s chunks for meeting %s", len(payloads), meeting_id)
         return {"status": "completed", "chunks": len(payloads), "meeting_id": meeting_id}
     except Exception as exc:
         logger.error("Failed to compute embeddings for meeting %s: %s", meeting_id, exc, exc_info=True)
-        crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+        try:
+            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+        except Exception as mark_exc:
+            logger.error("Failed to mark embeddings as failed: %s", mark_exc)
         raise
     finally:
         db.close()

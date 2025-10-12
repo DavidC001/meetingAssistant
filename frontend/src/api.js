@@ -34,6 +34,7 @@ const api = {
   updateMeetingTagsFolder: (meetingId, tags, folder) => {
     return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
   },
+  getAllTags: () => client.get('/api/v1/meetings/tags/all'),
 
   // Notes API
   updateMeetingNotes: (meetingId, notes) => {
@@ -82,12 +83,13 @@ const api = {
   // Global chat API
   globalChat: {
     listSessions: () => client.get('/api/v1/global-chat/sessions'),
-    createSession: (title) => client.post('/api/v1/global-chat/sessions', { title }),
+    createSession: (title, tags) => client.post('/api/v1/global-chat/sessions', { title, tags }),
     getSession: (sessionId) => client.get(`/api/v1/global-chat/sessions/${sessionId}`),
     deleteSession: (sessionId) => client.delete(`/api/v1/global-chat/sessions/${sessionId}`),
-    sendMessage: (sessionId, message, chatHistory) => client.post(
+    updateSession: (sessionId, title, tags) => client.put(`/api/v1/global-chat/sessions/${sessionId}`, { title, tags }),
+    sendMessage: (sessionId, message, chatHistory, topK) => client.post(
       `/api/v1/global-chat/sessions/${sessionId}/messages`,
-      { message, chat_history: chatHistory }
+      { message, chat_history: chatHistory, top_k: topK }
     ),
   },
 

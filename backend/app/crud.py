@@ -617,8 +617,8 @@ def set_worker_configuration(db: Session, max_workers: int):
 def list_global_chat_sessions(db: Session):
     return db.query(models.GlobalChatSession).order_by(models.GlobalChatSession.updated_at.desc()).all()
 
-def create_global_chat_session(db: Session, title: str | None = None):
-    session = models.GlobalChatSession(title=title or "New chat")
+def create_global_chat_session(db: Session, title: str | None = None, tags: str | None = None):
+    session = models.GlobalChatSession(title=title or "New chat", tags=tags)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -633,6 +633,19 @@ def delete_global_chat_session(db: Session, session_id: int):
         return None
     db.delete(session)
     db.commit()
+    return session
+
+def update_global_chat_session(db: Session, session_id: int, title: str | None = None, tags: str | None = None):
+    session = get_global_chat_session(db, session_id)
+    if not session:
+        return None
+    if title is not None:
+        session.title = title
+    if tags is not None:
+        session.tags = tags
+    session.updated_at = func.now()
+    db.commit()
+    db.refresh(session)
     return session
 
 def add_global_chat_message(db: Session, session_id: int, role: str, content: str, sources: list | None = None):

@@ -22,11 +22,12 @@ requests>=2.31.0
 
 # AI/ML Dependencies
 # PyTorch with CUDA support (installed via Docker)
-torch>=2.0.0,<2.2.0
-torchaudio>=2.0.0,<2.2.0
+torch>=2.2.0,<2.5.0
+torchaudio>=2.2.0,<2.5.0
 numpy<2.0.0
 # cuDNN libraries for CUDA acceleration
 nvidia-cudnn-cu12>=9.1.0
+transformers>=4.45.0
 sentence-transformers>=2.2.0
 tiktoken>=0.5.0
 

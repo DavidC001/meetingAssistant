@@ -477,6 +477,11 @@ def update_meeting_notes(meeting_id: int, notes: Optional[str] = Body(None, embe
     db_meeting.notes = notes
     db.commit()
     db.refresh(db_meeting)
+    
+    # Trigger embedding computation to index the updated notes
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
+    
     return db_meeting
 
 @router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
@@ -515,6 +520,7 @@ async def chat_with_meeting_endpoint(
         query=request.query,
         meeting_id=meeting_id,
         chat_history=chat_history,
+        top_k=request.top_k or 5,
         llm_config=llm_config,
     )
 
@@ -741,6 +747,10 @@ async def upload_attachment(
         description=description
     )
     
+    # Trigger embedding computation for the meeting to index the new attachment
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
+    
     return attachment
 
 
@@ -889,6 +899,8 @@ def delete_attachment(
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
     
+    meeting_id = attachment.meeting_id  # Store meeting_id before deletion
+    
     # Delete file from disk
     file_path = Path(attachment.filepath)
     if file_path.exists():
@@ -900,6 +912,10 @@ def delete_attachment(
     
     # Delete database record
     crud.delete_attachment(db=db, attachment_id=attachment_id)
+    
+    # Trigger embedding recomputation to remove deleted attachment from index
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
     
     return None
 
@@ -943,3 +959,29 @@ def stream_meeting_audio(
             "Content-Disposition": f'inline; filename="{meeting.filename}_audio.mp3"'
         }
     )
+
+
+@router.get("/tags/all", response_model=List[str])
+def get_all_tags(db: Session = Depends(get_db)):
+    """Get all unique tags from meetings and global chat sessions."""
+    tags_set = set()
+    
+    # Get tags from meetings
+    meetings = crud.get_meetings(db)
+    for meeting in meetings:
+        if meeting.tags:
+            for tag in meeting.tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    tags_set.add(tag)
+    
+    # Get tags from global chat sessions
+    sessions = crud.list_global_chat_sessions(db)
+    for session in sessions:
+        if session.tags:
+            for tag in session.tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    tags_set.add(tag)
+    
+    return sorted(list(tags_set))

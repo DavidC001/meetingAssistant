@@ -14,13 +14,20 @@ import {
     Tooltip,
     Chip,
     Stack,
-    Divider
+    Divider,
+    Collapse,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
 import { 
     Send as SendIcon, 
     Assistant as AssistantIcon, 
     Person as PersonIcon,
-    ClearAll as ClearAllIcon
+    ClearAll as ClearAllIcon,
+    ExpandMore as ExpandMoreIcon,
+    ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -32,6 +39,8 @@ const Chat = ({ meetingId }) => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [topK, setTopK] = useState(5);
+    const [expandedSources, setExpandedSources] = useState({});
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -75,6 +84,13 @@ const Chat = ({ meetingId }) => {
         }
     };
 
+    const toggleSourcesExpanded = (index) => {
+        setExpandedSources(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
+    };
+
     const handleSend = async () => {
         if (input.trim() && !isLoading) {
             const newMessages = [...messages, { role: 'user', content: input }];
@@ -90,7 +106,8 @@ const Chat = ({ meetingId }) => {
 
                 const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
                     query: input,
-                    chat_history: chat_history
+                    chat_history: chat_history,
+                    top_k: topK
                 });
 
                 setMessages([...newMessages, { role: 'assistant', content: response.data.response, sources: response.data.sources || [] }]);
@@ -103,32 +120,43 @@ const Chat = ({ meetingId }) => {
         }
     };
 
-    const renderSources = (sources) => {
+    const renderSources = (sources, messageIndex) => {
         if (!sources || sources.length === 0) {
             return null;
         }
 
+        const isExpanded = expandedSources[messageIndex];
+
         return (
-            <Box className="source-container">
-                <Divider textAlign="left" sx={{ mt: 1, mb: 1 }}>Sources</Divider>
-                <Stack spacing={1} className="source-stack">
-                    {sources.map((source, index) => (
-                        <Paper key={index} variant="outlined" className="source-card">
-                            <Typography variant="subtitle2" color="primary">
-                                {source.meeting_name || `Meeting ${source.meeting_id}`}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                                {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
-                            </Typography>
-                            <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                {source.snippet}
-                            </Typography>
-                            {source.metadata && source.metadata.attachment_name && (
-                                <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
-                            )}
-                        </Paper>
-                    ))}
-                </Stack>
+            <Box className="source-container" sx={{ mt: 2 }}>
+                <Button
+                    size="small"
+                    onClick={() => toggleSourcesExpanded(messageIndex)}
+                    endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    sx={{ mb: 1 }}
+                >
+                    {isExpanded ? 'Hide' : 'Show'} Sources ({sources.length})
+                </Button>
+                <Collapse in={isExpanded}>
+                    <Stack spacing={1} className="source-stack">
+                        {sources.map((source, index) => (
+                            <Paper key={index} variant="outlined" className="source-card" sx={{ p: 1.5 }}>
+                                <Typography variant="subtitle2" color="primary">
+                                    {source.meeting_name || `Meeting ${source.meeting_id}`}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
+                                </Typography>
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                    {source.snippet}
+                                </Typography>
+                                {source.metadata && source.metadata.attachment_name && (
+                                    <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
+                                )}
+                            </Paper>
+                        ))}
+                    </Stack>
+                </Collapse>
             </Box>
         );
     };
@@ -139,15 +167,39 @@ const Chat = ({ meetingId }) => {
                 <Typography variant="h5">
                     💬 Ask Questions About This Meeting
                 </Typography>
-                <Tooltip title="Clear chat history">
-                    <IconButton 
-                        onClick={clearChatHistory}
-                        sx={{ color: 'white' }}
-                        disabled={isLoading || messages.length === 0}
-                    >
-                        <ClearAllIcon />
-                    </IconButton>
-                </Tooltip>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Tooltip title="Number of sources to retrieve for each question">
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel sx={{ color: 'white' }}>Top-K</InputLabel>
+                            <Select
+                                value={topK}
+                                label="Top-K"
+                                onChange={(e) => setTopK(e.target.value)}
+                                sx={{ 
+                                    color: 'white',
+                                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.5)' },
+                                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                                    '.MuiSvgIcon-root': { color: 'white' }
+                                }}
+                            >
+                                <MenuItem value={3}>3 Sources</MenuItem>
+                                <MenuItem value={5}>5 Sources</MenuItem>
+                                <MenuItem value={7}>7 Sources</MenuItem>
+                                <MenuItem value={10}>10 Sources</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Tooltip>
+                    <Tooltip title="Clear chat history">
+                        <IconButton 
+                            onClick={clearChatHistory}
+                            sx={{ color: 'white' }}
+                            disabled={isLoading || messages.length === 0}
+                        >
+                            <ClearAllIcon />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
             </Box>
             <Box className="chat-messages">
                 <List>
@@ -201,7 +253,7 @@ const Chat = ({ meetingId }) => {
                                             >
                                                 {msg.content}
                                             </ReactMarkdown>
-                                            {renderSources(msg.sources)}
+                                            {renderSources(msg.sources, index)}
                                         </>
                                     ) : (
                                         msg.content

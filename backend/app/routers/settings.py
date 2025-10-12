@@ -518,9 +518,14 @@ def get_embedding_configuration_settings(db: Session = Depends(get_db)):
 
 @router.post("/embedding-config", response_model=schemas.EmbeddingConfiguration)
 def create_embedding_configuration(config: schemas.EmbeddingConfigurationCreate, db: Session = Depends(get_db)):
-    valid, message = validate_embedding_model(config.provider, config.model_name)
+    valid, message, dimension = validate_embedding_model(config.provider, config.model_name)
     if not valid:
         raise HTTPException(status_code=400, detail=message or "Invalid embedding model")
+    
+    # Auto-populate dimension if not provided and detected
+    if dimension is not None and (not hasattr(config, 'dimension') or config.dimension is None or config.dimension == 0):
+        config.dimension = dimension
+    
     return crud.create_embedding_configuration(db, config)
 
 
@@ -532,9 +537,13 @@ def update_embedding_configuration(config_id: int, payload: schemas.EmbeddingCon
 
     provider = payload.provider or existing.provider
     model_name = payload.model_name or existing.model_name
-    valid, message = validate_embedding_model(provider, model_name)
+    valid, message, dimension = validate_embedding_model(provider, model_name)
     if not valid:
         raise HTTPException(status_code=400, detail=message or "Invalid embedding model")
+
+    # Auto-populate dimension if not provided and detected
+    if dimension is not None and (not hasattr(payload, 'dimension') or payload.dimension is None or payload.dimension == 0):
+        payload.dimension = dimension
 
     config = crud.update_embedding_configuration(db, config_id, payload)
     if not config:
@@ -563,8 +572,11 @@ def validate_embedding_model_endpoint(
     provider: str = Query(..., description="Embedding provider identifier"),
     model_name: str = Query(..., description="Model name or repository to validate"),
 ):
-    valid, message = validate_embedding_model(provider, model_name)
-    return {"valid": valid, "message": message}
+    valid, message, dimension = validate_embedding_model(provider, model_name)
+    response = {"valid": valid, "message": message}
+    if dimension is not None:
+        response["dimension"] = dimension
+    return response
 
 
 @router.post("/embedding-config/recompute")

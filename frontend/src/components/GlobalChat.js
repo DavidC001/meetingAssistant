@@ -12,14 +12,33 @@ import {
   Stack,
   IconButton,
   Divider,
-  Chip
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Collapse,
+  Slider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Tooltip,
+  InputAdornment,
+  Autocomplete
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Send as SendIcon,
   Assistant as AssistantIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Edit as EditIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Tune as TuneIcon,
+  Search as SearchIcon,
+  Label as LabelIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -34,7 +53,16 @@ const GlobalChat = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialising, setInitialising] = useState(true);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameSessionId, setRenameSessionId] = useState(null);
+  const [newSessionName, setNewSessionName] = useState('');
+  const [newSessionTags, setNewSessionTags] = useState([]); // Changed to array for better Autocomplete handling
+  const [searchQuery, setSearchQuery] = useState('');
+  const [topK, setTopK] = useState(5);
+  const [expandedSources, setExpandedSources] = useState({});
   const navigate = useNavigate();
+
+  const [allTags, setAllTags] = useState([]);
 
   const loadSessions = async () => {
     setInitialising(true);
@@ -51,6 +79,15 @@ const GlobalChat = () => {
       console.error('Failed to load chat sessions', error);
     } finally {
       setInitialising(false);
+    }
+  };
+
+  const loadAllTags = async () => {
+    try {
+      const response = await api.getAllTags();
+      setAllTags(response.data || []);
+    } catch (error) {
+      console.error('Failed to load tags', error);
     }
   };
 
@@ -73,6 +110,7 @@ const GlobalChat = () => {
 
   useEffect(() => {
     loadSessions();
+    loadAllTags();
   }, []);
 
   const handleCreateSession = async () => {
@@ -99,6 +137,70 @@ const GlobalChat = () => {
     }
   };
 
+  const handleRenameSession = (sessionId) => {
+    const session = sessions.find(s => s.id === sessionId);
+    setRenameSessionId(sessionId);
+    setNewSessionName(session?.title || '');
+    // Convert tags string to array for Autocomplete
+    const tagsArray = session?.tags ? session.tags.split(',').map(t => t.trim()).filter(t => t) : [];
+    setNewSessionTags(tagsArray);
+    setRenameDialogOpen(true);
+  };
+
+  const handleRenameConfirm = async () => {
+    if (!newSessionName.trim()) return;
+    
+    try {
+      // Convert tags array to comma-separated string
+      const tagsString = Array.isArray(newSessionTags) 
+        ? newSessionTags.filter(t => t && t.trim()).join(', ')
+        : '';
+      
+      console.log('Saving tags:', { array: newSessionTags, string: tagsString });
+      
+      await api.globalChat.updateSession(renameSessionId, newSessionName.trim(), tagsString);
+      await loadSessions();
+      await loadAllTags(); // Refresh tags list
+      setRenameDialogOpen(false);
+      setRenameSessionId(null);
+      setNewSessionName('');
+      setNewSessionTags([]);
+    } catch (error) {
+      console.error('Failed to update session', error);
+    }
+  };
+
+  const toggleSourcesExpanded = (index) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
+  // Filter sessions by search query
+  const filteredSessions = React.useMemo(() => {
+    if (!searchQuery.trim()) return sessions;
+    const query = searchQuery.toLowerCase();
+    return sessions.filter(session => 
+      session.title?.toLowerCase().includes(query) ||
+      session.tags?.toLowerCase().includes(query)
+    );
+  }, [sessions, searchQuery]);
+
+  // Get all available tags (from API and current sessions)
+  const availableTags = React.useMemo(() => {
+    const tagsSet = new Set(allTags);
+    sessions.forEach(session => {
+      if (session.tags) {
+        session.tags.split(',').forEach(tag => {
+          const trimmed = tag.trim();
+          if (trimmed) tagsSet.add(trimmed);
+        });
+      }
+    });
+    return Array.from(tagsSet).sort();
+  }, [sessions, allTags]);
+
   const handleSend = async () => {
     if (!input.trim() || !activeSessionId) {
       return;
@@ -114,7 +216,7 @@ const GlobalChat = () => {
         role: msg.role,
         content: msg.content
       }));
-      const response = await api.globalChat.sendMessage(activeSessionId, question, chatHistory);
+      const response = await api.globalChat.sendMessage(activeSessionId, question, chatHistory, topK);
       setMessages([
         ...newMessages,
         {
@@ -138,36 +240,53 @@ const GlobalChat = () => {
     }
   };
 
-  const renderSources = (sources) => {
+  const renderSources = (sources, messageIndex) => {
     if (!sources || sources.length === 0) {
       return null;
     }
+
+    const isExpanded = expandedSources[messageIndex];
+
     return (
-      <Box className="global-source-container">
-        <Divider textAlign="left" sx={{ mt: 1, mb: 1 }}>Sources</Divider>
-        <Stack spacing={1} className="global-source-stack">
-          {sources.map((source, index) => (
-            <Paper
-              key={index}
-              variant="outlined"
-              className="global-source-card"
-              onClick={() => navigate(`/meetings/${source.meeting_id}`)}
-            >
-              <Typography variant="subtitle2" color="primary">
-                {source.meeting_name || `Meeting ${source.meeting_id}`}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                {source.snippet}
-              </Typography>
-              {source.metadata && source.metadata.attachment_name && (
-                <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
-              )}
-            </Paper>
-          ))}
-        </Stack>
+      <Box className="global-source-container" sx={{ mt: 2 }}>
+        <Button
+          size="small"
+          onClick={() => toggleSourcesExpanded(messageIndex)}
+          endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          sx={{ mb: 1 }}
+        >
+          {isExpanded ? 'Hide' : 'Show'} Sources ({sources.length})
+        </Button>
+        <Collapse in={isExpanded}>
+          <Stack spacing={1} className="global-source-stack">
+            {sources.map((source, index) => (
+              <Paper
+                key={index}
+                variant="outlined"
+                className="global-source-card"
+                onClick={() => navigate(`/meetings/${source.meeting_id}`)}
+                sx={{ 
+                  cursor: 'pointer',
+                  '&:hover': { bgcolor: 'action.hover' },
+                  p: 1.5
+                }}
+              >
+                <Typography variant="subtitle2" color="primary">
+                  {source.meeting_name || `Meeting ${source.meeting_id}`}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  {source.snippet}
+                </Typography>
+                {source.metadata && source.metadata.attachment_name && (
+                  <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </Collapse>
       </Box>
     );
   };
@@ -182,38 +301,100 @@ const GlobalChat = () => {
               New
             </Button>
           </Box>
+          {/* Search Bar */}
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="🔍 Search sessions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ mb: 1, px: 1 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+          />
           {initialising ? (
             <Box className="global-chat-loading">
               <CircularProgress />
             </Box>
           ) : (
             <List className="global-chat-session-list">
-              {sessions.map((session) => (
-                <ListItemButton
-                  key={session.id}
-                  selected={session.id === activeSessionId}
-                  onClick={() => {
-                    setActiveSessionId(session.id);
-                    loadSession(session.id);
-                  }}
-                  className="global-chat-session-item"
-                >
-                  <ListItemText
-                    primary={session.title || `Session ${session.id}`}
-                    secondary={new Date(session.updated_at).toLocaleString()}
-                  />
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDeleteSession(session.id);
+              {filteredSessions.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 2, px: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {searchQuery ? 'No sessions match your search' : 'No sessions yet'}
+                  </Typography>
+                </Box>
+              ) : (
+                filteredSessions.map((session) => (
+                  <ListItemButton
+                    key={session.id}
+                    selected={session.id === activeSessionId}
+                    onClick={() => {
+                      setActiveSessionId(session.id);
+                      loadSession(session.id);
                     }}
+                    className="global-chat-session-item"
                   >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </ListItemButton>
-              ))}
+                    <ListItemText
+                      primary={session.title || `Session ${session.id}`}
+                      secondary={
+                        <Box>
+                          <Typography variant="caption" display="block">
+                            {new Date(session.updated_at).toLocaleString()}
+                          </Typography>
+                          {session.tags && (
+                            <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                              {session.tags.split(',').slice(0, 2).map((tag, i) => (
+                                <Chip
+                                  key={i}
+                                  icon={<LabelIcon />}
+                                  label={tag.trim()}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              ))}
+                              {session.tags.split(',').length > 2 && (
+                                <Chip
+                                  label={`+${session.tags.split(',').length - 2}`}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Stack>
+                          )}
+                        </Box>
+                      }
+                    />
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRenameSession(session.id);
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteSession(session.id);
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </ListItemButton>
+                ))
+              )}
             </List>
           )}
         </Box>
@@ -221,7 +402,24 @@ const GlobalChat = () => {
         <Box className="global-chat-content">
           <Box className="global-chat-header">
             <Typography variant="h5">AI Meeting Assistant</Typography>
-            {loading && <CircularProgress size={24} />}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Tooltip title="Number of sources to retrieve for each question">
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Top-K Sources</InputLabel>
+                  <Select
+                    value={topK}
+                    label="Top-K Sources"
+                    onChange={(e) => setTopK(e.target.value)}
+                  >
+                    <MenuItem value={3}>3 Sources</MenuItem>
+                    <MenuItem value={5}>5 Sources</MenuItem>
+                    <MenuItem value={7}>7 Sources</MenuItem>
+                    <MenuItem value={10}>10 Sources</MenuItem>
+                  </Select>
+                </FormControl>
+              </Tooltip>
+              {loading && <CircularProgress size={24} />}
+            </Box>
           </Box>
           <Box className="global-chat-messages">
             {messages.map((message, index) => (
@@ -262,7 +460,7 @@ const GlobalChat = () => {
                       >
                         {message.content}
                       </ReactMarkdown>
-                      {renderSources(message.sources)}
+                      {renderSources(message.sources, index)}
                     </>
                   ) : (
                     <Typography>{message.content}</Typography>
@@ -297,6 +495,75 @@ const GlobalChat = () => {
           </Box>
         </Box>
       </Paper>
+
+      {/* Edit Session Dialog */}
+      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Chat Session</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Session Name"
+            fullWidth
+            variant="outlined"
+            value={newSessionName}
+            onChange={(e) => setNewSessionName(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <Autocomplete
+            multiple
+            freeSolo
+            options={availableTags}
+            value={newSessionTags}
+            onChange={(event, newValue) => {
+              console.log('Autocomplete onChange:', newValue);
+              // newValue is an array of strings (both selected and newly typed)
+              setNewSessionTags(newValue);
+            }}
+            filterOptions={(options, params) => {
+              const filtered = options.filter(option =>
+                option.toLowerCase().includes(params.inputValue.toLowerCase())
+              );
+              
+              // Suggest the creation of a new value
+              if (params.inputValue !== '' && !filtered.includes(params.inputValue)) {
+                filtered.push(params.inputValue);
+              }
+              
+              return filtered;
+            }}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip
+                  icon={<LabelIcon />}
+                  label={option}
+                  {...getTagProps({ index })}
+                  size="small"
+                />
+              ))
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Tags"
+                placeholder="Add tags..."
+                helperText="Select existing tags or type new ones. Press Enter to add."
+                variant="outlined"
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleRenameConfirm} 
+            variant="contained"
+            disabled={!newSessionName.trim()}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

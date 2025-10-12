@@ -230,7 +230,7 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
     content_type = Column(String, nullable=False)
     chunk_index = Column(Integer, nullable=False)
-    metadata = Column(JSON, nullable=True)
+    chunk_metadata = Column(JSON, nullable=True)
     embedding = Column(Vector(), nullable=False)
     embedding_config_id = Column(Integer, ForeignKey("embedding_configurations.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -244,6 +244,7 @@ class GlobalChatSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False, default="New chat")
+    tags = Column(String, nullable=True)  # Comma-separated tags
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

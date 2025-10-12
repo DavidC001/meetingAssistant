@@ -72,7 +72,7 @@ class PgVectorStore(VectorStore):
                 content=chunk["content"],
                 content_type=chunk.get("content_type", "transcript"),
                 chunk_index=chunk.get("chunk_index", 0),
-                metadata=chunk.get("metadata", {}),
+                chunk_metadata=chunk.get("metadata", {}),
                 embedding=list(embedding),
                 embedding_config_id=embedding_config_id,
             )

@@ -171,6 +171,7 @@ class ChatHistoryResponse(BaseModel):
 class ChatRequest(BaseModel):
     query: str
     chat_history: Optional[List[dict]] = None
+    top_k: Optional[int] = 5
 
 class ChatResponse(BaseModel):
     response: str
@@ -294,7 +295,7 @@ class DocumentChunk(BaseModel):
     content: str
     content_type: str
     chunk_index: int
-    metadata: Optional[Dict[str, Any]] = None
+    chunk_metadata: Optional[Dict[str, Any]] = None
     similarity: Optional[float] = None
     created_at: datetime
 
@@ -316,6 +317,7 @@ class WorkerConfigurationUpdate(BaseModel):
 class GlobalChatSession(BaseModel):
     id: int
     title: str
+    tags: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -335,10 +337,16 @@ class GlobalChatMessage(BaseModel):
 
 class GlobalChatSessionCreate(BaseModel):
     title: Optional[str] = None
+    tags: Optional[str] = None
+
+class GlobalChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[str] = None
 
 class GlobalChatMessageCreate(BaseModel):
     message: str
     chat_history: Optional[List[Dict[str, Any]]] = None
+    top_k: Optional[int] = 5
 
 class GlobalChatSessionDetail(BaseModel):
     session: GlobalChatSession

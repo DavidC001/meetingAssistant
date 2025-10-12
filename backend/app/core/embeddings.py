@@ -124,10 +124,43 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             )
         super().__init__(runtime_config)
         model_name = runtime_config.model_name
-        if model_name not in self._cache:
+        cache_key = f"{model_name}_{runtime_config.api_key[:8] if runtime_config.api_key else 'no_token'}"
+        if cache_key not in self._cache:
             model_kwargs = runtime_config.settings or {}
-            self._cache[model_name] = SentenceTransformer(model_name, **model_kwargs)
-        self._model = self._cache[model_name]
+            # Add HuggingFace token if available (needed for gated models)
+            if runtime_config.api_key:
+                model_kwargs['token'] = runtime_config.api_key
+            try:
+                self.logger.info(f"Loading sentence-transformer model: {model_name}")
+                self._cache[cache_key] = SentenceTransformer(model_name, **model_kwargs)
+                self.logger.info(f"Successfully loaded model: {model_name}")
+            except Exception as e:
+                self.logger.error(f"Failed to load model {model_name}: {e}")
+                error_msg = str(e)
+                
+                # Provide helpful error messages based on the error type
+                if "does not recognize this architecture" in error_msg:
+                    raise RuntimeError(
+                        f"Model architecture not supported: {model_name}. "
+                        f"This model requires a newer version of the transformers library. "
+                        f"Error: {error_msg}. "
+                        f"Try using a different model like 'sentence-transformers/all-MiniLM-L6-v2' "
+                        f"or 'sentence-transformers/all-mpnet-base-v2' instead."
+                    )
+                elif "gated" in error_msg.lower() or "authentication" in error_msg.lower():
+                    raise RuntimeError(
+                        f"Failed to load model {model_name}. "
+                        f"This appears to be a gated model. "
+                        f"Ensure HUGGINGFACE_TOKEN is set in your environment and you have access to this model. "
+                        f"Error: {error_msg}"
+                    )
+                else:
+                    raise RuntimeError(
+                        f"Failed to load model {model_name}. "
+                        f"Error: {error_msg}. "
+                        f"If this is a gated model, ensure HUGGINGFACE_TOKEN is set in your environment."
+                    )
+        self._model = self._cache[cache_key]
 
     def embed_documents(self, texts: Sequence[str]) -> List[List[float]]:
         # The encode method already batches internally; we still wrap for logging
@@ -161,45 +194,113 @@ class EmbeddingProviderFactory:
 DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
-def _check_huggingface_model(model_name: str) -> Tuple[bool, str]:
-    """Check whether a Hugging Face model repository exists."""
+def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]:
+    """Check whether a Hugging Face model repository exists and get its dimension.
+    
+    Returns:
+        Tuple of (valid, message, dimension)
+    """
 
     if not model_name or not model_name.strip():
-        return False, "A model name is required."
+        return False, "A model name is required.", None
 
     url = HF_MODEL_INFO_URL.format(model_id=model_name)
+    
+    # Try to get HuggingFace token for authentication
+    headers = {}
+    hf_token = config.api.huggingface_token
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+    
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
     except requests.RequestException as exc:  # pragma: no cover - network failure
         LOGGER.warning("Failed to reach Hugging Face for model %s: %s", model_name, exc)
-        return False, "Could not verify the model on Hugging Face. Please try again."
+        return False, "Could not verify the model on Hugging Face. Please try again.", None
 
-    if response.status_code == 200:
-        return True, "Model found on Hugging Face."
     if response.status_code == 404:
-        return False, "Model not found on Hugging Face. Check the repository name."
+        return False, "Model not found on Hugging Face. Check the repository name.", None
+    
+    if response.status_code == 401 or response.status_code == 403:
+        if not hf_token:
+            return False, "This model requires authentication. Please provide a HuggingFace token in the HUGGINGFACE_TOKEN environment variable.", None
+        else:
+            return False, "Access denied. Your HuggingFace token may not have access to this model, or the token is invalid.", None
+    
+    if response.status_code != 200:
+        LOGGER.warning(
+            "Unexpected response when checking Hugging Face model %s: %s %s",
+            model_name,
+            response.status_code,
+            response.text,
+        )
+        return (
+            False,
+            "Unable to confirm the model on Hugging Face due to an unexpected response.",
+            None,
+        )
+    
+    # Model found, try to extract dimension from config
+    dimension = None
+    try:
+        model_info = response.json()
+        # Try to get dimension from config
+        if "config" in model_info:
+            config_data = model_info["config"]
+            # Common keys for embedding dimension in different model architectures
+            dimension_keys = [
+                "hidden_size",
+                "d_model", 
+                "embedding_size",
+                "n_embd",
+                "dim",
+                "embedding_dim"
+            ]
+            for key in dimension_keys:
+                if key in config_data:
+                    dimension = int(config_data[key])
+                    LOGGER.info(f"Found dimension {dimension} for model {model_name} via key '{key}'")
+                    break
+        
+        # If dimension still not found, try to load the actual config file
+        if dimension is None:
+            config_url = f"https://huggingface.co/{model_name}/resolve/main/config.json"
+            config_headers = {}
+            if hf_token:
+                config_headers["Authorization"] = f"Bearer {hf_token}"
+            try:
+                config_response = requests.get(config_url, headers=config_headers, timeout=10)
+                if config_response.status_code == 200:
+                    config_json = config_response.json()
+                    for key in dimension_keys:
+                        if key in config_json:
+                            dimension = int(config_json[key])
+                            LOGGER.info(f"Found dimension {dimension} for model {model_name} via config.json key '{key}'")
+                            break
+            except Exception as e:
+                LOGGER.debug(f"Could not fetch config.json for {model_name}: {e}")
+        
+        message = f"Model found on Hugging Face{f' (dimension: {dimension})' if dimension else ''}."
+        return True, message, dimension
+        
+    except Exception as e:
+        LOGGER.warning(f"Error extracting dimension for {model_name}: {e}")
+        return True, "Model found on Hugging Face.", None
 
-    LOGGER.warning(
-        "Unexpected response when checking Hugging Face model %s: %s %s",
-        model_name,
-        response.status_code,
-        response.text,
-    )
-    return (
-        False,
-        "Unable to confirm the model on Hugging Face due to an unexpected response.",
-    )
 
-
-def validate_embedding_model(provider: str, model_name: str) -> Tuple[bool, str]:
-    """Validate that a requested embedding model is available for the provider."""
+def validate_embedding_model(provider: str, model_name: str) -> Tuple[bool, str, Optional[int]]:
+    """Validate that a requested embedding model is available for the provider.
+    
+    Returns:
+        Tuple of (valid, message, dimension) where dimension is only available for sentence-transformers
+    """
 
     provider_key = (provider or "").lower()
     if provider_key in {"sentence-transformers", "local"}:
         return _check_huggingface_model(model_name)
 
     # For OpenAI and Ollama we rely on runtime errors if the model is unavailable.
-    return True, ""
+    return True, "", None
 
 
 def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguration) -> EmbeddingConfig:
@@ -213,6 +314,9 @@ def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguratio
             api_key = config.get_api_key(api_key_record.environment_variable)
     if not api_key and provider == "openai":
         api_key = config.get_api_key("OPENAI_API_KEY")
+    # For sentence-transformers, use HuggingFace token if available (needed for gated models)
+    if not api_key and provider in {"sentence-transformers", "local"}:
+        api_key = config.api.huggingface_token
 
     base_url = db_config.base_url
     if not base_url and provider == "ollama":
@@ -244,8 +348,24 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
         )
 
     LOGGER.info("Creating default local embedding configuration using %s", DEFAULT_LOCAL_MODEL)
-    model = SentenceTransformer(DEFAULT_LOCAL_MODEL)
-    dimension = int(model.get_sentence_embedding_dimension())
+    
+    # Get HuggingFace token if available
+    hf_token = config.api.huggingface_token
+    model_kwargs = {}
+    if hf_token:
+        model_kwargs['token'] = hf_token
+        
+    try:
+        model = SentenceTransformer(DEFAULT_LOCAL_MODEL, **model_kwargs)
+        dimension = int(model.get_sentence_embedding_dimension())
+    except Exception as e:
+        LOGGER.error(f"Failed to load default model {DEFAULT_LOCAL_MODEL}: {e}")
+        raise RuntimeError(
+            f"Failed to initialize default embedding model. "
+            f"Error: {str(e)}. "
+            "Please create an embedding configuration manually in the settings."
+        )
+    
     create_schema = schemas.EmbeddingConfigurationCreate(
         provider="sentence-transformers",
         model_name=DEFAULT_LOCAL_MODEL,
