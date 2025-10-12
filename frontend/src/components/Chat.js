@@ -6,18 +6,28 @@ import {
     Paper, 
     Typography, 
     CircularProgress, 
-    List, 
-    ListItem, 
-    ListItemText, 
+    List,
+    ListItem,
+    ListItemText,
     Avatar,
     IconButton,
-    Tooltip
+    Tooltip,
+    Chip,
+    Stack,
+    Divider,
+    Collapse,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
 import { 
     Send as SendIcon, 
     Assistant as AssistantIcon, 
     Person as PersonIcon,
-    ClearAll as ClearAllIcon
+    ClearAll as ClearAllIcon,
+    ExpandMore as ExpandMoreIcon,
+    ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,6 +39,8 @@ const Chat = ({ meetingId }) => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [historyLoaded, setHistoryLoaded] = useState(false);
+    const [topK, setTopK] = useState(5);
+    const [expandedSources, setExpandedSources] = useState({});
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -45,7 +57,11 @@ const Chat = ({ meetingId }) => {
             try {
                 const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history`);
                 if (response.data.history && response.data.history.length > 0) {
-                    setMessages(response.data.history);
+                    const hydratedHistory = response.data.history.map(msg => ({
+                        ...msg,
+                        sources: msg.sources || []
+                    }));
+                    setMessages(hydratedHistory);
                 }
                 setHistoryLoaded(true);
             } catch (error) {
@@ -68,6 +84,13 @@ const Chat = ({ meetingId }) => {
         }
     };
 
+    const toggleSourcesExpanded = (index) => {
+        setExpandedSources(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
+    };
+
     const handleSend = async () => {
         if (input.trim() && !isLoading) {
             const newMessages = [...messages, { role: 'user', content: input }];
@@ -83,17 +106,59 @@ const Chat = ({ meetingId }) => {
 
                 const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
                     query: input,
-                    chat_history: chat_history
+                    chat_history: chat_history,
+                    top_k: topK
                 });
 
-                setMessages([...newMessages, { role: 'assistant', content: response.data.response }]);
+                setMessages([...newMessages, { role: 'assistant', content: response.data.response, sources: response.data.sources || [] }]);
             } catch (error) {
                 console.error('Error sending message:', error);
-                setMessages([...newMessages, { role: 'assistant', content: 'Sorry, I had trouble getting a response. Please try again.' }]);
+                setMessages([...newMessages, { role: 'assistant', content: 'Sorry, I had trouble getting a response. Please try again.', sources: [] }]);
             } finally {
                 setIsLoading(false);
             }
         }
+    };
+
+    const renderSources = (sources, messageIndex) => {
+        if (!sources || sources.length === 0) {
+            return null;
+        }
+
+        const isExpanded = expandedSources[messageIndex];
+
+        return (
+            <Box className="source-container" sx={{ mt: 2 }}>
+                <Button
+                    size="small"
+                    onClick={() => toggleSourcesExpanded(messageIndex)}
+                    endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    sx={{ mb: 1 }}
+                >
+                    {isExpanded ? 'Hide' : 'Show'} Sources ({sources.length})
+                </Button>
+                <Collapse in={isExpanded}>
+                    <Stack spacing={1} className="source-stack">
+                        {sources.map((source, index) => (
+                            <Paper key={index} variant="outlined" className="source-card" sx={{ p: 1.5 }}>
+                                <Typography variant="subtitle2" color="primary">
+                                    {source.meeting_name || `Meeting ${source.meeting_id}`}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                    {source.content_type.replace('_', ' ')} • similarity {(source.similarity || 0).toFixed(2)}
+                                </Typography>
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                    {source.snippet}
+                                </Typography>
+                                {source.metadata && source.metadata.attachment_name && (
+                                    <Chip size="small" label={`Attachment: ${source.metadata.attachment_name}`} sx={{ mt: 1 }} />
+                                )}
+                            </Paper>
+                        ))}
+                    </Stack>
+                </Collapse>
+            </Box>
+        );
     };
 
     return (
@@ -102,15 +167,39 @@ const Chat = ({ meetingId }) => {
                 <Typography variant="h5">
                     💬 Ask Questions About This Meeting
                 </Typography>
-                <Tooltip title="Clear chat history">
-                    <IconButton 
-                        onClick={clearChatHistory}
-                        sx={{ color: 'white' }}
-                        disabled={isLoading || messages.length === 0}
-                    >
-                        <ClearAllIcon />
-                    </IconButton>
-                </Tooltip>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Tooltip title="Number of sources to retrieve for each question">
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel sx={{ color: 'white' }}>Top-K</InputLabel>
+                            <Select
+                                value={topK}
+                                label="Top-K"
+                                onChange={(e) => setTopK(e.target.value)}
+                                sx={{ 
+                                    color: 'white',
+                                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.5)' },
+                                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                                    '.MuiSvgIcon-root': { color: 'white' }
+                                }}
+                            >
+                                <MenuItem value={3}>3 Sources</MenuItem>
+                                <MenuItem value={5}>5 Sources</MenuItem>
+                                <MenuItem value={7}>7 Sources</MenuItem>
+                                <MenuItem value={10}>10 Sources</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Tooltip>
+                    <Tooltip title="Clear chat history">
+                        <IconButton 
+                            onClick={clearChatHistory}
+                            sx={{ color: 'white' }}
+                            disabled={isLoading || messages.length === 0}
+                        >
+                            <ClearAllIcon />
+                        </IconButton>
+                    </Tooltip>
+                </Box>
             </Box>
             <Box className="chat-messages">
                 <List>
@@ -119,55 +208,57 @@ const Chat = ({ meetingId }) => {
                             <Avatar className={`avatar ${msg.role}`}>
                                 {msg.role === 'user' ? <PersonIcon /> : <AssistantIcon />}
                             </Avatar>
-                            <ListItemText
+                            <ListItemText className="message-text"
                                 primary={
                                     msg.role === 'assistant' ? (
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
-                                                ul: ({ children }) => <ul style={{ marginLeft: '20px' }}>{children}</ul>,
-                                                ol: ({ children }) => <ol style={{ marginLeft: '20px' }}>{children}</ol>,
-                                                code: ({ inline, children, ...props }) => (
-                                                    inline ? (
-                                                        <code style={{ 
-                                                            backgroundColor: '#f5f5f5', 
-                                                            padding: '2px 4px', 
-                                                            borderRadius: '3px',
-                                                            fontSize: '0.9em'
-                                                        }}>{children}</code>
-                                                    ) : (
-                                                        <pre style={{ 
-                                                            backgroundColor: '#f5f5f5', 
-                                                            padding: '12px', 
-                                                            borderRadius: '5px',
-                                                            overflow: 'auto',
-                                                            fontSize: '0.9em'
+                                        <>
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    p: ({ children }) => <p style={{ margin: '8px 0' }}>{children}</p>,
+                                                    ul: ({ children }) => <ul style={{ marginLeft: '20px' }}>{children}</ul>,
+                                                    ol: ({ children }) => <ol style={{ marginLeft: '20px' }}>{children}</ol>,
+                                                    code: ({ inline, children, ...props }) => (
+                                                        inline ? (
+                                                            <code style={{
+                                                                backgroundColor: '#f5f5f5',
+                                                                padding: '2px 4px',
+                                                                borderRadius: '3px',
+                                                                fontSize: '0.9em'
+                                                            }}>{children}</code>
+                                                        ) : (
+                                                            <pre style={{
+                                                                backgroundColor: '#f5f5f5',
+                                                                padding: '12px',
+                                                                borderRadius: '5px',
+                                                                overflow: 'auto',
+                                                                fontSize: '0.9em'
+                                                            }}>
+                                                                <code {...props}>{children}</code>
+                                                            </pre>
+                                                        )
+                                                    ),
+                                                    blockquote: ({ children }) => (
+                                                        <blockquote style={{
+                                                            borderLeft: '4px solid #ddd',
+                                                            margin: '16px 0',
+                                                            paddingLeft: '16px',
+                                                            fontStyle: 'italic',
+                                                            color: '#666'
                                                         }}>
-                                                            <code {...props}>{children}</code>
-                                                        </pre>
+                                                            {children}
+                                                        </blockquote>
                                                     )
-                                                ),
-                                                blockquote: ({ children }) => (
-                                                    <blockquote style={{
-                                                        borderLeft: '4px solid #ddd',
-                                                        margin: '16px 0',
-                                                        paddingLeft: '16px',
-                                                        fontStyle: 'italic',
-                                                        color: '#666'
-                                                    }}>
-                                                        {children}
-                                                    </blockquote>
-                                                )
-                                            }}
-                                        >
-                                            {msg.content}
-                                        </ReactMarkdown>
+                                                }}
+                                            >
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                            {renderSources(msg.sources, index)}
+                                        </>
                                     ) : (
                                         msg.content
                                     )
                                 }
-                                className="message-text"
                             />
                         </ListItem>
                     ))}

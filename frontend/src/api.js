@@ -34,6 +34,7 @@ const api = {
   updateMeetingTagsFolder: (meetingId, tags, folder) => {
     return client.put(`/api/v1/meetings/${meetingId}/tags-folder`, { tags, folder });
   },
+  getAllTags: () => client.get('/api/v1/meetings/tags/all'),
 
   // Notes API
   updateMeetingNotes: (meetingId, notes) => {
@@ -78,6 +79,38 @@ const api = {
   deleteAttachment: (attachmentId) => {
     return client.delete(`/api/v1/meetings/attachments/${attachmentId}`);
   },
+
+  // Global chat API
+  globalChat: {
+    listSessions: () => client.get('/api/v1/global-chat/sessions'),
+    createSession: (title, tags) => client.post('/api/v1/global-chat/sessions', { title, tags }),
+    getSession: (sessionId) => client.get(`/api/v1/global-chat/sessions/${sessionId}`),
+    deleteSession: (sessionId) => client.delete(`/api/v1/global-chat/sessions/${sessionId}`),
+    updateSession: (sessionId, title, tags) => client.put(`/api/v1/global-chat/sessions/${sessionId}`, { title, tags }),
+    sendMessage: (sessionId, message, chatHistory, topK) => client.post(
+      `/api/v1/global-chat/sessions/${sessionId}/messages`,
+      { message, chat_history: chatHistory, top_k: topK }
+    ),
+  },
+
+  // Embedding & worker settings
+  embeddingSettings: {
+    getConfig: () => client.get('/api/v1/settings/embedding-config'),
+    validateModel: (provider, modelName) =>
+      client.get('/api/v1/settings/embedding-config/validate-model', {
+        params: { provider, model_name: modelName },
+      }),
+    createConfig: (payload) => client.post('/api/v1/settings/embedding-config', payload),
+    updateConfig: (configId, payload) => client.put(`/api/v1/settings/embedding-config/${configId}`, payload),
+    activateConfig: (configId) => client.post(`/api/v1/settings/embedding-config/${configId}/activate`),
+    deleteConfig: (configId) => client.delete(`/api/v1/settings/embedding-config/${configId}`),
+    recomputeAll: () => client.post('/api/v1/settings/embedding-config/recompute'),
+    recomputeMeeting: (meetingId) => client.post(`/api/v1/settings/embedding-config/${meetingId}/recompute`),
+  },
+  workerSettings: {
+    get: () => client.get('/api/v1/settings/worker-scaling'),
+    update: (maxWorkers) => client.put('/api/v1/settings/worker-scaling', { max_workers: maxWorkers }),
+  }
 };
 
 

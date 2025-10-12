@@ -12,15 +12,17 @@ import {
   Tabs,
   Tab
 } from '@mui/material';
-import { 
+import {
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
-  CalendarMonth as CalendarIcon
+  CalendarMonth as CalendarIcon,
+  ChatBubbleOutline as ChatIcon
 } from '@mui/icons-material';
 import MeetingsDashboard from './components/MeetingsDashboard';
 import MeetingDetails from './components/MeetingDetails';
 import Settings from './components/Settings';
 import Calendar from './components/Calendar';
+import GlobalChat from './components/GlobalChat';
 
 // Create a modern theme
 const theme = createTheme({
@@ -76,30 +78,37 @@ function NavigationTabs() {
   const [value, setValue] = React.useState(0);
 
   React.useEffect(() => {
-    if (location.pathname === '/') setValue(0);
-    else if (location.pathname === '/calendar') setValue(1);
-    else if (location.pathname === '/settings') setValue(2);
+    if (location.pathname === '/' || location.pathname.startsWith('/meetings')) setValue(0);
+    else if (location.pathname.startsWith('/global-chat')) setValue(1);
+    else if (location.pathname.startsWith('/calendar')) setValue(2);
+    else if (location.pathname.startsWith('/settings')) setValue(3);
   }, [location.pathname]);
 
   return (
     <Tabs value={value} textColor="inherit" indicatorColor="secondary">
-      <Tab 
-        icon={<DashboardIcon />} 
-        label="Dashboard" 
-        component={Link} 
-        to="/" 
+      <Tab
+        icon={<DashboardIcon />}
+        label="Dashboard"
+        component={Link}
+        to="/"
       />
-      <Tab 
-        icon={<CalendarIcon />} 
-        label="Calendar" 
-        component={Link} 
-        to="/calendar" 
+      <Tab
+        icon={<ChatIcon />}
+        label="Global Chat"
+        component={Link}
+        to="/global-chat"
       />
-      <Tab 
-        icon={<SettingsIcon />} 
-        label="Settings" 
-        component={Link} 
-        to="/settings" 
+      <Tab
+        icon={<CalendarIcon />}
+        label="Calendar"
+        component={Link}
+        to="/calendar"
+      />
+      <Tab
+        icon={<SettingsIcon />}
+        label="Settings"
+        component={Link}
+        to="/settings"
       />
     </Tabs>
   );
@@ -126,6 +135,7 @@ function App() {
             <Routes>
               <Route path="/" element={<MeetingsDashboard />} />
               <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
+              <Route path="/global-chat" element={<GlobalChat />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

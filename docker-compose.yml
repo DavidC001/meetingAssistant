@@ -63,9 +63,10 @@ services:
           memory: 4G
 
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password

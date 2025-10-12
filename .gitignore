@@ -3,3 +3,5 @@ uploads/
 
 __pycache__/
 *.pyc
+
+docs/

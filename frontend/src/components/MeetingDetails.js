@@ -713,12 +713,26 @@ const MeetingDetails = () => {
                 variant="filled"
                 size="large"
               />
+              {meeting.status === 'completed' && (
+                <Chip
+                  label={meeting.embeddings_computed ? '✓ RAG Ready' : '⏳ Indexing...'}
+                  color={meeting.embeddings_computed ? 'success' : 'warning'}
+                  variant="outlined"
+                  size="medium"
+                  sx={{ ml: 1 }}
+                />
+              )}
             </Box>
           </Box>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             <CalendarIcon sx={{ fontSize: 16, mr: 1, verticalAlign: 'middle' }} />
             Uploaded on: {new Date(meeting.created_at).toLocaleString()}
           </Typography>
+          {meeting.status === 'completed' && !meeting.embeddings_computed && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This meeting is being indexed for chat retrieval. The chat feature will be available shortly.
+            </Alert>
+          )}
           
           {/* Tags and Folder Edit - Improved UI */}
           <Paper elevation={0} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, mb: 2 }}>

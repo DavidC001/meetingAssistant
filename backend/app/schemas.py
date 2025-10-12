@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .models import MeetingStatus, ProcessingStage
 
 # API Key Schemas
@@ -171,9 +171,11 @@ class ChatHistoryResponse(BaseModel):
 class ChatRequest(BaseModel):
     query: str
     chat_history: Optional[List[dict]] = None
+    top_k: Optional[int] = 5
 
 class ChatResponse(BaseModel):
     response: str
+    sources: List[Dict[str, Any]] = []
 
 # Transcription Schemas
 class TranscriptionBase(BaseModel):
@@ -231,7 +233,10 @@ class Meeting(MeetingBase):
     current_stage: Optional[ProcessingStage] = None
     stage_progress: float = 0.0
     overall_progress: float = 0.0
-    
+    embeddings_computed: bool = False
+    embeddings_updated_at: Optional[datetime] = None
+    embedding_config_id: Optional[int] = None
+
     # Processing details and metadata
     file_size: Optional[int] = None
     estimated_duration: Optional[float] = None
@@ -252,3 +257,97 @@ class Meeting(MeetingBase):
 
     class Config:
         from_attributes = True
+
+# Embedding schemas
+class EmbeddingConfigurationBase(BaseModel):
+    provider: str
+    model_name: str
+    dimension: int
+    base_url: Optional[str] = None
+    api_key_id: Optional[int] = None
+    settings: Optional[dict] = None
+    is_active: bool = True
+
+class EmbeddingConfigurationCreate(EmbeddingConfigurationBase):
+    pass
+
+class EmbeddingConfigurationUpdate(BaseModel):
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    dimension: Optional[int] = None
+    base_url: Optional[str] = None
+    api_key_id: Optional[int] = None
+    settings: Optional[dict] = None
+    is_active: Optional[bool] = None
+
+class EmbeddingConfiguration(EmbeddingConfigurationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DocumentChunk(BaseModel):
+    id: int
+    meeting_id: int
+    attachment_id: Optional[int] = None
+    content: str
+    content_type: str
+    chunk_index: int
+    chunk_metadata: Optional[Dict[str, Any]] = None
+    similarity: Optional[float] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkerConfiguration(BaseModel):
+    id: int
+    max_workers: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class WorkerConfigurationUpdate(BaseModel):
+    max_workers: int
+
+class GlobalChatSession(BaseModel):
+    id: int
+    title: str
+    tags: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GlobalChatMessage(BaseModel):
+    id: int
+    session_id: int
+    role: str
+    content: str
+    sources: Optional[List[Dict[str, Any]]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GlobalChatSessionCreate(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[str] = None
+
+class GlobalChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[str] = None
+
+class GlobalChatMessageCreate(BaseModel):
+    message: str
+    chat_history: Optional[List[Dict[str, Any]]] = None
+    top_k: Optional[int] = 5
+
+class GlobalChatSessionDetail(BaseModel):
+    session: GlobalChatSession
+    messages: List[GlobalChatMessage]

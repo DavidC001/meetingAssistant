@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import crud, models, schemas
-from ..core import chat
+from ..core import chat, rag
 from ..core.config import config
 from ..core.export import export_to_json, export_to_txt, export_to_docx, export_to_pdf
 from ..database import get_db
@@ -477,6 +477,11 @@ def update_meeting_notes(meeting_id: int, notes: Optional[str] = Body(None, embe
     db_meeting.notes = notes
     db.commit()
     db.refresh(db_meeting)
+    
+    # Trigger embedding computation to index the updated notes
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
+    
     return db_meeting
 
 @router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
@@ -498,33 +503,30 @@ async def chat_with_meeting_endpoint(
     # Save user message to database
     crud.create_chat_message(db, meeting_id, "user", request.query)
 
-    # Get the last 5 messages from the chat history
     chat_history = request.chat_history or []
 
-    # Get model configuration
     model_config = None
     if db_meeting.model_configuration_id:
         model_config = crud.get_model_configuration(db, db_meeting.model_configuration_id)
     if not model_config:
         model_config = crud.get_default_model_configuration(db)
-    
-    # Convert to LLMConfig if we have a model configuration
+
     llm_config = None
     if model_config:
         llm_config = chat.model_config_to_llm_config(model_config, use_analysis=False)
 
-    # Call the chat logic
-    response_text = await chat.chat_with_meeting(
+    response_text, sources = await rag.generate_rag_response(
+        db,
         query=request.query,
-        transcript=db_meeting.transcription.full_text,
+        meeting_id=meeting_id,
         chat_history=chat_history,
-        config=llm_config
+        top_k=request.top_k or 5,
+        llm_config=llm_config,
     )
 
-    # Save assistant response to database
     crud.create_chat_message(db, meeting_id, "assistant", response_text)
 
-    return schemas.ChatResponse(response=response_text)
+    return schemas.ChatResponse(response=response_text, sources=sources)
 
 @router.get("/{meeting_id}/chat/history", response_model=schemas.ChatHistoryResponse)
 def get_chat_history_endpoint(
@@ -745,6 +747,10 @@ async def upload_attachment(
         description=description
     )
     
+    # Trigger embedding computation for the meeting to index the new attachment
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
+    
     return attachment
 
 
@@ -893,6 +899,8 @@ def delete_attachment(
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found")
     
+    meeting_id = attachment.meeting_id  # Store meeting_id before deletion
+    
     # Delete file from disk
     file_path = Path(attachment.filepath)
     if file_path.exists():
@@ -904,6 +912,10 @@ def delete_attachment(
     
     # Delete database record
     crud.delete_attachment(db=db, attachment_id=attachment_id)
+    
+    # Trigger embedding recomputation to remove deleted attachment from index
+    from ..tasks import compute_embeddings_for_meeting
+    compute_embeddings_for_meeting.delay(meeting_id)
     
     return None
 
@@ -947,3 +959,29 @@ def stream_meeting_audio(
             "Content-Disposition": f'inline; filename="{meeting.filename}_audio.mp3"'
         }
     )
+
+
+@router.get("/tags/all", response_model=List[str])
+def get_all_tags(db: Session = Depends(get_db)):
+    """Get all unique tags from meetings and global chat sessions."""
+    tags_set = set()
+    
+    # Get tags from meetings
+    meetings = crud.get_meetings(db)
+    for meeting in meetings:
+        if meeting.tags:
+            for tag in meeting.tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    tags_set.add(tag)
+    
+    # Get tags from global chat sessions
+    sessions = crud.list_global_chat_sessions(db)
+    for session in sessions:
+        if session.tags:
+            for tag in session.tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    tags_set.add(tag)
+    
+    return sorted(list(tags_set))
