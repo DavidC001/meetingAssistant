@@ -437,8 +437,8 @@ const MeetingDetails = () => {
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              // Force page reload by navigating away and back
-              window.location.href = `/meeting/${meetingId}`;
+              // Navigate to the meeting details page
+              navigate(`/meetings/${meetingId}`);
             }}
             onMouseEnter={() => setHoveredMeetingId(parseInt(meetingId))}
             onMouseLeave={() => setHoveredMeetingId(null)}

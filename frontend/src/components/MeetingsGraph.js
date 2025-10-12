@@ -156,13 +156,13 @@ const MeetingsGraph = () => {
   const handleNodeDoubleClick = useCallback((node) => {
     // Navigate to meeting on double-click
     if (node.type === 'meeting' && node.data && node.data.id) {
-      window.location.href = `/meeting/${node.data.id}`;
+      window.location.href = `/meetings/${node.data.id}`;
     }
   }, []);
 
   const handleOpenMeeting = useCallback(() => {
     if (selectedNode && selectedNode.type === 'meeting' && selectedNode.data && selectedNode.data.id) {
-      window.location.href = `/meeting/${selectedNode.data.id}`;
+      window.location.href = `/meetings/${selectedNode.data.id}`;
     }
   }, [selectedNode]);
 
