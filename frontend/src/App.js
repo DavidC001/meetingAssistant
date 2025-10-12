@@ -16,13 +16,15 @@ import {
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
   CalendarMonth as CalendarIcon,
-  ChatBubbleOutline as ChatIcon
+  ChatBubbleOutline as ChatIcon,
+  Event as EventIcon
 } from '@mui/icons-material';
 import MeetingsDashboard from './components/MeetingsDashboard';
 import MeetingDetails from './components/MeetingDetails';
 import Settings from './components/Settings';
 import Calendar from './components/Calendar';
 import GlobalChat from './components/GlobalChat';
+import ScheduledMeetings from './components/ScheduledMeetings';
 
 // Create a modern theme
 const theme = createTheme({
@@ -80,8 +82,9 @@ function NavigationTabs() {
   React.useEffect(() => {
     if (location.pathname === '/' || location.pathname.startsWith('/meetings')) setValue(0);
     else if (location.pathname.startsWith('/global-chat')) setValue(1);
-    else if (location.pathname.startsWith('/calendar')) setValue(2);
-    else if (location.pathname.startsWith('/settings')) setValue(3);
+    else if (location.pathname.startsWith('/scheduled-meetings')) setValue(2);
+    else if (location.pathname.startsWith('/calendar')) setValue(3);
+    else if (location.pathname.startsWith('/settings')) setValue(4);
   }, [location.pathname]);
 
   return (
@@ -97,6 +100,12 @@ function NavigationTabs() {
         label="Global Chat"
         component={Link}
         to="/global-chat"
+      />
+      <Tab
+        icon={<EventIcon />}
+        label="Scheduled"
+        component={Link}
+        to="/scheduled-meetings"
       />
       <Tab
         icon={<CalendarIcon />}
@@ -136,6 +145,7 @@ function App() {
               <Route path="/" element={<MeetingsDashboard />} />
               <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
               <Route path="/global-chat" element={<GlobalChat />} />
+              <Route path="/scheduled-meetings" element={<ScheduledMeetings />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

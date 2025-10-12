@@ -318,3 +318,77 @@ class GoogleCalendarService:
         except HttpError as e:
             print(f"Error deleting calendar event: {e}")
             return False
+    
+    def fetch_upcoming_events(self, max_results: int = 50, time_min: Optional[datetime] = None, time_max: Optional[datetime] = None) -> list:
+        """
+        Fetch upcoming calendar events that could be meetings.
+        
+        Args:
+            max_results: Maximum number of events to return
+            time_min: Start time for event search (defaults to now)
+            time_max: End time for event search (defaults to 3 months from now)
+            
+        Returns:
+            List of calendar events
+        """
+        if not self.is_connected():
+            raise ValueError("Not connected to Google Calendar")
+        
+        if not time_min:
+            time_min = datetime.now()
+        if not time_max:
+            time_max = datetime.now() + timedelta(days=90)  # 3 months
+        
+        try:
+            events_result = self.service.events().list(
+                calendarId='primary',
+                timeMin=time_min.isoformat() + 'Z',
+                timeMax=time_max.isoformat() + 'Z',
+                maxResults=max_results,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            
+            # Filter for events that look like meetings (have attendees or are long enough)
+            meeting_events = []
+            for event in events:
+                # Skip all-day events
+                start = event.get('start', {})
+                if 'date' in start:  # All-day event
+                    continue
+                
+                # Include events with attendees or events longer than 15 minutes
+                attendees = event.get('attendees', [])
+                has_attendees = len(attendees) > 1  # More than just the organizer
+                
+                # Calculate duration
+                start_time = datetime.fromisoformat(start.get('dateTime', '').replace('Z', '+00:00'))
+                end = event.get('end', {})
+                end_time = datetime.fromisoformat(end.get('dateTime', '').replace('Z', '+00:00'))
+                duration_minutes = (end_time - start_time).total_seconds() / 60
+                
+                if has_attendees or duration_minutes >= 15:
+                    meeting_events.append(event)
+            
+            return meeting_events
+        except HttpError as e:
+            print(f"Error fetching calendar events: {e}")
+            return []
+    
+    def fetch_past_events(self, max_results: int = 50, days_back: int = 30) -> list:
+        """
+        Fetch past calendar events that could be meetings.
+        
+        Args:
+            max_results: Maximum number of events to return
+            days_back: How many days back to search
+            
+        Returns:
+            List of calendar events
+        """
+        time_min = datetime.now() - timedelta(days=days_back)
+        time_max = datetime.now()
+        
+        return self.fetch_upcoming_events(max_results=max_results, time_min=time_min, time_max=time_max)

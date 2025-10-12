@@ -149,7 +149,7 @@ class DiarizationTiming(Base):
 class APIKey(Base):
     __tablename__ = "api_keys"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)      
     name = Column(String, unique=True, index=True)  # Friendly name for the API key
     provider = Column(String, index=True)  # Provider: openai, anthropic, etc.
     environment_variable = Column(String)  # Environment variable name containing the actual key
@@ -281,3 +281,30 @@ class GoogleCalendarCredentials(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class ScheduledMeeting(Base):
+    __tablename__ = "scheduled_meetings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)  # Meeting title/summary
+    description = Column(Text, nullable=True)  # Meeting description
+    scheduled_time = Column(DateTime(timezone=True), nullable=False)  # When the meeting is scheduled
+    duration_minutes = Column(Integer, default=60)  # Expected duration
+    location = Column(String, nullable=True)  # Meeting location (physical or virtual)
+    attendees = Column(Text, nullable=True)  # Comma-separated list of attendees
+    
+    # Google Calendar integration
+    google_calendar_event_id = Column(String, nullable=True, unique=True)  # Google Calendar event ID
+    google_meet_link = Column(String, nullable=True)  # Google Meet conference link if available
+    
+    # Status and linking
+    status = Column(String, default="scheduled")  # scheduled, completed, cancelled
+    linked_meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)  # Link to uploaded meeting
+    
+    # Metadata
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)  # Last time synced from Google Calendar
+    
+    # Relationships
+    linked_meeting = relationship("Meeting", backref="scheduled_meeting", foreign_keys=[linked_meeting_id])
