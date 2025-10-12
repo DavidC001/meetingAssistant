@@ -17,7 +17,8 @@ import {
   Settings as SettingsIcon,
   CalendarMonth as CalendarIcon,
   ChatBubbleOutline as ChatIcon,
-  Event as EventIcon
+  Event as EventIcon,
+  AccountTree as GraphIcon
 } from '@mui/icons-material';
 import MeetingsDashboard from './components/MeetingsDashboard';
 import MeetingDetails from './components/MeetingDetails';
@@ -25,6 +26,7 @@ import Settings from './components/Settings';
 import Calendar from './components/Calendar';
 import GlobalChat from './components/GlobalChat';
 import ScheduledMeetings from './components/ScheduledMeetings';
+import MeetingsGraph from './components/MeetingsGraph';
 
 // Create a modern theme
 const theme = createTheme({
@@ -83,8 +85,9 @@ function NavigationTabs() {
     if (location.pathname === '/' || location.pathname.startsWith('/meetings')) setValue(0);
     else if (location.pathname.startsWith('/global-chat')) setValue(1);
     else if (location.pathname.startsWith('/scheduled-meetings')) setValue(2);
-    else if (location.pathname.startsWith('/calendar')) setValue(3);
-    else if (location.pathname.startsWith('/settings')) setValue(4);
+    else if (location.pathname.startsWith('/graph')) setValue(3);
+    else if (location.pathname.startsWith('/calendar')) setValue(4);
+    else if (location.pathname.startsWith('/settings')) setValue(5);
   }, [location.pathname]);
 
   return (
@@ -106,6 +109,12 @@ function NavigationTabs() {
         label="Scheduled"
         component={Link}
         to="/scheduled-meetings"
+      />
+      <Tab
+        icon={<GraphIcon />}
+        label="Graph"
+        component={Link}
+        to="/graph"
       />
       <Tab
         icon={<CalendarIcon />}
@@ -146,6 +155,7 @@ function App() {
               <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
               <Route path="/global-chat" element={<GlobalChat />} />
               <Route path="/scheduled-meetings" element={<ScheduledMeetings />} />
+              <Route path="/graph" element={<MeetingsGraph />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

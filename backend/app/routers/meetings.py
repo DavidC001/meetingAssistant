@@ -481,7 +481,7 @@ def update_meeting_tags_folder(meeting_id: int, tags: Optional[str] = Body(None)
 
 @router.put("/{meeting_id}/notes", response_model=schemas.Meeting)
 def update_meeting_notes(meeting_id: int, notes: Optional[str] = Body(None, embed=True), db: Session = Depends(get_db)):
-    """Update notes for a meeting."""
+    """Update notes for a meeting and sync meeting links."""
     db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
     if not db_meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -489,11 +489,85 @@ def update_meeting_notes(meeting_id: int, notes: Optional[str] = Body(None, embe
     db.commit()
     db.refresh(db_meeting)
     
+    # Sync meeting links from notes
+    sync_meeting_links_from_notes(db, meeting_id, notes)
+    
     # Trigger embedding computation to index the updated notes
     from ..tasks import compute_embeddings_for_meeting
     compute_embeddings_for_meeting.delay(meeting_id)
     
     return db_meeting
+
+
+def sync_meeting_links_from_notes(db: Session, source_meeting_id: int, notes: Optional[str]):
+    """
+    Extract meeting references from notes and sync with meeting_links table.
+    Removes old links and adds new ones based on current notes content.
+    """
+    if not notes:
+        # If notes are empty, remove all links from this meeting
+        db.query(models.MeetingLink).filter(
+            models.MeetingLink.source_meeting_id == source_meeting_id
+        ).delete()
+        db.commit()
+        return
+    
+    # Extract meeting IDs from notes
+    meeting_ids = set()
+    
+    # Pattern 1: #meeting-123 or #123
+    pattern1 = r'#(?:meeting-)?(\d+)'
+    matches = re.finditer(pattern1, notes, re.IGNORECASE)
+    for match in matches:
+        meeting_ids.add(int(match.group(1)))
+    
+    # Pattern 2: meeting:123
+    pattern2 = r'meeting:\s*(\d+)'
+    matches = re.finditer(pattern2, notes, re.IGNORECASE)
+    for match in matches:
+        meeting_ids.add(int(match.group(1)))
+    
+    # Pattern 3: [[123]]
+    pattern3 = r'\[\[(\d+)\]\]'
+    matches = re.finditer(pattern3, notes, re.IGNORECASE)
+    for match in matches:
+        meeting_ids.add(int(match.group(1)))
+    
+    # Remove self-references
+    meeting_ids.discard(source_meeting_id)
+    
+    # Get existing links for this meeting
+    existing_links = db.query(models.MeetingLink).filter(
+        models.MeetingLink.source_meeting_id == source_meeting_id
+    ).all()
+    
+    existing_target_ids = {link.target_meeting_id for link in existing_links}
+    
+    # Find links to add and remove
+    to_add = meeting_ids - existing_target_ids
+    to_remove = existing_target_ids - meeting_ids
+    
+    # Remove outdated links
+    if to_remove:
+        db.query(models.MeetingLink).filter(
+            models.MeetingLink.source_meeting_id == source_meeting_id,
+            models.MeetingLink.target_meeting_id.in_(to_remove)
+        ).delete(synchronize_session=False)
+    
+    # Add new links (verify target meetings exist)
+    for target_id in to_add:
+        target_meeting = db.query(models.Meeting).filter(
+            models.Meeting.id == target_id
+        ).first()
+        
+        if target_meeting:
+            new_link = models.MeetingLink(
+                source_meeting_id=source_meeting_id,
+                target_meeting_id=target_id
+            )
+            db.add(new_link)
+    
+    db.commit()
 
 @router.post("/{meeting_id}/chat", response_model=schemas.ChatResponse)
 async def chat_with_meeting_endpoint(

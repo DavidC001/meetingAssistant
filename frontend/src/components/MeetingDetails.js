@@ -33,7 +33,11 @@ import {
   TextField,
   Autocomplete,
   Menu,
-  MenuItem
+  MenuItem,
+  Popper,
+  ClickAwayListener,
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -48,12 +52,14 @@ import {
   Summarize as SummarizeIcon,
   Transcribe as TranscribeIcon,
   AccessTime as AccessTimeIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
   PlayCircle as PlayCircleIcon,
   Info as InfoIcon,
   Refresh as RefreshIcon,
   RestartAlt as RestartAltIcon,
   Delete as DeleteIcon,
-  Edit as EditIcon,
   Download as DownloadIcon,
   AttachFile as AttachFileIcon,
   CloudUpload as CloudUploadIcon,
@@ -98,9 +104,17 @@ const MeetingDetails = () => {
   const [attachments, setAttachments] = useState([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
+  const [allMeetings, setAllMeetings] = useState([]);
+  const [showMeetingSuggestions, setShowMeetingSuggestions] = useState(false);
+  const [meetingSuggestions, setMeetingSuggestions] = useState([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const notesRef = React.useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [attachmentDescription, setAttachmentDescription] = useState('');
   const [editingAttachment, setEditingAttachment] = useState(null);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
+  const [meetingPreviews, setMeetingPreviews] = useState({});
 
   // Add manual refresh function
   const handleManualRefresh = async () => {
@@ -266,7 +280,196 @@ const MeetingDetails = () => {
     try {
       const res = await api.updateMeetingNotes(meetingId, notes);
       setMeeting(res.data);
+      setShowMeetingSuggestions(false);
     } catch (err) { setError('Failed to update notes'); }
+  };
+
+  // Handle notes change with autocomplete detection
+  const handleNotesChange = (e) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    
+    setNotes(value);
+    setCursorPosition(cursorPos);
+
+    // Check if user typed # and show suggestions
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+    
+    if (lastHashIndex !== -1) {
+      const textAfterHash = textBeforeCursor.substring(lastHashIndex + 1);
+      
+      // Allow # followed by letters, numbers, spaces, hyphens, or nothing
+      // This allows filtering by name like "#KG" or by ID like "#123" or "#meeting-123"
+      const hashPattern = /^[a-zA-Z0-9\s-]*$/;
+      
+      if (hashPattern.test(textAfterHash)) {
+        // Filter meetings based on what's typed after #
+        const searchTerm = textAfterHash.replace('meeting-', '').toLowerCase().trim();
+        
+        const filtered = allMeetings.filter(m => {
+          // Search by ID
+          if (m.id.toString().includes(searchTerm)) {
+            return true;
+          }
+          // Search by filename/name
+          if (m.filename && m.filename.toLowerCase().includes(searchTerm)) {
+            return true;
+          }
+          return false;
+        }).slice(0, 10); // Limit to 10 suggestions
+        
+        setMeetingSuggestions(filtered);
+        setShowMeetingSuggestions(filtered.length > 0);
+        return;
+      }
+    }
+    
+    setShowMeetingSuggestions(false);
+  };
+
+  // Insert meeting reference
+  const insertMeetingReference = (meeting) => {
+    const textBeforeCursor = notes.substring(0, cursorPosition);
+    const textAfterCursor = notes.substring(cursorPosition);
+    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
+    
+    if (lastHashIndex !== -1) {
+      const beforeHash = notes.substring(0, lastHashIndex);
+      const reference = `#meeting-${meeting.id}`;
+      const newNotes = beforeHash + reference + ' ' + textAfterCursor;
+      
+      setNotes(newNotes);
+      setShowMeetingSuggestions(false);
+      
+      // Set focus back to textarea
+      setTimeout(() => {
+        if (notesRef.current) {
+          const newCursorPos = beforeHash.length + reference.length + 1;
+          notesRef.current.focus();
+          notesRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+  };
+
+  // Fetch meeting preview on hover
+  const fetchMeetingPreview = async (meetingId) => {
+    if (meetingPreviews[meetingId]) return; // Already cached
+    
+    try {
+      const response = await api.get(`/api/v1/meetings/${meetingId}`);
+      setMeetingPreviews(prev => ({
+        ...prev,
+        [meetingId]: response.data
+      }));
+    } catch (error) {
+      console.error('Error fetching meeting preview:', error);
+    }
+  };
+
+  // Render notes with clickable meeting references
+  const renderNotesWithPills = (notesText) => {
+    if (!notesText) {
+      return <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>No notes yet. Click Edit to add notes.</Typography>;
+    }
+
+    const parts = [];
+    let lastIndex = 0;
+    
+    // Combined pattern to match all reference formats
+    const pattern = /#(?:meeting-)?(\d+)|\[\[(\d+)\]\]|meeting:\s*(\d+)/gi;
+    let match;
+    
+    while ((match = pattern.exec(notesText)) !== null) {
+      const meetingId = match[1] || match[2] || match[3];
+      const matchedText = match[0];
+      
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push(
+          <span key={`text-${lastIndex}`}>
+            {notesText.substring(lastIndex, match.index)}
+          </span>
+        );
+      }
+      
+      // Find meeting info
+      const referencedMeeting = allMeetings.find(m => m.id === parseInt(meetingId));
+      const preview = meetingPreviews[meetingId];
+      
+      // Add clickable pill
+      parts.push(
+        <Tooltip
+          key={`pill-${match.index}`}
+          title={
+            preview ? (
+              <Box sx={{ p: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                  {preview.filename || 'Untitled'}
+                </Typography>
+                {preview.meeting_date && (
+                  <Typography variant="caption" display="block">
+                    📅 {new Date(preview.meeting_date).toLocaleDateString()}
+                  </Typography>
+                )}
+                {preview.summary && (
+                  <Typography variant="caption" display="block" sx={{ mt: 0.5, maxWidth: 300 }}>
+                    {preview.summary.substring(0, 150)}...
+                  </Typography>
+                )}
+                <Typography variant="caption" display="block" sx={{ mt: 0.5, color: 'primary.light' }}>
+                  Click to open meeting
+                </Typography>
+              </Box>
+            ) : (
+              referencedMeeting ? `Meeting: ${referencedMeeting.filename || 'Untitled'}` : 'Loading...'
+            )
+          }
+          arrow
+          placement="top"
+          onOpen={() => fetchMeetingPreview(meetingId)}
+        >
+          <Chip
+            label={`#${meetingId}`}
+            size="small"
+            clickable
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Force page reload by navigating away and back
+              window.location.href = `/meeting/${meetingId}`;
+            }}
+            onMouseEnter={() => setHoveredMeetingId(parseInt(meetingId))}
+            onMouseLeave={() => setHoveredMeetingId(null)}
+            icon={<CalendarIcon fontSize="small" />}
+            color={hoveredMeetingId === parseInt(meetingId) ? "primary" : "default"}
+            sx={{
+              mx: 0.5,
+              fontWeight: 'medium',
+              cursor: 'pointer',
+              '&:hover': {
+                transform: 'scale(1.05)',
+                transition: 'transform 0.2s',
+              }
+            }}
+          />
+        </Tooltip>
+      );
+      
+      lastIndex = match.index + matchedText.length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < notesText.length) {
+      parts.push(
+        <span key={`text-${lastIndex}`}>
+          {notesText.substring(lastIndex)}
+        </span>
+      );
+    }
+    
+    return <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{parts}</Typography>;
   };
 
   // Delete meeting handlers
@@ -484,6 +687,8 @@ const MeetingDetails = () => {
       const response = await api.get('/api/v1/meetings/');
       const folders = [...new Set(response.data.map(m => m.folder).filter(f => f && f !== 'Uncategorized'))];
       setAvailableFolders(folders.sort());
+      // Also store all meetings for autocomplete
+      setAllMeetings(response.data.filter(m => m.id !== parseInt(meetingId)));
     } catch (err) {
       console.error('Error fetching folders:', err);
     }
@@ -800,37 +1005,150 @@ const MeetingDetails = () => {
 
           {/* Notes Section */}
           <Paper elevation={0} sx={{ p: 2, bgcolor: 'info.lighter', borderRadius: 2, mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom fontWeight="medium">
-              Meeting Notes
-            </Typography>
-            <Box>
-              <TextField
-                label="Notes"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Add notes about this meeting..."
-                multiline
-                rows={4}
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <Box component="span" sx={{ mr: 1, alignSelf: 'flex-start', mt: 1 }}>
-                      📝
-                    </Box>
-                  ),
-                }}
-              />
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                <Button 
-                  onClick={handleUpdateNotes} 
-                  size="medium" 
-                  variant="contained"
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2" fontWeight="medium">
+                Meeting Notes
+              </Typography>
+              {!isEditingNotes ? (
+                <IconButton 
+                  size="small" 
+                  onClick={() => setIsEditingNotes(true)}
+                  sx={{ color: 'primary.main' }}
                 >
-                  Save Notes
-                </Button>
-              </Box>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              ) : (
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => {
+                      handleUpdateNotes();
+                      setIsEditingNotes(false);
+                    }}
+                    sx={{ color: 'success.main' }}
+                  >
+                    <SaveIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => {
+                      setNotes(meeting.notes || '');
+                      setIsEditingNotes(false);
+                      setShowMeetingSuggestions(false);
+                    }}
+                    sx={{ color: 'error.main' }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              )}
             </Box>
+
+            {isEditingNotes ? (
+              <Box>
+                <TextField
+                  label="Notes"
+                  value={notes}
+                  onChange={handleNotesChange}
+                  placeholder="Add notes about this meeting..."
+                  multiline
+                  rows={4}
+                  fullWidth
+                  inputRef={notesRef}
+                  autoFocus
+                  InputProps={{
+                    startAdornment: (
+                      <Box component="span" sx={{ mr: 1, alignSelf: 'flex-start', mt: 1 }}>
+                        📝
+                      </Box>
+                    ),
+                  }}
+                  sx={{ bgcolor: 'white' }}
+                />
+                
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 1 }}>
+                  💡 Type # to filter by ID or name (e.g., #123 or #KGE), then select a meeting
+                </Typography>
+              </Box>
+            ) : (
+              <Box sx={{ 
+                p: 2, 
+                bgcolor: 'white', 
+                borderRadius: 1,
+                minHeight: 80,
+                border: '1px solid',
+                borderColor: 'divider'
+              }}>
+                {renderNotesWithPills(meeting.notes)}
+              </Box>
+            )}
           </Paper>
+
+          {/* Autocomplete Suggestions Popper - Renders independently */}
+          <Popper
+            open={showMeetingSuggestions && meetingSuggestions.length > 0}
+            anchorEl={notesRef.current}
+            placement="bottom-start"
+            style={{ zIndex: 1500 }}
+            modifiers={[
+              {
+                name: 'offset',
+                options: {
+                  offset: [0, 8],
+                },
+              },
+            ]}
+          >
+            <ClickAwayListener onClickAway={() => setShowMeetingSuggestions(false)}>
+              <Paper
+                elevation={8}
+                sx={{
+                  maxHeight: '300px',
+                  width: notesRef.current ? notesRef.current.offsetWidth : 400,
+                  overflow: 'auto',
+                  bgcolor: 'background.paper',
+                  border: '2px solid',
+                  borderColor: 'primary.main',
+                  borderRadius: 1,
+                }}
+              >
+                <List dense sx={{ py: 0 }}>
+                  {meetingSuggestions.map((m) => (
+                    <ListItem
+                      key={m.id}
+                      button
+                      onClick={() => insertMeetingReference(m)}
+                      sx={{
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        '&:last-child': {
+                          borderBottom: 'none',
+                        },
+                        '&:hover': {
+                          bgcolor: 'primary.light',
+                          color: 'primary.contrastText',
+                          '& .MuiListItemIcon-root': {
+                            color: 'primary.contrastText',
+                          },
+                        },
+                        py: 1.5,
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <CalendarIcon fontSize="small" color="primary" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={`#${m.id} - ${m.filename || 'Untitled'}`}
+                        secondary={m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : 'No date'}
+                        primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            </ClickAwayListener>
+          </Popper>
           <Grid container spacing={2} sx={{ mt: 2 }}>
             {/* ...existing file info boxes... */}
           </Grid>

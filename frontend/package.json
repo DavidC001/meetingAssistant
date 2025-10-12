@@ -27,7 +27,8 @@
     "web-vitals": "^2.1.4",
     "react-big-calendar": "^1.8.5",
     "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1"
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-force-graph-2d": "^1.25.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",

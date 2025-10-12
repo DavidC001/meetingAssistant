@@ -308,3 +308,15 @@ class ScheduledMeeting(Base):
     
     # Relationships
     linked_meeting = relationship("Meeting", backref="scheduled_meeting", foreign_keys=[linked_meeting_id])
+
+class MeetingLink(Base):
+    __tablename__ = "meeting_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
+    target_meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    source_meeting = relationship("Meeting", foreign_keys=[source_meeting_id], backref="outgoing_links")
+    target_meeting = relationship("Meeting", foreign_keys=[target_meeting_id], backref="incoming_links")
