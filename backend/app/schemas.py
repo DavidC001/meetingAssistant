@@ -213,6 +213,7 @@ class MeetingCreate(MeetingBase):
     transcription_language: Optional[str] = "en-US"
     number_of_speakers: Optional[str] = "auto"
     model_configuration_id: Optional[int] = None
+    meeting_date: Optional[datetime] = None
 
 class MeetingUpdate(BaseModel):
     filename: Optional[str] = None
@@ -222,6 +223,7 @@ class MeetingUpdate(BaseModel):
     tags: Optional[str] = None
     folder: Optional[str] = None
     notes: Optional[str] = None
+    meeting_date: Optional[datetime] = None
 
 class Meeting(MeetingBase):
     id: int
@@ -250,6 +252,7 @@ class Meeting(MeetingBase):
     tags: Optional[str] = None
     folder: Optional[str] = None
     notes: Optional[str] = None
+    meeting_date: Optional[datetime] = None
     speakers: List[Speaker] = []
     attachments: List[Attachment] = []
     transcription: Optional[Transcription] = None

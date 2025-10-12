@@ -84,6 +84,7 @@ def create_upload_file(
     file: UploadFile = File(...),
     transcription_language: Optional[str] = Form("en-US"),
     number_of_speakers: Optional[str] = Form("auto"),
+    meeting_date: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Upload a new meeting file for processing with custom parameters."""
@@ -97,11 +98,21 @@ def create_upload_file(
     # Save the uploaded file
     file_path = FileManager.save_uploaded_file(file)
 
+    # Parse meeting_date if provided
+    parsed_meeting_date = None
+    if meeting_date:
+        try:
+            from datetime import datetime
+            parsed_meeting_date = datetime.fromisoformat(meeting_date.replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            pass  # If parsing fails, just leave it as None
+
     # Create a meeting record in the database with processing parameters
     meeting_create = schemas.MeetingCreate(
         filename=file.filename,
         transcription_language=transcription_language,
-        number_of_speakers=number_of_speakers
+        number_of_speakers=number_of_speakers,
+        meeting_date=parsed_meeting_date
     )
     db_meeting = crud.create_meeting(db=db, meeting=meeting_create, file_path=file_path, file_size=file_size)
 

@@ -70,6 +70,7 @@ const UploadForm = ({ onUploadSuccess }) => {
   // Meeting configuration parameters
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [numberOfSpeakers, setNumberOfSpeakers] = useState('auto');
+  const [meetingDate, setMeetingDate] = useState('');
   const [maxFileSize, setMaxFileSize] = useState(3000); // Default 3GB, will be updated from settings
   
   const languages = [
@@ -172,6 +173,9 @@ const UploadForm = ({ onUploadSuccess }) => {
     formData.append('file', selectedFile);
     formData.append('transcription_language', transcriptionLanguage);
     formData.append('number_of_speakers', numberOfSpeakers);
+    if (meetingDate) {
+      formData.append('meeting_date', meetingDate);
+    }
 
     try {
       setIsUploading(true);
@@ -364,6 +368,20 @@ const UploadForm = ({ onUploadSuccess }) => {
                     </Select>
                   </FormControl>
                 </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Meeting Date (Optional)"
+                    type="datetime-local"
+                    value={meetingDate}
+                    onChange={(e) => setMeetingDate(e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    helperText="When did this meeting take place?"
+                  />
+                </Grid>
               </Grid>
               
               <Alert severity="info" sx={{ mt: 2 }}>
@@ -371,7 +389,9 @@ const UploadForm = ({ onUploadSuccess }) => {
                   <strong>Language:</strong> Choose the primary language spoken in your meeting. 
                   This helps improve transcription accuracy.<br />
                   <strong>Speakers:</strong> Specify the number of speakers or use auto-detect 
-                  for speaker identification and diarization.
+                  for speaker identification and diarization.<br />
+                  <strong>Meeting Date:</strong> Optionally specify when the meeting took place. 
+                  If not set, the upload time will be used.
                 </Typography>
               </Alert>
               

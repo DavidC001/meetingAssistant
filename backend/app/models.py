@@ -37,6 +37,7 @@ class Meeting(Base):
     audio_filepath = Column(String, nullable=True)  # Path to playback audio file (MP3)
     status = Column(String, default=MeetingStatus.PENDING.value)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    meeting_date = Column(DateTime(timezone=True), nullable=True)  # When the meeting actually took place
     
     # Processing configuration
     transcription_language = Column(String, default="en-US")

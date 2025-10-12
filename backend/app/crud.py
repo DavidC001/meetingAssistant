@@ -19,7 +19,8 @@ def create_meeting(db: Session, meeting: schemas.MeetingCreate, file_path: str, 
         number_of_speakers=meeting.number_of_speakers or "auto",
         model_configuration_id=meeting.model_configuration_id,
         file_size=file_size,
-        celery_task_id=celery_task_id
+        celery_task_id=celery_task_id,
+        meeting_date=meeting.meeting_date
     )
     db.add(db_meeting)
     db.commit()
@@ -62,6 +63,8 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
             db_meeting.folder = meeting.folder
         if meeting.notes is not None:
             db_meeting.notes = meeting.notes
+        if meeting.meeting_date is not None:
+            db_meeting.meeting_date = meeting.meeting_date
 
         db.commit()
         db.refresh(db_meeting)
