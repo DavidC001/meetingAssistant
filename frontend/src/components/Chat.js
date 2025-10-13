@@ -19,7 +19,9 @@ import {
     FormControl,
     InputLabel,
     Select,
-    MenuItem
+    MenuItem,
+    Switch,
+    FormControlLabel
 } from '@mui/material';
 import { 
     Send as SendIcon, 
@@ -41,6 +43,7 @@ const Chat = ({ meetingId }) => {
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [topK, setTopK] = useState(5);
     const [expandedSources, setExpandedSources] = useState({});
+    const [useFullTranscript, setUseFullTranscript] = useState(false);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -107,7 +110,8 @@ const Chat = ({ meetingId }) => {
                 const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
                     query: input,
                     chat_history: chat_history,
-                    top_k: topK
+                    top_k: topK,
+                    use_full_transcript: useFullTranscript
                 });
 
                 setMessages([...newMessages, { role: 'assistant', content: response.data.response, sources: response.data.sources || [] }]);
@@ -168,8 +172,34 @@ const Chat = ({ meetingId }) => {
                     💬 Ask Questions About This Meeting
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Tooltip title="Number of sources to retrieve for each question">
-                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <Tooltip title="Use full transcript instead of RAG retrieval (still uses RAG for documents)">
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={useFullTranscript}
+                                    onChange={(e) => setUseFullTranscript(e.target.checked)}
+                                    sx={{
+                                        '& .MuiSwitch-switchBase.Mui-checked': {
+                                            color: 'white',
+                                        },
+                                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                            backgroundColor: 'white',
+                                        },
+                                    }}
+                                />
+                            }
+                            label="Full Transcript"
+                            sx={{ 
+                                color: 'white',
+                                m: 0,
+                                '& .MuiFormControlLabel-label': {
+                                    fontSize: '0.875rem'
+                                }
+                            }}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Number of sources to retrieve for each question (RAG mode only)">
+                        <FormControl size="small" sx={{ minWidth: 120 }} disabled={useFullTranscript}>
                             <InputLabel sx={{ color: 'white' }}>Top-K</InputLabel>
                             <Select
                                 value={topK}

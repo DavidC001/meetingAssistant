@@ -172,6 +172,7 @@ class ChatRequest(BaseModel):
     query: str
     chat_history: Optional[List[dict]] = None
     top_k: Optional[int] = 5
+    use_full_transcript: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     response: str

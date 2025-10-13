@@ -57,9 +57,60 @@ async def generate_rag_response(
     chat_history: Optional[List[Dict[str, str]]] = None,
     top_k: int = 5,
     llm_config=None,
+    use_full_transcript: bool = False,
+    full_transcript: Optional[str] = None,
 ) -> Tuple[str, List[Dict]]:
-    """Generate a response using retrieval-augmented generation."""
+    """Generate a response using retrieval-augmented generation.
+    
+    Args:
+        db: Database session
+        query: User's question
+        meeting_id: Optional meeting ID to filter results
+        chat_history: Previous chat messages
+        top_k: Number of chunks to retrieve (for RAG mode)
+        llm_config: LLM configuration
+        use_full_transcript: If True, use full transcript instead of RAG
+        full_transcript: The full transcript text (required when use_full_transcript=True)
+    
+    Returns:
+        Tuple of (response_text, sources)
+    """
 
+    if llm_config is None:
+        llm_config = chat.get_default_chat_config()
+
+    provider_instance = chat.ProviderFactory.create_provider(llm_config)
+
+    # If full transcript mode is enabled, bypass RAG and use the full transcript
+    if use_full_transcript and full_transcript:
+        LOGGER.info("Using full transcript mode (bypassing RAG)")
+        
+        system_prompt = (
+            "You are an AI meeting assistant that answers questions using the full meeting transcript. "
+            "Use the complete transcript provided to answer questions accurately and helpfully. "
+            "If a question cannot be answered from the transcript, say so clearly. "
+            "Be concise but thorough in your responses."
+        )
+        
+        history = chat_history[-6:] if chat_history else []
+        messages = [
+            {"role": message.get("role", "user"), "content": message.get("content", "")}
+            for message in history
+        ]
+        
+        user_message = (
+            "Here is the complete meeting transcript:\n\n"
+            f"{full_transcript}\n\n"
+            f"User question: {query}\n"
+            "Please answer based on the full transcript provided."
+        )
+        messages.append({"role": "user", "content": user_message})
+        
+        response_text = await provider_instance.chat_completion(messages, system_prompt)
+        # Return empty sources list when using full transcript
+        return response_text, []
+
+    # Standard RAG mode
     try:
         provider, _ = get_embedding_provider(db)
     except Exception as e:
@@ -83,11 +134,6 @@ async def generate_rag_response(
     )
 
     context_text = _format_context(retrieved) if retrieved else ""
-
-    if llm_config is None:
-        llm_config = chat.get_default_chat_config()
-
-    provider_instance = chat.ProviderFactory.create_provider(llm_config)
 
     system_prompt = (
         "You are an AI meeting assistant that answers questions using provided meeting context. "

@@ -607,6 +607,8 @@ async def chat_with_meeting_endpoint(
         chat_history=chat_history,
         top_k=request.top_k or 5,
         llm_config=llm_config,
+        use_full_transcript=request.use_full_transcript or False,
+        full_transcript=db_meeting.transcription.full_text if request.use_full_transcript else None,
     )
 
     crud.create_chat_message(db, meeting_id, "assistant", response_text)
