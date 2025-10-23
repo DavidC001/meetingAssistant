@@ -116,7 +116,12 @@ const ScheduledMeetings = () => {
 
   const createScheduledMeeting = async () => {
     try {
-      await api.post('/api/v1/scheduled-meetings/', newMeeting);
+      // Convert local datetime to ISO string with proper timezone
+      const meetingData = {
+        ...newMeeting,
+        scheduled_time: new Date(newMeeting.scheduled_time).toISOString()
+      };
+      await api.post('/api/v1/scheduled-meetings/', meetingData);
       showSnackbar('Scheduled meeting created successfully', 'success');
       setCreateDialogOpen(false);
       resetForm();

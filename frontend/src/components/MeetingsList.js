@@ -51,7 +51,11 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
     try {
       setIsLoading(true);
       const response = await api.get('/api/v1/meetings/');
-      setMeetings(response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      setMeetings(response.data.sort((a, b) => {
+        const dateA = new Date(a.meeting_date || a.created_at);
+        const dateB = new Date(b.meeting_date || b.created_at);
+        return dateB - dateA;
+      }));
       setError(null);
     } catch (err) {
       setError('Failed to fetch meetings.');
@@ -75,7 +79,11 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
         pollTimeout = setTimeout(async () => {
           try {
             const response = await api.get('/api/v1/meetings/');
-            const updatedMeetings = response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const updatedMeetings = response.data.sort((a, b) => {
+              const dateA = new Date(a.meeting_date || a.created_at);
+              const dateB = new Date(b.meeting_date || b.created_at);
+              return dateB - dateA;
+            });
             setMeetings(updatedMeetings);
             currentMeetings = updatedMeetings; // Update reference
             scheduleNextPoll();
@@ -196,6 +204,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'No date';
     return new Date(dateString).toLocaleString();
   };
 
@@ -276,7 +285,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
                     secondary={
                       <Box>
                         <Typography variant="body2" color="text.secondary">
-                          {formatDate(meeting.created_at)}
+                          {formatDate(meeting.meeting_date || meeting.created_at)}
                         </Typography>
                         {meeting.status === 'processing' && (
                           <Box sx={{ mt: 1, width: '200px' }}>

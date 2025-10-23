@@ -1885,7 +1885,8 @@ const MeetingDetails = () => {
                                 </Typography>
                               </Box>
                               <Box sx={{ display: 'flex', gap: 1 }}>
-                                {attachment.mime_type === 'application/pdf' && (
+                                {(attachment.mime_type === 'application/pdf' || 
+                                  attachment.mime_type?.startsWith('image/')) && (
                                   <Button
                                     size="small"
                                     variant="outlined"

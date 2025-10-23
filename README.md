@@ -10,16 +10,18 @@
 ## ✨ Features
 
 ### 🎙️ Audio Processing
-- **Multi-format Support**: WAV, MP3, MP4, M4A, FLAC
+- **Multi-format Support**: WAV, MP3, MP4, MKV, M4A, FLAC, AVI, MOV
 - **Speaker Diarization**: Automatic speaker identification and separation
 - **Large File Handling**: Support for files up to 3GB
 - **GPU Acceleration**: CUDA support for faster processing
+- **Batch Upload**: Upload multiple files with individual date selection
 
 ### 🧠 AI-Powered Analysis
 - **Automatic Transcription**: High-accuracy speech-to-text using Whisper
 - **Intelligent Summarization**: AI-generated meeting summaries
 - **Action Item Extraction**: Automatic identification of tasks and owners
 - **Decision Tracking**: Key decisions and outcomes detection
+- **LLM Tool Use**: AI assistant can perform actions like creating tasks, updating meetings, and searching content 🆕
 
 ### 📊 Export & Integration
 - **Multiple Formats**: JSON, TXT, DOCX, PDF exports

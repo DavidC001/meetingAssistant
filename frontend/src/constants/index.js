@@ -37,7 +37,7 @@ export const POLLING = {
 // File upload
 export const UPLOAD = {
   MAX_FILE_SIZE_MB: 3000,
-  ALLOWED_EXTENSIONS: ['.wav', '.mp3', '.mp4', '.m4a', '.flac'],
+  ALLOWED_EXTENSIONS: ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.mkv', '.avi', '.mov'],
   CHUNK_SIZE: 1024 * 1024 // 1MB chunks
 };
 

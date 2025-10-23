@@ -67,6 +67,18 @@ const Calendar = () => {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   
+  // User filter state - changed to use name instead of email
+  const [filterUserName, setFilterUserName] = useState(() => {
+    return localStorage.getItem('calendarUserName') || '';
+  });
+  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
+    return localStorage.getItem('calendarShowOnlyMyTasks') === 'true';
+  });
+  const [syncOnlyMyTasks, setSyncOnlyMyTasks] = useState(() => {
+    const stored = localStorage.getItem('calendarSyncOnlyMyTasks');
+    return stored !== null ? stored === 'true' : true;
+  });
+  
   // Form state
   const [formData, setFormData] = useState({
     task: '',
@@ -82,7 +94,8 @@ const Calendar = () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/calendar/google/status`);
       setGoogleConnected(response.data.is_connected);
-      setGoogleEmail(response.data.email || '');
+      const email = response.data.email || '';
+      setGoogleEmail(email);
     } catch (error) {
       console.error('Error fetching Google Calendar status:', error);
     }
@@ -93,10 +106,20 @@ const Calendar = () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}/calendar/action-items`);
-      setActionItems(response.data);
+      let items = response.data;
+      
+      // Apply user filter if enabled
+      if (showOnlyMyTasks && filterUserName) {
+        items = items.filter(item => {
+          if (!item.owner) return false;
+          return item.owner.toLowerCase().trim() === filterUserName.toLowerCase().trim();
+        });
+      }
+      
+      setActionItems(items);
       
       // Convert action items to calendar events
-      const calendarEvents = response.data.map(item => {
+      const calendarEvents = items.map(item => {
         let start = new Date();
         
         // Parse due date
@@ -133,12 +156,25 @@ const Calendar = () => {
       showSnackbar('Error loading action items', 'error');
       setLoading(false);
     }
-  }, []);
+  }, [showOnlyMyTasks, filterUserName]);
 
   useEffect(() => {
     fetchActionItems();
     fetchGoogleStatus();
   }, [fetchActionItems, fetchGoogleStatus]);
+
+  // Save user preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem('calendarUserName', filterUserName);
+  }, [filterUserName]);
+
+  useEffect(() => {
+    localStorage.setItem('calendarShowOnlyMyTasks', showOnlyMyTasks.toString());
+  }, [showOnlyMyTasks]);
+
+  useEffect(() => {
+    localStorage.setItem('calendarSyncOnlyMyTasks', syncOnlyMyTasks.toString());
+  }, [syncOnlyMyTasks]);
 
   const showSnackbar = (message, severity = 'info') => {
     setSnackbar({ open: true, message, severity });
@@ -330,15 +366,33 @@ const Calendar = () => {
       return;
     }
 
+    if (syncOnlyMyTasks && !filterUserName) {
+      showSnackbar('Please enter your name to sync your tasks', 'warning');
+      return;
+    }
+
     setSyncing(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/calendar/sync-all?status=pending`);
-      showSnackbar(response.data.message, 'success');
+      
+      // Show detailed sync result
+      const { synced, skipped, failed, user_email } = response.data;
+      let message = `Synced ${synced} item(s) to Google Calendar`;
+      
+      if (skipped > 0) {
+        message += ` (${skipped} skipped - not assigned to you)`;
+      }
+      if (failed > 0) {
+        message += ` (${failed} failed)`;
+      }
+      
+      showSnackbar(message, synced > 0 ? 'success' : 'info');
       fetchActionItems();
       setSyncDialogOpen(false);
     } catch (error) {
       console.error('Error syncing all items:', error);
-      showSnackbar('Error syncing items to Google Calendar', 'error');
+      const errorMsg = error.response?.data?.detail || 'Error syncing items to Google Calendar';
+      showSnackbar(errorMsg, 'error');
     } finally {
       setSyncing(false);
     }
@@ -347,23 +401,28 @@ const Calendar = () => {
   // Event style based on priority and status
   const eventStyleGetter = (event) => {
     const item = event.resource;
-    let backgroundColor = '#3174ad';
+    let backgroundColor = '#3174ad'; // Default blue
 
-    // Color by priority
-    if (item.priority === 'high') {
-      backgroundColor = '#d32f2f';
-    } else if (item.priority === 'medium') {
-      backgroundColor = '#f57c00';
-    } else if (item.priority === 'low') {
-      backgroundColor = '#388e3c';
-    }
-
-    // Adjust for status
+    // First, determine color by status (status takes precedence)
     if (item.status === 'completed') {
-      backgroundColor = '#757575';
+      backgroundColor = '#757575'; // Gray for completed
     } else if (item.status === 'in_progress') {
-      backgroundColor = '#1976d2';
+      backgroundColor = '#1976d2'; // Blue for in progress
+    } else {
+      // For pending or other statuses, use priority-based colors
+      if (item.priority === 'high') {
+        backgroundColor = '#d32f2f'; // Red for high priority
+      } else if (item.priority === 'medium') {
+        backgroundColor = '#f57c00'; // Orange for medium priority
+      } else if (item.priority === 'low') {
+        backgroundColor = '#388e3c'; // Green for low priority
+      }
+      // else: stays default blue if no priority set
     }
+
+    // Check if task belongs to the filtered user
+    const isMyTask = filterUserName && item.owner && 
+      item.owner.toLowerCase().trim() === filterUserName.toLowerCase().trim();
 
     return {
       style: {
@@ -373,6 +432,8 @@ const Calendar = () => {
         color: 'white',
         border: item.synced_to_calendar ? '2px solid #4caf50' : '0px',
         display: 'block',
+        fontWeight: isMyTask ? '600' : 'normal',
+        boxShadow: isMyTask ? '0 0 8px rgba(33, 150, 243, 0.5)' : 'none',
       },
     };
   };
@@ -414,6 +475,57 @@ const Calendar = () => {
           </Box>
         </Box>
 
+        {/* User Filter Controls */}
+        <Card sx={{ mb: 2, bgcolor: '#f5f5f5' }}>
+          <CardContent>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+              User Filter & Sync Settings
+            </Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={7}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="My Name"
+                  placeholder="Enter your full name as it appears in meetings"
+                  value={filterUserName}
+                  onChange={(e) => setFilterUserName(e.target.value)}
+                  helperText="Tasks assigned to this name will be filtered and synced"
+                />
+              </Grid>
+              <Grid item xs={12} md={2}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showOnlyMyTasks}
+                      onChange={(e) => setShowOnlyMyTasks(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Show only my tasks"
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={syncOnlyMyTasks}
+                      onChange={(e) => setSyncOnlyMyTasks(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Sync only my tasks"
+                />
+              </Grid>
+            </Grid>
+            {showOnlyMyTasks && !filterUserName && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Enter your name to filter tasks
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Legend */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Chip label="High Priority" size="small" sx={{ bgcolor: '#d32f2f', color: 'white' }} />
@@ -421,6 +533,18 @@ const Calendar = () => {
           <Chip label="Low Priority" size="small" sx={{ bgcolor: '#388e3c', color: 'white' }} />
           <Chip label="Completed" size="small" sx={{ bgcolor: '#757575', color: 'white' }} />
           <Chip label="Synced to Google" size="small" sx={{ border: '2px solid #4caf50' }} variant="outlined" />
+          {filterUserName && (
+            <Chip 
+              label="My Task (highlighted)" 
+              size="small" 
+              sx={{ 
+                bgcolor: '#1976d2', 
+                color: 'white',
+                fontWeight: 600,
+                boxShadow: '0 0 8px rgba(33, 150, 243, 0.5)'
+              }} 
+            />
+          )}
         </Box>
       </Paper>
 
@@ -432,6 +556,7 @@ const Calendar = () => {
           </Box>
         ) : (
           <BigCalendar
+            key={events.length} // Force re-render when events change
             localizer={localizer}
             events={events}
             startAccessor="start"
@@ -466,6 +591,28 @@ const Calendar = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            {/* Show meeting source if available */}
+            {selectedEvent?.resource?.meeting_title && (
+              <Alert severity="info" icon={false}>
+                <Typography variant="body2">
+                  <strong>From Meeting:</strong> {selectedEvent.resource.meeting_title}
+                  {selectedEvent.resource.meeting_id && (
+                    <Button
+                      size="small"
+                      sx={{ ml: 1 }}
+                      onClick={() => window.open(`/meetings/${selectedEvent.resource.meeting_id}`, '_blank')}
+                    >
+                      View Meeting
+                    </Button>
+                  )}
+                </Typography>
+                {selectedEvent.resource.meeting_date && (
+                  <Typography variant="caption" color="text.secondary">
+                    Meeting Date: {new Date(selectedEvent.resource.meeting_date).toLocaleDateString()}
+                  </Typography>
+                )}
+              </Alert>
+            )}
             <TextField
               label="Task"
               fullWidth
@@ -549,20 +696,53 @@ const Calendar = () => {
       </Dialog>
 
       {/* Sync All Dialog */}
-      <Dialog open={syncDialogOpen} onClose={() => setSyncDialogOpen(false)}>
-        <DialogTitle>Sync All Action Items</DialogTitle>
+      <Dialog open={syncDialogOpen} onClose={() => setSyncDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Sync Action Items to Google Calendar</DialogTitle>
         <DialogContent>
-          <Typography>
-            This will sync all pending action items that are not yet synced to your Google Calendar.
-            Do you want to continue?
-          </Typography>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body1" gutterBottom>
+              This will sync pending action items to your Google Calendar.
+            </Typography>
+            
+            {syncOnlyMyTasks && filterUserName ? (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Sync Mode:</strong> Only tasks assigned to you
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Your name:</strong> {filterUserName}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Only tasks with owner matching "{filterUserName}" will be synced.
+                </Typography>
+              </Alert>
+            ) : (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Sync Mode:</strong> All tasks
+                </Typography>
+                <Typography variant="body2">
+                  All pending action items will be synced, regardless of owner.
+                </Typography>
+                {!filterUserName && (
+                  <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                    Tip: Set your name above and enable "Sync only my tasks" to sync only your tasks.
+                  </Typography>
+                )}
+              </Alert>
+            )}
+            
+            <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+              Do you want to continue?
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSyncDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={handleSyncAll}
             variant="contained"
-            disabled={syncing}
+            disabled={syncing || (syncOnlyMyTasks && !filterUserName)}
             startIcon={syncing ? <CircularProgress size={20} /> : <SyncIcon />}
           >
             {syncing ? 'Syncing...' : 'Sync All'}

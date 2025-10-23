@@ -59,6 +59,7 @@ async def generate_rag_response(
     llm_config=None,
     use_full_transcript: bool = False,
     full_transcript: Optional[str] = None,
+    enable_tools: bool = True,
 ) -> Tuple[str, List[Dict]]:
     """Generate a response using retrieval-augmented generation.
     
@@ -71,6 +72,7 @@ async def generate_rag_response(
         llm_config: LLM configuration
         use_full_transcript: If True, use full transcript instead of RAG
         full_transcript: The full transcript text (required when use_full_transcript=True)
+        enable_tools: Whether to enable tool calling capabilities
     
     Returns:
         Tuple of (response_text, sources)
@@ -85,28 +87,16 @@ async def generate_rag_response(
     if use_full_transcript and full_transcript:
         LOGGER.info("Using full transcript mode (bypassing RAG)")
         
-        system_prompt = (
-            "You are an AI meeting assistant that answers questions using the full meeting transcript. "
-            "Use the complete transcript provided to answer questions accurately and helpfully. "
-            "If a question cannot be answered from the transcript, say so clearly. "
-            "Be concise but thorough in your responses."
+        # Use chat_with_meeting which has tool support
+        response_text = await chat.chat_with_meeting(
+            query=query,
+            transcript=full_transcript,
+            chat_history=chat_history or [],
+            config=llm_config,
+            db=db,
+            meeting_id=meeting_id,
+            enable_tools=enable_tools
         )
-        
-        history = chat_history[-6:] if chat_history else []
-        messages = [
-            {"role": message.get("role", "user"), "content": message.get("content", "")}
-            for message in history
-        ]
-        
-        user_message = (
-            "Here is the complete meeting transcript:\n\n"
-            f"{full_transcript}\n\n"
-            f"User question: {query}\n"
-            "Please answer based on the full transcript provided."
-        )
-        messages.append({"role": "user", "content": user_message})
-        
-        response_text = await provider_instance.chat_completion(messages, system_prompt)
         # Return empty sources list when using full transcript
         return response_text, []
 
@@ -135,32 +125,26 @@ async def generate_rag_response(
 
     context_text = _format_context(retrieved) if retrieved else ""
 
-    system_prompt = (
-        "You are an AI meeting assistant that answers questions using provided meeting context. "
-        "Use only the supplied context snippets. If the context does not contain the answer, "
-        "respond that the information is not available. Cite the sources you used in natural language."
-    )
-
-    history = chat_history[-6:] if chat_history else []
-    messages = [
-        {"role": message.get("role", "user"), "content": message.get("content", "")}
-        for message in history
-    ]
+    # Use the enhanced chat function with tool support
     if context_text:
-        user_message = (
+        transcript_context = (
             "Here is relevant meeting context:\n\n"
             f"{context_text}\n\n"
-            f"User question: {query}\n"
-            "Provide a concise answer and mention which meeting segments were used."
+            "Use this context to answer the user's question."
         )
     else:
-        user_message = (
-            "No relevant meeting context was retrieved. "
-            f"Answer the question if you can using prior responses, otherwise explain the limitation.\n\n{query}"
-        )
-    messages.append({"role": "user", "content": user_message})
-
-    response_text = await provider_instance.chat_completion(messages, system_prompt)
+        transcript_context = "No relevant meeting context was retrieved for this query."
+    
+    response_text = await chat.chat_with_meeting(
+        query=query,
+        transcript=transcript_context,
+        chat_history=chat_history or [],
+        config=llm_config,
+        db=db,
+        meeting_id=meeting_id,
+        enable_tools=enable_tools
+    )
+    
     sources = [_chunk_to_source(chunk) for chunk in retrieved]
     return response_text, sources
 

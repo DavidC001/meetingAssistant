@@ -320,3 +320,14 @@ class MeetingLink(Base):
     # Relationships
     source_meeting = relationship("Meeting", foreign_keys=[source_meeting_id], backref="outgoing_links")
     target_meeting = relationship("Meeting", foreign_keys=[target_meeting_id], backref="incoming_links")
+
+class UserMapping(Base):
+    """Maps person names to email addresses for task assignment and calendar sync"""
+    __tablename__ = "user_mappings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)  # Person's name as it appears in meetings (e.g., "Davide Cavicchini")
+    email = Column(String, nullable=False, index=True)  # Person's email address (e.g., "davide@example.com")
+    is_active = Column(Boolean, default=True)  # Whether this mapping is active
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

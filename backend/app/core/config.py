@@ -118,7 +118,7 @@ def get_upload_config() -> UploadConfig:
     """Build the :class:`UploadConfig` from environment variables."""
     allowed = tuple(
         ext.strip()
-        for ext in os.getenv("ALLOWED_EXTENSIONS", ".wav,.mp3,.mp4,.m4a,.flac").split(",")
+        for ext in os.getenv("ALLOWED_EXTENSIONS", ".wav,.mp3,.mp4,.m4a,.flac,.mkv,.avi,.mov").split(",")
         if ext.strip()
     )
     return UploadConfig(

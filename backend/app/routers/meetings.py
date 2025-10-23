@@ -125,6 +125,102 @@ def create_upload_file(
 
     return db_meeting
 
+
+@router.post("/batch-upload", response_model=List[schemas.Meeting])
+def create_batch_upload_files(
+    files: List[UploadFile] = File(...),
+    transcription_languages: Optional[str] = Form("en-US"),
+    number_of_speakers_list: Optional[str] = Form("auto"),
+    meeting_dates: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """Upload multiple meeting files for processing with individual custom parameters.
+    
+    Parameters:
+    - files: List of files to upload
+    - transcription_languages: Comma-separated list of languages (one per file) or single value for all
+    - number_of_speakers_list: Comma-separated list of speaker counts (one per file) or single value for all
+    - meeting_dates: Comma-separated list of ISO date strings (one per file) or empty for none
+    """
+    from datetime import datetime
+    
+    # Parse comma-separated parameters
+    languages = transcription_languages.split(',') if transcription_languages else []
+    speakers = number_of_speakers_list.split(',') if number_of_speakers_list else []
+    dates = meeting_dates.split(',') if meeting_dates else []
+    
+    # If single value provided, use it for all files
+    if len(languages) == 1:
+        languages = languages * len(files)
+    if len(speakers) == 1:
+        speakers = speakers * len(files)
+    
+    # Pad with defaults if needed
+    while len(languages) < len(files):
+        languages.append('en-US')
+    while len(speakers) < len(files):
+        speakers.append('auto')
+    while len(dates) < len(files):
+        dates.append('')
+    
+    uploaded_meetings = []
+    errors = []
+    
+    for idx, file in enumerate(files):
+        try:
+            # Validate file extension
+            FileValidator.validate_file_extension(file.filename)
+            
+            # Validate file size
+            file_size = FileValidator.validate_file_size(file)
+            
+            # Save the uploaded file
+            file_path = FileManager.save_uploaded_file(file)
+            
+            # Parse meeting_date if provided
+            parsed_meeting_date = None
+            if dates[idx] and dates[idx].strip():
+                try:
+                    parsed_meeting_date = datetime.fromisoformat(dates[idx].strip().replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    pass  # If parsing fails, just leave it as None
+            
+            # Create a meeting record in the database with processing parameters
+            meeting_create = schemas.MeetingCreate(
+                filename=file.filename,
+                transcription_language=languages[idx].strip(),
+                number_of_speakers=speakers[idx].strip(),
+                meeting_date=parsed_meeting_date
+            )
+            db_meeting = crud.create_meeting(db=db, meeting=meeting_create, file_path=file_path, file_size=file_size)
+            
+            # Trigger the background processing task and store the task ID
+            from ..tasks import process_meeting_task
+            task_result = process_meeting_task.delay(db_meeting.id)
+            
+            # Store the Celery task ID in the database for tracking
+            crud.update_meeting_task_id(db, db_meeting.id, task_result.id)
+            
+            uploaded_meetings.append(db_meeting)
+            
+        except HTTPException as e:
+            errors.append({"filename": file.filename, "error": e.detail})
+        except Exception as e:
+            errors.append({"filename": file.filename, "error": str(e)})
+    
+    # If there were errors, include them in the response metadata
+    # For now, we'll just log them and return successful uploads
+    if errors:
+        print(f"Batch upload errors: {errors}")
+    
+    if not uploaded_meetings:
+        raise HTTPException(
+            status_code=400,
+            detail=f"All files failed to upload. Errors: {errors}"
+        )
+    
+    return uploaded_meetings
+
 @router.get("/", response_model=List[schemas.Meeting])
 def read_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
@@ -600,6 +696,9 @@ async def chat_with_meeting_endpoint(
     if model_config:
         llm_config = chat.model_config_to_llm_config(model_config, use_analysis=False)
 
+    # Check if tools should be enabled (default to True)
+    enable_tools = getattr(request, 'enable_tools', True)
+    
     response_text, sources = await rag.generate_rag_response(
         db,
         query=request.query,
@@ -609,6 +708,7 @@ async def chat_with_meeting_endpoint(
         llm_config=llm_config,
         use_full_transcript=request.use_full_transcript or False,
         full_transcript=db_meeting.transcription.full_text if request.use_full_transcript else None,
+        enable_tools=enable_tools,
     )
 
     crud.create_chat_message(db, meeting_id, "assistant", response_text)

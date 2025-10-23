@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from .database import engine, Base
-from .routers import meetings, settings, admin, ollama, calendar, global_chat, scheduled_meetings, graph
+from .routers import meetings, settings, admin, ollama, calendar, global_chat, scheduled_meetings, graph, user_mappings
 from .startup import startup_recovery
 from .core.config import config
 
@@ -61,6 +61,7 @@ app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(global_chat.router, prefix="/api/v1")
 app.include_router(scheduled_meetings.router, prefix="/api/v1")
 app.include_router(graph.router, prefix="/api/v1")
+app.include_router(user_mappings.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

@@ -21,7 +21,7 @@ router = APIRouter(
 )
 
 
-@router.get("/action-items", response_model=List[schemas.ActionItem])
+@router.get("/action-items", response_model=List[schemas.ActionItemWithMeeting])
 def get_all_action_items(
     status: Optional[str] = Query(None, description="Filter by status: pending, in_progress, completed, cancelled"),
     skip: int = 0,
@@ -29,11 +29,42 @@ def get_all_action_items(
     db: Session = Depends(get_db)
 ):
     """
-    Get all action items across all meetings.
-    Useful for calendar view that shows all action items.
+    Get all action items across all meetings with meeting information.
+    Useful for calendar view that shows all action items with their source meeting.
     """
     action_items = crud.get_all_action_items(db, skip=skip, limit=limit, status=status)
-    return action_items
+    
+    # Enrich action items with meeting information
+    result = []
+    for item in action_items:
+        item_dict = {
+            "id": item.id,
+            "transcription_id": item.transcription_id,
+            "task": item.task,
+            "owner": item.owner,
+            "due_date": item.due_date,
+            "status": item.status,
+            "priority": item.priority,
+            "notes": item.notes,
+            "is_manual": item.is_manual,
+            "google_calendar_event_id": item.google_calendar_event_id,
+            "synced_to_calendar": item.synced_to_calendar,
+            "last_synced_at": item.last_synced_at,
+            "meeting_id": None,
+            "meeting_title": None,
+            "meeting_date": None
+        }
+        
+        # Get meeting info through transcription relationship
+        if item.transcription and item.transcription.meeting:
+            meeting = item.transcription.meeting
+            item_dict["meeting_id"] = meeting.id
+            item_dict["meeting_title"] = meeting.filename
+            item_dict["meeting_date"] = meeting.meeting_date
+        
+        result.append(item_dict)
+    
+    return result
 
 
 @router.get("/action-items/{item_id}", response_model=schemas.ActionItem)
@@ -67,6 +98,21 @@ def update_action_item(
         try:
             calendar_service = GoogleCalendarService(db)
             if calendar_service.is_connected():
+                # Verify the action item belongs to the current user before updating calendar
+                user_info = calendar_service.get_user_info()
+                user_email = user_info.get('email') if user_info else None
+                
+                if action_item.owner and user_email:
+                    # Get email for the owner (handles both name and email formats)
+                    owner_email = crud.get_email_for_name(db, action_item.owner)
+                    item_owner = owner_email.strip().lower()
+                    current_user = user_email.strip().lower()
+                    
+                    if item_owner != current_user:
+                        # Don't update calendar if task is not owned by current user
+                        # Just return the updated action item without syncing
+                        return action_item
+                
                 # Get meeting title for context
                 transcription = db.query(models.Transcription).filter(
                     models.Transcription.id == action_item.transcription_id
@@ -165,6 +211,30 @@ def sync_action_item_to_calendar(
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     
+    # Get the current user's email from Google Calendar
+    user_info = calendar_service.get_user_info()
+    user_email = user_info.get('email') if user_info else None
+    
+    # Check if the action item is assigned to the current user
+    if action_item.owner and user_email:
+        # Get email for the owner (handles both name and email formats)
+        owner_email = crud.get_email_for_name(db, action_item.owner)
+        
+        # Normalize both emails for comparison (case-insensitive)
+        item_owner = owner_email.strip().lower()
+        current_user = user_email.strip().lower()
+        
+        if item_owner != current_user:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Cannot sync action item. This task is assigned to '{action_item.owner}' ({owner_email}), but you are logged in as '{user_email}'. Only tasks assigned to you can be synced to your calendar."
+            )
+    elif not action_item.owner:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot sync action item without an assigned owner. Please assign the task to someone first."
+        )
+    
     # Get meeting title for context
     transcription = db.query(models.Transcription).filter(
         models.Transcription.id == action_item.transcription_id
@@ -231,7 +301,7 @@ def sync_all_action_items(
     status: Optional[str] = Query("pending", description="Sync items with this status"),
     db: Session = Depends(get_db)
 ):
-    """Sync all pending action items to Google Calendar."""
+    """Sync all pending action items assigned to the current user to Google Calendar."""
     calendar_service = GoogleCalendarService(db)
     
     if not calendar_service.is_connected():
@@ -240,14 +310,41 @@ def sync_all_action_items(
             detail="Not connected to Google Calendar. Please authorize first."
         )
     
+    # Get the current user's email from Google Calendar
+    user_info = calendar_service.get_user_info()
+    user_email = user_info.get('email') if user_info else None
+    
+    if not user_email:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to retrieve user email from Google Calendar."
+        )
+    
     action_items = crud.get_all_action_items(db, status=status)
     
     synced_count = 0
     failed_count = 0
+    skipped_count = 0
     
     for action_item in action_items:
         if action_item.synced_to_calendar:
             continue  # Skip already synced items
+        
+        # Check if the action item is assigned to the current user
+        if not action_item.owner:
+            skipped_count += 1
+            continue  # Skip items without an owner
+        
+        # Get email for the owner (handles both name and email formats)
+        owner_email = crud.get_email_for_name(db, action_item.owner)
+        
+        # Normalize both emails for comparison (case-insensitive)
+        item_owner = owner_email.strip().lower()
+        current_user = user_email.strip().lower()
+        
+        if item_owner != current_user:
+            skipped_count += 1
+            continue  # Skip items not assigned to the current user
         
         # Get meeting title
         transcription = db.query(models.Transcription).filter(
@@ -269,7 +366,9 @@ def sync_all_action_items(
             failed_count += 1
     
     return {
-        "message": f"Synced {synced_count} action items to Google Calendar",
+        "message": f"Synced {synced_count} action items to Google Calendar (skipped {skipped_count} items not assigned to you)",
         "synced": synced_count,
-        "failed": failed_count
+        "failed": failed_count,
+        "skipped": skipped_count,
+        "user_email": user_email
     }

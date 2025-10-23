@@ -27,7 +27,8 @@ import {
   Settings as SettingsIcon,
   ExpandMore as ExpandMoreIcon,
   Language as LanguageIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -59,7 +60,7 @@ const DropZone = styled(Box)(({ theme, isDragOver }) => ({
 }));
 
 const UploadForm = ({ onUploadSuccess }) => {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [message, setMessage] = useState('');
@@ -67,10 +68,9 @@ const UploadForm = ({ onUploadSuccess }) => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   
-  // Meeting configuration parameters
+  // Meeting configuration parameters (defaults for all files)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [numberOfSpeakers, setNumberOfSpeakers] = useState('auto');
-  const [meetingDate, setMeetingDate] = useState('');
   const [maxFileSize, setMaxFileSize] = useState(3000); // Default 3GB, will be updated from settings
   
   const languages = [
@@ -115,39 +115,56 @@ const UploadForm = ({ onUploadSuccess }) => {
     fetchMaxFileSize();
   }, []);
 
-  const handleFileSelect = (file) => {
+  const handleFileSelect = (files) => {
     const maxSizeBytes = maxFileSize * 1024 * 1024; // Convert MB to bytes
     
-    if (!file) return;
+    if (!files || files.length === 0) return;
     
-    if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
-      setMessage('Please select a valid audio or video file.');
+    const validFiles = [];
+    const errors = [];
+    
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
+        errors.push(`${file.name}: Invalid file type. Please select audio or video files.`);
+        return;
+      }
+      
+      if (file.size > maxSizeBytes) {
+        errors.push(`${file.name}: File size exceeds ${maxFileSize}MB limit.`);
+        return;
+      }
+      
+      // Add file with individual settings
+      validFiles.push({
+        file: file,
+        transcriptionLanguage: transcriptionLanguage,
+        numberOfSpeakers: numberOfSpeakers,
+        meetingDate: ''
+      });
+    });
+    
+    if (errors.length > 0) {
+      setMessage(errors.join('\n'));
       setMessageType('error');
       setSnackbarOpen(true);
-      return;
     }
     
-    if (file.size > maxSizeBytes) {
-      setMessage(`File size exceeds the maximum limit of ${maxFileSize}MB. Please select a smaller file.`);
-      setMessageType('error');
-      setSnackbarOpen(true);
-      return;
+    if (validFiles.length > 0) {
+      setSelectedFiles([...selectedFiles, ...validFiles]);
+      setMessage('');
     }
-    
-    setSelectedFile(file);
-    setMessage('');
   };
 
   const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    handleFileSelect(file);
+    const files = event.target.files;
+    handleFileSelect(files);
   };
 
   const handleDrop = (event) => {
     event.preventDefault();
     setIsDragOver(false);
-    const file = event.dataTransfer.files[0];
-    handleFileSelect(file);
+    const files = event.dataTransfer.files;
+    handleFileSelect(files);
   };
 
   const handleDragOver = (event) => {
@@ -160,21 +177,35 @@ const UploadForm = ({ onUploadSuccess }) => {
     setIsDragOver(false);
   };
 
+  const removeFile = (index) => {
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== index));
+  };
+
+  const updateFileConfig = (index, field, value) => {
+    const updatedFiles = [...selectedFiles];
+    updatedFiles[index][field] = value;
+    setSelectedFiles(updatedFiles);
+  };
+
+  const applyDefaultsToAll = () => {
+    const updatedFiles = selectedFiles.map(fileConfig => ({
+      ...fileConfig,
+      transcriptionLanguage: transcriptionLanguage,
+      numberOfSpeakers: numberOfSpeakers
+    }));
+    setSelectedFiles(updatedFiles);
+    setMessage('Default settings applied to all files');
+    setMessageType('success');
+    setSnackbarOpen(true);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!selectedFile) {
-      setMessage('Please select a file first.');
+    if (selectedFiles.length === 0) {
+      setMessage('Please select at least one file first.');
       setMessageType('error');
       setSnackbarOpen(true);
       return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('transcription_language', transcriptionLanguage);
-    formData.append('number_of_speakers', numberOfSpeakers);
-    if (meetingDate) {
-      formData.append('meeting_date', meetingDate);
     }
 
     try {
@@ -183,35 +214,63 @@ const UploadForm = ({ onUploadSuccess }) => {
       setMessage('Uploading and processing...');
       setMessageType('info');
 
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
+      // For single file, use the original endpoint
+      if (selectedFiles.length === 1) {
+        const formData = new FormData();
+        formData.append('file', selectedFiles[0].file);
+        formData.append('transcription_language', selectedFiles[0].transcriptionLanguage);
+        formData.append('number_of_speakers', selectedFiles[0].numberOfSpeakers);
+        if (selectedFiles[0].meetingDate) {
+          formData.append('meeting_date', selectedFiles[0].meetingDate);
+        }
+
+        const response = await api.post('/api/v1/meetings/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            setUploadProgress(percentCompleted);
+          },
         });
-      }, 200);
+      } else {
+        // For multiple files, use the batch endpoint
+        const formData = new FormData();
+        
+        // Append all files
+        selectedFiles.forEach(fileConfig => {
+          formData.append('files', fileConfig.file);
+        });
+        
+        // Prepare comma-separated parameters
+        const languages = selectedFiles.map(f => f.transcriptionLanguage).join(',');
+        const speakers = selectedFiles.map(f => f.numberOfSpeakers).join(',');
+        const dates = selectedFiles.map(f => f.meetingDate || '').join(',');
+        
+        formData.append('transcription_languages', languages);
+        formData.append('number_of_speakers_list', speakers);
+        formData.append('meeting_dates', dates);
 
-      const response = await api.post('/api/v1/meetings/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          setUploadProgress(percentCompleted);
-        },
-      });
+        const response = await api.post('/api/v1/meetings/batch-upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            setUploadProgress(percentCompleted);
+          },
+        });
+      }
 
-      clearInterval(progressInterval);
       setUploadProgress(100);
-      setMessage('File uploaded successfully! Processing will begin shortly.');
+      setMessage(`Successfully uploaded ${selectedFiles.length} file(s)! Processing will begin shortly.`);
       setMessageType('success');
       setSnackbarOpen(true);
-      setSelectedFile(null);
+      setSelectedFiles([]);
       
       if (onUploadSuccess) {
         onUploadSuccess();
@@ -252,10 +311,10 @@ const UploadForm = ({ onUploadSuccess }) => {
           >
             <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
             <Typography variant="h6" gutterBottom>
-              Drop your audio/video file here
+              Drop your audio/video file(s) here
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              or click to browse files (up to {maxFileSize}MB)
+              or click to browse files (up to {maxFileSize}MB per file)
             </Typography>
             <Button
               component="label"
@@ -263,36 +322,154 @@ const UploadForm = ({ onUploadSuccess }) => {
               startIcon={<CloudUploadIcon />}
               size="large"
             >
-              Select File
+              Select File(s)
               <VisuallyHiddenInput
                 id="file-input"
                 type="file"
                 accept="audio/*,video/*"
                 onChange={handleFileChange}
+                multiple
               />
             </Button>
           </DropZone>
 
-          {selectedFile && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AudioFileIcon color="primary" />
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="body1" fontWeight="medium">
-                    {selectedFile.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {formatFileSize(selectedFile.size)}
-                  </Typography>
-                </Box>
-                <IconButton
-                  size="small"
-                  onClick={() => setSelectedFile(null)}
-                  disabled={isUploading}
-                >
-                  <CloseIcon />
-                </IconButton>
+          {selectedFiles.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  Selected Files ({selectedFiles.length})
+                </Typography>
+                {selectedFiles.length > 1 && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<RefreshIcon />}
+                    onClick={applyDefaultsToAll}
+                    disabled={isUploading}
+                  >
+                    Apply Defaults to All
+                  </Button>
+                )}
               </Box>
+              {selectedFiles.map((fileConfig, index) => (
+                <Box 
+                  key={index} 
+                  sx={{ 
+                    mb: 2, 
+                    p: 2, 
+                    bgcolor: 'grey.50', 
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'grey.300'
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <AudioFileIcon color="primary" />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="body1" fontWeight="medium">
+                        {fileConfig.file.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatFileSize(fileConfig.file.size)}
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={() => removeFile(index)}
+                      disabled={isUploading}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </Box>
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6} md={4}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Language</InputLabel>
+                        <Select
+                          value={fileConfig.transcriptionLanguage}
+                          onChange={(e) => updateFileConfig(index, 'transcriptionLanguage', e.target.value)}
+                          label="Language"
+                          disabled={isUploading}
+                        >
+                          {languages.map((lang) => (
+                            <MenuItem key={lang.code} value={lang.code}>
+                              {lang.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6} md={4}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Speakers</InputLabel>
+                        <Select
+                          value={fileConfig.numberOfSpeakers}
+                          onChange={(e) => updateFileConfig(index, 'numberOfSpeakers', e.target.value)}
+                          label="Speakers"
+                          disabled={isUploading}
+                        >
+                          {speakerOptions.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={12} md={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Meeting Date (Optional)"
+                        type="datetime-local"
+                        value={
+                          // Convert ISO string back to datetime-local format for display
+                          fileConfig.meetingDate 
+                            ? (() => {
+                                try {
+                                  // If it's already an ISO string, convert to local datetime format
+                                  const date = new Date(fileConfig.meetingDate);
+                                  if (!isNaN(date.getTime())) {
+                                    // Format: YYYY-MM-DDTHH:mm (local time)
+                                    const year = date.getFullYear();
+                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getDate()).padStart(2, '0');
+                                    const hours = String(date.getHours()).padStart(2, '0');
+                                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                                    return `${year}-${month}-${day}T${hours}:${minutes}`;
+                                  }
+                                } catch (e) {
+                                  console.error('Error formatting date:', e);
+                                }
+                                return fileConfig.meetingDate;
+                              })()
+                            : ''
+                        }
+                        onChange={(e) => {
+                          // Convert local datetime to ISO string with timezone
+                          const localDateTime = e.target.value;
+                          if (localDateTime) {
+                            // Create a date object from the local datetime string
+                            const date = new Date(localDateTime);
+                            // Convert to ISO string (which will be in UTC)
+                            const isoString = date.toISOString();
+                            updateFileConfig(index, 'meetingDate', isoString);
+                          } else {
+                            updateFileConfig(index, 'meetingDate', '');
+                          }
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        disabled={isUploading}
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
+              ))}
             </Box>
           )}
 
@@ -318,7 +495,7 @@ const UploadForm = ({ onUploadSuccess }) => {
             >
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <SettingsIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Processing Configuration</Typography>
+                <Typography variant="h6">Default Processing Configuration</Typography>
               </Box>
             </AccordionSummary>
             <AccordionDetails>
@@ -368,36 +545,24 @@ const UploadForm = ({ onUploadSuccess }) => {
                     </Select>
                   </FormControl>
                 </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Meeting Date (Optional)"
-                    type="datetime-local"
-                    value={meetingDate}
-                    onChange={(e) => setMeetingDate(e.target.value)}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    helperText="When did this meeting take place?"
-                  />
-                </Grid>
               </Grid>
               
               <Alert severity="info" sx={{ mt: 2 }}>
                 <Typography variant="body2">
+                  <strong>Default Settings:</strong> These settings will be applied to newly added files. 
+                  You can customize settings for each file individually after selecting them.<br />
                   <strong>Language:</strong> Choose the primary language spoken in your meeting. 
                   This helps improve transcription accuracy.<br />
                   <strong>Speakers:</strong> Specify the number of speakers or use auto-detect 
                   for speaker identification and diarization.<br />
-                  <strong>Meeting Date:</strong> Optionally specify when the meeting took place. 
+                  <strong>Meeting Date:</strong> Optionally specify when each meeting took place. 
                   If not set, the upload time will be used.
                 </Typography>
               </Alert>
               
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                 Maximum file size: {maxFileSize}MB | 
-                Supported formats: MP3, WAV, MP4, MOV, AVI, and more
+                Supported formats: MP3, WAV, MP4, MKV, MOV, AVI, FLAC, M4A, and more
               </Typography>
             </AccordionDetails>
           </Accordion>
@@ -407,12 +572,15 @@ const UploadForm = ({ onUploadSuccess }) => {
           <Button
             type="submit"
             variant="contained"
-            disabled={!selectedFile || isUploading}
+            disabled={selectedFiles.length === 0 || isUploading}
             fullWidth
             size="large"
             startIcon={<CloudUploadIcon />}
           >
-            {isUploading ? 'Uploading...' : 'Upload and Process'}
+            {isUploading 
+              ? 'Uploading...' 
+              : `Upload and Process ${selectedFiles.length > 0 ? `(${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''})` : ''}`
+            }
           </Button>
         </form>
 

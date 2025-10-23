@@ -115,7 +115,7 @@ export const getStatusIcon = (status) => {
  * @param {string[]} allowedExtensions - Allowed file extensions
  * @returns {string|null} Error message or null if valid
  */
-export const validateFile = (file, maxSizeMB = 3000, allowedExtensions = ['.wav', '.mp3', '.mp4', '.m4a', '.flac']) => {
+export const validateFile = (file, maxSizeMB = 3000, allowedExtensions = ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.mkv', '.avi', '.mov']) => {
   if (!file) {
     return 'Please select a file';
   }

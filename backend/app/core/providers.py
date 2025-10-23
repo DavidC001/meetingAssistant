@@ -45,8 +45,18 @@ class LLMProvider(ABC):
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
     
     @abstractmethod
-    async def chat_completion(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> str:
-        """Generate a chat completion response"""
+    async def chat_completion(
+        self, 
+        messages: List[Dict[str, str]], 
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """Generate a chat completion response
+        
+        Returns:
+            If tools are not used: str (the response text)
+            If tools are used: Dict with 'tool_calls' key containing list of tool calls
+        """
         pass
     
     @abstractmethod
@@ -114,8 +124,23 @@ class OpenAIProvider(LLMProvider):
         return {"max_completion_tokens": self.config.max_tokens}
     
     @retry_api_call(max_retries=3, delay=5.0)
-    async def chat_completion(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> str:
-        """Generate a chat completion response"""
+    async def chat_completion(
+        self, 
+        messages: List[Dict[str, str]], 
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """Generate a chat completion response
+        
+        Args:
+            messages: Conversation messages
+            system_prompt: Optional system prompt
+            tools: Optional list of tool definitions
+            
+        Returns:
+            If no tool calls: str (the response text)
+            If tool calls: Dict with 'tool_calls' and optional 'message' keys
+        """
         try:
             # Prepare messages
             formatted_messages = []
@@ -126,14 +151,42 @@ class OpenAIProvider(LLMProvider):
             # Get the appropriate token parameter for this model
             token_param = self._get_token_param()
             
-            response = await self.async_client.chat.completions.create(
-                model=self.config.model,
-                messages=formatted_messages,
+            # Build request parameters
+            request_params = {
+                "model": self.config.model,
+                "messages": formatted_messages,
                 **token_param,
-                timeout=self.config.timeout
-            )
+                "timeout": self.config.timeout
+            }
             
-            return response.choices[0].message.content.strip()
+            # Add tools if provided
+            if tools:
+                request_params["tools"] = tools
+                request_params["tool_choice"] = "auto"
+            
+            response = await self.async_client.chat.completions.create(**request_params)
+            
+            message = response.choices[0].message
+            
+            # Check if the model wants to call tools
+            if message.tool_calls:
+                tool_calls = []
+                for tool_call in message.tool_calls:
+                    tool_calls.append({
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    })
+                return {
+                    "tool_calls": tool_calls,
+                    "message": message.content if message.content else ""
+                }
+            
+            # No tool calls, return text response
+            return message.content.strip() if message.content else ""
             
         except Exception as e:
             self.logger.error(f"OpenAI chat completion failed: {e}")
@@ -241,8 +294,16 @@ class OllamaProvider(LLMProvider):
             raise RuntimeError(f"Ollama is not accessible at {self.base_url}: {e}")
     
     @retry_api_call(max_retries=3, delay=5.0)
-    async def chat_completion(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None) -> str:
-        """Generate a chat completion response"""
+    async def chat_completion(
+        self, 
+        messages: List[Dict[str, str]], 
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Union[str, Dict[str, Any]]:
+        """Generate a chat completion response
+        
+        Note: Ollama has limited tool support. For now, tools are ignored with Ollama.
+        """
         try:
             # Prepare messages for Ollama format
             formatted_messages = []
@@ -258,6 +319,11 @@ class OllamaProvider(LLMProvider):
                     "num_ctx": self.config.max_tokens,
                 }
             }
+            
+            # Note: Ollama tool support is limited/experimental
+            # For now, we'll ignore tools and just do standard chat
+            if tools:
+                self.logger.warning("Tool calling requested but Ollama has limited tool support. Proceeding without tools.")
             
             # Use asyncio to run the synchronous request
             def make_request():

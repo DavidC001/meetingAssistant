@@ -213,14 +213,22 @@ class GoogleCalendarService:
             },
         }
         
-        # Add color coding based on priority
-        if action_item.priority:
+        # Add color coding based on status and priority
+        # Status takes precedence over priority
+        if action_item.status == 'completed':
+            event['colorId'] = '8'  # Gray for completed
+        elif action_item.status == 'in_progress':
+            event['colorId'] = '9'  # Blue for in progress
+        elif action_item.priority:
+            # For pending or other statuses, use priority colors
             color_map = {
                 'high': '11',  # Red
-                'medium': '5',  # Yellow
+                'medium': '5',  # Yellow/Orange
                 'low': '2',    # Green
             }
             event['colorId'] = color_map.get(action_item.priority.lower(), '1')
+        else:
+            event['colorId'] = '1'  # Default blue if no priority
         
         try:
             created_event = self.service.events().insert(
@@ -284,14 +292,22 @@ class GoogleCalendarService:
             description_parts.append(f"\n\n[Action Item ID: {action_item.id}]")
             event['description'] = '\n'.join(description_parts)
             
-            # Update priority color
-            if action_item.priority:
+            # Update color based on status and priority
+            # Status takes precedence over priority
+            if action_item.status == 'completed':
+                event['colorId'] = '8'  # Gray for completed
+            elif action_item.status == 'in_progress':
+                event['colorId'] = '9'  # Blue for in progress
+            elif action_item.priority:
+                # For pending or other statuses, use priority colors
                 color_map = {
-                    'high': '11',
-                    'medium': '5',
-                    'low': '2',
+                    'high': '11',  # Red
+                    'medium': '5',  # Yellow/Orange
+                    'low': '2',    # Green
                 }
                 event['colorId'] = color_map.get(action_item.priority.lower(), '1')
+            else:
+                event['colorId'] = '1'  # Default blue if no priority
             
             self.service.events().update(
                 calendarId='primary',

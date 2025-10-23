@@ -69,7 +69,11 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
     try {
       setIsLoading(true);
       const response = await api.get('/api/v1/meetings/');
-      setMeetings(response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      setMeetings(response.data.sort((a, b) => {
+        const dateA = new Date(a.meeting_date || a.created_at);
+        const dateB = new Date(b.meeting_date || b.created_at);
+        return dateB - dateA;
+      }));
       setError(null);
     } catch (err) {
       setError('Failed to fetch meetings.');
@@ -92,7 +96,11 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
         pollTimeout = setTimeout(async () => {
           try {
             const response = await api.get('/api/v1/meetings/');
-            const updatedMeetings = response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const updatedMeetings = response.data.sort((a, b) => {
+              const dateA = new Date(a.meeting_date || a.created_at);
+              const dateB = new Date(b.meeting_date || b.created_at);
+              return dateB - dateA;
+            });
             setMeetings(updatedMeetings);
             currentMeetings = updatedMeetings;
             scheduleNextPoll();
@@ -255,6 +263,7 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'No date';
     return new Date(dateString).toLocaleString();
   };
 
@@ -469,7 +478,7 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
                                   secondary={
                                     <Box>
                                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                        📅 {formatDate(meeting.created_at)}
+                                        📅 {formatDate(meeting.meeting_date || meeting.created_at)}
                                       </Typography>
                                       {meeting.tags && (
                                         <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>

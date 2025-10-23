@@ -21,9 +21,11 @@ export const useMeetings = (refreshKey = 0) => {
     try {
       setIsLoading(true);
       const response = await api.get('/api/v1/meetings/');
-      const sortedMeetings = response.data.sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      );
+      const sortedMeetings = response.data.sort((a, b) => {
+        const dateA = new Date(a.meeting_date || a.created_at);
+        const dateB = new Date(b.meeting_date || b.created_at);
+        return dateB - dateA;
+      });
       setMeetings(sortedMeetings);
       setError(null);
       return sortedMeetings;

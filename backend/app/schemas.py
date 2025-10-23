@@ -106,6 +106,15 @@ class ActionItem(ActionItemBase):
     class Config:
         from_attributes = True
 
+# Extended ActionItem with meeting info for Calendar view
+class ActionItemWithMeeting(ActionItem):
+    meeting_id: Optional[int] = None
+    meeting_title: Optional[str] = None
+    meeting_date: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 # Google Calendar Schemas
 class GoogleCalendarAuthUrl(BaseModel):
     auth_url: str
@@ -173,6 +182,7 @@ class ChatRequest(BaseModel):
     chat_history: Optional[List[dict]] = None
     top_k: Optional[int] = 5
     use_full_transcript: Optional[bool] = False
+    enable_tools: Optional[bool] = True
 
 class ChatResponse(BaseModel):
     response: str
@@ -395,5 +405,27 @@ class ScheduledMeeting(ScheduledMeetingBase):
 class ScheduledMeetingWithLinkedMeeting(ScheduledMeeting):
     linked_meeting: Optional[Meeting] = None
     
+    class Config:
+        from_attributes = True
+
+# User Mapping Schemas
+class UserMappingBase(BaseModel):
+    name: str
+    email: str
+
+class UserMappingCreate(UserMappingBase):
+    pass
+
+class UserMappingUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class UserMapping(UserMappingBase):
+    id: int
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True

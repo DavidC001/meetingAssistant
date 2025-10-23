@@ -11,7 +11,7 @@ This module provides endpoints for:
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .. import crud, schemas
 from ..database import get_db
@@ -230,14 +230,15 @@ def get_meetings_needing_upload(
     Get past scheduled meetings that don't have a linked recording yet.
     These are meetings that occurred but haven't been uploaded.
     """
-    cutoff_time = datetime.now() - timedelta(days=days_back)
+    now = datetime.now(timezone.utc)
+    cutoff_time = now - timedelta(days=days_back)
     
     # Get completed/past meetings without a linked recording
     all_scheduled = crud.get_scheduled_meetings(db, limit=1000)
     
     needs_upload = [
         meeting for meeting in all_scheduled
-        if meeting.scheduled_time < datetime.now()
+        if meeting.scheduled_time < now
         and meeting.scheduled_time >= cutoff_time
         and meeting.linked_meeting_id is None
         and meeting.status != "cancelled"
