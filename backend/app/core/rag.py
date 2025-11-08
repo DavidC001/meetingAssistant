@@ -54,6 +54,7 @@ async def generate_rag_response(
     *,
     query: str,
     meeting_id: Optional[int] = None,
+    meeting_ids: Optional[List[int]] = None,
     chat_history: Optional[List[Dict[str, str]]] = None,
     top_k: int = 5,
     llm_config=None,
@@ -66,7 +67,8 @@ async def generate_rag_response(
     Args:
         db: Database session
         query: User's question
-        meeting_id: Optional meeting ID to filter results
+        meeting_id: Optional meeting ID to filter results (single meeting)
+        meeting_ids: Optional list of meeting IDs to filter results (global chat)
         chat_history: Previous chat messages
         top_k: Number of chunks to retrieve (for RAG mode)
         llm_config: LLM configuration
@@ -120,6 +122,7 @@ async def generate_rag_response(
         db,
         query_embedding,
         meeting_id=meeting_id,
+        meeting_ids=meeting_ids,
         top_k=top_k,
     )
 
@@ -154,6 +157,7 @@ def retrieve_relevant_chunks(
     *,
     query: str,
     meeting_id: Optional[int] = None,
+    meeting_ids: Optional[List[int]] = None,
     top_k: int = 5,
 ) -> List[RetrievedChunk]:
     try:
@@ -166,6 +170,7 @@ def retrieve_relevant_chunks(
             db,
             query_embedding,
             meeting_id=meeting_id,
+            meeting_ids=meeting_ids,
             top_k=top_k,
         )
     except Exception as e:

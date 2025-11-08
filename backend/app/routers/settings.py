@@ -391,6 +391,13 @@ def create_api_key(api_key: schemas.APIKeyCreate, db: Session = Depends(get_db))
     if existing:
         raise HTTPException(status_code=400, detail="API key with this name already exists")
     
+    # If key_value is provided, save it to .env file
+    if api_key.key_value:
+        env_updates = {api_key.environment_variable: api_key.key_value}
+        success = write_env_file(env_updates)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to save API key to environment file")
+    
     created_key = crud.create_api_key(db, api_key)
     env_vars = read_env_file()
     env_value = env_vars.get(created_key.environment_variable, "")
@@ -440,6 +447,20 @@ def update_api_key(key_id: int, api_key_update: schemas.APIKeyUpdate, db: Sessio
             status_code=400, 
             detail="Cannot edit environment-based API keys. These are loaded from environment variables."
         )
+    
+    # Get the current API key to check environment variable changes
+    current_api_key = crud.get_api_key(db, key_id)
+    if not current_api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    # If key_value is provided, save it to .env file
+    if api_key_update.key_value:
+        # Use the updated environment variable name if provided, otherwise use the existing one
+        env_var_name = api_key_update.environment_variable if api_key_update.environment_variable else current_api_key.environment_variable
+        env_updates = {env_var_name: api_key_update.key_value}
+        success = write_env_file(env_updates)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update API key in environment file")
         
     api_key = crud.update_api_key(db, key_id, api_key_update)
     if not api_key:

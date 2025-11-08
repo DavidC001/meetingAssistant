@@ -430,6 +430,8 @@ def get_speakers(meeting_id: int, db: Session = Depends(get_db)):
 
 @router.put("/speakers/{speaker_id}", response_model=schemas.Speaker)
 def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session = Depends(get_db)):
+    from ..core.transcript_formatter import update_speaker_name_in_transcript
+    
     db_speaker = db.query(models.Speaker).filter(models.Speaker.id == speaker_id).first()
     if not db_speaker:
         raise HTTPException(status_code=404, detail="Speaker not found")
@@ -452,37 +454,13 @@ def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session 
             if meeting.transcription.full_text:
                 updated_text = meeting.transcription.full_text
                 
-                # Replace speaker labels at the start of lines (typical transcript format)
-                # This handles both old_label and old_name patterns in speaker positions
+                # Replace old label if it exists
+                if old_label and old_label != speaker.name:
+                    updated_text = update_speaker_name_in_transcript(updated_text, old_label, speaker.name)
                 
-                patterns_to_replace = []
-                
-                # Add old label pattern if it exists and is different from new name
-                if old_label and speaker.name and old_label != speaker.name:
-                    patterns_to_replace.append(old_label)
-                
-                # Add old name pattern if it exists, is different from new name, and wasn't already added
+                # Replace old name if it's different from both the label and the new name
                 if old_name and old_name != speaker.name and old_name != old_label:
-                    patterns_to_replace.append(old_name)
-                
-                # Apply replacements for speaker names at beginning of lines (transcript format)
-                for pattern_text in patterns_to_replace:
-                    # Match speaker name at start of line, followed by optional space and then either:
-                    # - Timestamp in parentheses followed by colon: "SPEAKER_00 (0.01s - 7.29s): text"
-                    # - Just a colon: "SPEAKER_00: text"
-                    # - Or in brackets/parentheses
-                    
-                    # Pattern 1: Speaker with timestamp format: "SPEAKER_00 (0.01s - 7.29s): text"
-                    timestamp_pattern = rf'^(\s*){re.escape(pattern_text)}(\s+\([^)]+\)\s*:)'
-                    updated_text = re.sub(timestamp_pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
-                    
-                    # Pattern 2: Speaker with simple colon: "SPEAKER_00: text"
-                    simple_pattern = rf'^(\s*){re.escape(pattern_text)}(\s*:)'
-                    updated_text = re.sub(simple_pattern, rf'\1{speaker.name}\2', updated_text, flags=re.MULTILINE)
-                    
-                    # Pattern 3: Speaker in brackets or parentheses
-                    bracket_pattern = rf'(\[|\()\s*{re.escape(pattern_text)}\s*(\]|\))'
-                    updated_text = re.sub(bracket_pattern, rf'\1{speaker.name}\2', updated_text)
+                    updated_text = update_speaker_name_in_transcript(updated_text, old_name, speaker.name)
                 
                 meeting.transcription.full_text = updated_text
                 

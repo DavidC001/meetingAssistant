@@ -71,6 +71,7 @@ const ModelConfigurations = () => {
     analysis_base_url: '',
     analysis_api_key_id: null,
     max_tokens: 4000,
+    max_reasoning_depth: 3,
     is_default: false
   });
 
@@ -133,6 +134,7 @@ const ModelConfigurations = () => {
         analysis_base_url: '',
         analysis_api_key_id: null,
         max_tokens: 4000,
+        max_reasoning_depth: 3,
         is_default: false
       });
       setIsEditing(false);
@@ -157,6 +159,7 @@ const ModelConfigurations = () => {
       analysis_base_url: '',
       analysis_api_key_id: null,
       max_tokens: 4000,
+      max_reasoning_depth: 3,
       is_default: false
     });
   };
@@ -431,6 +434,17 @@ const ModelConfigurations = () => {
                   value={formData.max_tokens}
                   onChange={handleMaxTokensChange}
                   inputProps={{ min: 100, max: 32000 }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Max Reasoning Depth"
+                  value={formData.max_reasoning_depth}
+                  onChange={(e) => handleFormChange('max_reasoning_depth', parseInt(e.target.value))}
+                  inputProps={{ min: 1, max: 10 }}
+                  helperText="Maximum steps for iterative research tool (1-10)"
                 />
               </Grid>
             </Grid>

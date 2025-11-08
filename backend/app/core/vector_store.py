@@ -44,6 +44,7 @@ class VectorStore:
         meeting_id: Optional[int] = None,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
+        meeting_ids: Optional[List[int]] = None,
     ) -> List[RetrievedChunk]:
         raise NotImplementedError
 
@@ -95,6 +96,7 @@ class PgVectorStore(VectorStore):
         meeting_id: Optional[int] = None,
         top_k: int = 5,
         filters: Optional[Dict[str, Any]] = None,
+        meeting_ids: Optional[List[int]] = None,
     ) -> List[RetrievedChunk]:
         if not query_embedding:
             return []
@@ -105,6 +107,9 @@ class PgVectorStore(VectorStore):
         )
         if meeting_id is not None:
             query = query.filter(models.DocumentChunk.meeting_id == meeting_id)
+        elif meeting_ids is not None:
+            # Filter by list of meeting IDs (for global chat filtering)
+            query = query.filter(models.DocumentChunk.meeting_id.in_(meeting_ids))
         if "content_type" in similarity_filters:
             query = query.filter(models.DocumentChunk.content_type == similarity_filters["content_type"])
         query = query.order_by(models.DocumentChunk.embedding.cosine_distance(query_embedding).asc()).limit(top_k)

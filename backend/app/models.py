@@ -182,6 +182,7 @@ class ModelConfiguration(Base):
     
     # Additional Configuration
     max_tokens = Column(Integer, default=4000)  # Maximum tokens for responses
+    max_reasoning_depth = Column(Integer, default=3)  # Maximum depth for iterative research tool (1-10)
     
     # Metadata
     is_default = Column(Boolean, default=False)  # Whether this is the default configuration
@@ -248,6 +249,10 @@ class GlobalChatSession(Base):
     tags = Column(String, nullable=True)  # Comma-separated tags
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Filter options for constraining RAG retrieval
+    filter_folder = Column(String, nullable=True)  # Filter meetings by folder
+    filter_tags = Column(String, nullable=True)  # Filter meetings by tags (comma-separated)
 
     messages = relationship("GlobalChatMessage", back_populates="session", cascade="all, delete-orphan")
 

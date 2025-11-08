@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from .utils import _run_ffmpeg
 from .cache import cache_result, get_file_hash
+from .transcript_formatter import format_transcript_grouped
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -204,15 +205,14 @@ def compile_transcript(
     # Sort results by start time to ensure correct order
     results.sort(key=lambda r: r["start"])
 
-    # Combine results into a single transcript string
-    transcript_lines = []
+    # Count languages for determining dominant language
     language_counts = {}
     for res in results:
-        transcript_lines.append(f"{res['speaker']} ({res['start']:.2f}s - {res['end']:.2f}s): {res['text']}")
         lang = res["language"]
         language_counts[lang] = language_counts.get(lang, 0) + 1
 
-    full_transcript = "\n".join(transcript_lines)
+    # Format transcript using the new grouped format (no timestamps, grouped speakers)
+    full_transcript = format_transcript_grouped(results)
 
     # Determine dominant language
     dominant_language = max(language_counts, key=language_counts.get) if language_counts else whisper_config.language

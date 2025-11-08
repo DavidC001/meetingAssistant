@@ -83,14 +83,26 @@ const api = {
   // Global chat API
   globalChat: {
     listSessions: () => client.get('/api/v1/global-chat/sessions'),
-    createSession: (title, tags) => client.post('/api/v1/global-chat/sessions', { title, tags }),
+    createSession: (title, tags, filterFolder, filterTags) => client.post('/api/v1/global-chat/sessions', { 
+      title, 
+      tags,
+      filter_folder: filterFolder,
+      filter_tags: filterTags
+    }),
     getSession: (sessionId) => client.get(`/api/v1/global-chat/sessions/${sessionId}`),
     deleteSession: (sessionId) => client.delete(`/api/v1/global-chat/sessions/${sessionId}`),
-    updateSession: (sessionId, title, tags) => client.put(`/api/v1/global-chat/sessions/${sessionId}`, { title, tags }),
+    updateSession: (sessionId, title, tags, filterFolder, filterTags) => client.put(`/api/v1/global-chat/sessions/${sessionId}`, { 
+      title, 
+      tags,
+      filter_folder: filterFolder,
+      filter_tags: filterTags
+    }),
     sendMessage: (sessionId, message, chatHistory, topK) => client.post(
       `/api/v1/global-chat/sessions/${sessionId}/messages`,
       { message, chat_history: chatHistory, top_k: topK }
     ),
+    getAvailableFolders: () => client.get('/api/v1/global-chat/filters/folders'),
+    getAvailableFilterTags: () => client.get('/api/v1/global-chat/filters/tags'),
   },
 
   // Embedding & worker settings

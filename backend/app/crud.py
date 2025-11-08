@@ -288,7 +288,9 @@ def get_api_keys_by_provider(db: Session, provider: str):
     ).all()
 
 def create_api_key(db: Session, api_key: schemas.APIKeyCreate):
-    db_api_key = models.APIKey(**api_key.dict())
+    # Exclude key_value from the database model (it's only used for .env file)
+    api_key_data = api_key.dict(exclude={'key_value'})
+    db_api_key = models.APIKey(**api_key_data)
     db.add(db_api_key)
     db.commit()
     db.refresh(db_api_key)
@@ -299,7 +301,8 @@ def update_api_key(db: Session, key_id: int, api_key_update: schemas.APIKeyUpdat
     if not db_api_key:
         return None
     
-    update_data = api_key_update.dict(exclude_unset=True)
+    # Exclude key_value from the database model (it's only used for .env file)
+    update_data = api_key_update.dict(exclude_unset=True, exclude={'key_value'})
     for field, value in update_data.items():
         setattr(db_api_key, field, value)
     
@@ -620,8 +623,14 @@ def set_worker_configuration(db: Session, max_workers: int):
 def list_global_chat_sessions(db: Session):
     return db.query(models.GlobalChatSession).order_by(models.GlobalChatSession.updated_at.desc()).all()
 
-def create_global_chat_session(db: Session, title: str | None = None, tags: str | None = None):
-    session = models.GlobalChatSession(title=title or "New chat", tags=tags)
+def create_global_chat_session(db: Session, title: str | None = None, tags: str | None = None, 
+                              filter_folder: str | None = None, filter_tags: str | None = None):
+    session = models.GlobalChatSession(
+        title=title or "New chat", 
+        tags=tags,
+        filter_folder=filter_folder,
+        filter_tags=filter_tags
+    )
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -638,7 +647,8 @@ def delete_global_chat_session(db: Session, session_id: int):
     db.commit()
     return session
 
-def update_global_chat_session(db: Session, session_id: int, title: str | None = None, tags: str | None = None):
+def update_global_chat_session(db: Session, session_id: int, title: str | None = None, tags: str | None = None,
+                              filter_folder: str | None = None, filter_tags: str | None = None):
     session = get_global_chat_session(db, session_id)
     if not session:
         return None
@@ -646,6 +656,10 @@ def update_global_chat_session(db: Session, session_id: int, title: str | None =
         session.title = title
     if tags is not None:
         session.tags = tags
+    if filter_folder is not None:
+        session.filter_folder = filter_folder
+    if filter_tags is not None:
+        session.filter_tags = filter_tags
     session.updated_at = func.now()
     db.commit()
     db.refresh(session)
@@ -673,6 +687,37 @@ def get_global_chat_messages(db: Session, session_id: int):
         .order_by(models.GlobalChatMessage.created_at.asc())
         .all()
     )
+
+def get_meeting_ids_by_filters(db: Session, folder: str | None = None, tags: str | None = None):
+    """Get meeting IDs that match the given folder and/or tag filters.
+    
+    Args:
+        db: Database session
+        folder: Folder to filter by (optional)
+        tags: Comma-separated tags to filter by (optional, meeting must have at least one matching tag)
+    
+    Returns:
+        List of meeting IDs that match the filters
+    """
+    query = db.query(models.Meeting.id).filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
+    
+    if folder:
+        query = query.filter(models.Meeting.folder == folder)
+    
+    if tags:
+        # Parse the filter tags
+        filter_tag_list = [t.strip() for t in tags.split(',') if t.strip()]
+        if filter_tag_list:
+            # Match meetings that have at least one of the filter tags
+            # This uses SQL LIKE to check if any filter tag is in the meeting's tags
+            tag_conditions = []
+            for tag in filter_tag_list:
+                tag_conditions.append(models.Meeting.tags.like(f'%{tag}%'))
+            from sqlalchemy import or_
+            query = query.filter(or_(*tag_conditions))
+    
+    results = query.all()
+    return [row[0] for row in results]
 
 # Scheduled Meeting CRUD operations
 def get_scheduled_meetings(db: Session, skip: int = 0, limit: int = 100, status: str = None, upcoming_only: bool = False):

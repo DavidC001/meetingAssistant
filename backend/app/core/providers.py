@@ -77,7 +77,7 @@ class LLMProvider(ABC):
         return None
 
 class OpenAIProvider(LLMProvider):
-    """OpenAI provider implementation"""
+    """OpenAI-compatible provider implementation (supports OpenAI, Gemini, Anthropic, etc.)"""
     
     def __init__(self, config: LLMConfig):
         super().__init__(config)
@@ -86,9 +86,10 @@ class OpenAIProvider(LLMProvider):
         
         api_key = self.get_api_key()
         if not api_key:
-            env_hint = f" '{self.config.api_key_env}'" if self.config.api_key_env else ""
+            env_hint = f" from environment variable '{self.config.api_key_env}'" if self.config.api_key_env else ""
+            provider_name = self.config.provider.title() if self.config.provider else "API"
             raise RuntimeError(
-                f"OpenAI API key not provided{env_hint}. Configure it in the application settings."
+                f"{provider_name} API key not provided{env_hint}. Please configure the API key in Settings > Model Configuration."
             )
         
         # Initialize clients
@@ -302,7 +303,7 @@ class OllamaProvider(LLMProvider):
     ) -> Union[str, Dict[str, Any]]:
         """Generate a chat completion response
         
-        Note: Ollama has limited tool support. For now, tools are ignored with Ollama.
+        Note: Tool support requires Ollama 0.3.0+ with compatible models (e.g., llama3.1, mistral)
         """
         try:
             # Prepare messages for Ollama format
@@ -320,10 +321,10 @@ class OllamaProvider(LLMProvider):
                 }
             }
             
-            # Note: Ollama tool support is limited/experimental
-            # For now, we'll ignore tools and just do standard chat
+            # Add tools if provided (Ollama 0.3.0+ supports OpenAI-compatible tool format)
             if tools:
-                self.logger.warning("Tool calling requested but Ollama has limited tool support. Proceeding without tools.")
+                self.logger.info(f"Adding {len(tools)} tools to Ollama request")
+                payload["tools"] = tools
             
             # Use asyncio to run the synchronous request
             def make_request():
@@ -336,7 +337,28 @@ class OllamaProvider(LLMProvider):
                 return response.json()
             
             result = await asyncio.get_event_loop().run_in_executor(None, make_request)
-            return result.get("message", {}).get("content", "")
+            message = result.get("message", {})
+            
+            # Check if the model wants to call tools (Ollama uses same format as OpenAI)
+            if message.get("tool_calls"):
+                tool_calls = []
+                for tool_call in message["tool_calls"]:
+                    # Ollama returns tool calls in OpenAI-compatible format
+                    tool_calls.append({
+                        "id": tool_call.get("id", f"call_{len(tool_calls)}"),
+                        "type": "function",
+                        "function": {
+                            "name": tool_call["function"]["name"],
+                            "arguments": json.dumps(tool_call["function"]["arguments"]) if isinstance(tool_call["function"]["arguments"], dict) else tool_call["function"]["arguments"]
+                        }
+                    })
+                return {
+                    "tool_calls": tool_calls,
+                    "message": message.get("content", "")
+                }
+            
+            # No tool calls, return text response
+            return message.get("content", "")
             
         except Exception as e:
             self.logger.error(f"Ollama chat completion failed: {e}")
@@ -381,10 +403,17 @@ class ProviderFactory:
     
     @staticmethod
     def create_provider(config: LLMConfig) -> LLMProvider:
-        """Create a provider instance based on configuration"""
+        """Factory method to create a provider instance"""
         providers = {
             "openai": OpenAIProvider,
-            "ollama": OllamaProvider
+            "ollama": OllamaProvider,
+            # Map other providers to OpenAI (most support OpenAI-compatible APIs)
+            "anthropic": OpenAIProvider,
+            "gemini": OpenAIProvider,
+            "cohere": OpenAIProvider,
+            "grok": OpenAIProvider,
+            "groq": OpenAIProvider,
+            "huggingface": OpenAIProvider,
         }
         
         provider_class = providers.get(config.provider.lower())

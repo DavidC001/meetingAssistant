@@ -30,9 +30,26 @@ def model_config_to_llm_config(model_config, use_analysis: bool = False) -> LLMC
         base_url = model_config.chat_base_url
         api_key_id = model_config.chat_api_key_id
     
-    # Get API key if needed
+    # Get API key from the associated API key configuration or environment
     api_key = None
-    if provider == "openai":
+    api_key_env = None
+    
+    if api_key_id:
+        # Load the API key configuration from the relationship
+        if use_analysis and model_config.analysis_api_key:
+            api_key_config = model_config.analysis_api_key
+        elif not use_analysis and model_config.chat_api_key:
+            api_key_config = model_config.chat_api_key
+        else:
+            api_key_config = None
+            
+        if api_key_config:
+            # Get the environment variable name and load the key from environment
+            api_key_env = api_key_config.environment_variable
+            api_key = config.get_api_key(api_key_env)
+    
+    # Fallback to hardcoded OpenAI key if provider is openai and no key found
+    if not api_key and provider == "openai":
         api_key = config.get_api_key("OPENAI_API_KEY")
     
     return LLMConfig(
@@ -40,6 +57,7 @@ def model_config_to_llm_config(model_config, use_analysis: bool = False) -> LLMC
         model=model,
         base_url=base_url,
         api_key=api_key,
+        api_key_env=api_key_env,
         max_tokens=model_config.max_tokens
     )
 
@@ -126,15 +144,24 @@ async def chat_with_meeting(
             "Be concise but thorough in your responses.\n\n"
         )
         
-        if enable_tools and db and meeting_id:
-            system_prompt += (
-                "You have access to tools that allow you to perform actions like:\n"
-                "- Creating and updating action items\n"
-                "- Adding notes to meetings\n"
-                "- Searching meeting content\n"
-                "- Updating meeting details\n"
-                "Use these tools when appropriate to help the user manage their meetings effectively."
-            )
+        if enable_tools and db:
+            if meeting_id:
+                system_prompt += (
+                    "You have access to tools that allow you to perform actions like:\n"
+                    "- Creating and updating action items\n"
+                    "- Adding notes to meetings\n"
+                    "- Searching meeting content\n"
+                    "- Updating meeting details\n"
+                    "- Performing deep iterative research on complex questions\n"
+                    "Use these tools when appropriate to help the user manage their meetings effectively."
+                )
+            else:
+                system_prompt += (
+                    "You have access to tools for deep research:\n"
+                    "- Use iterative_research for complex questions that require thorough investigation\n"
+                    "- This tool can break down complex questions into steps and gather comprehensive information\n"
+                    "Use this tool when the user asks for in-depth analysis or comprehensive research."
+                )
         
         # Prepare context message with transcript
         context_message = f"Meeting Transcript:\n\n{transcript}\n\nUser Question: {query}"
@@ -156,9 +183,13 @@ async def chat_with_meeting(
         })
         
         # Get tool definitions if tools are enabled
+        # Note: Some tools (like iterative_research) work without a meeting_id
+        # Tool calling is supported by OpenAI and Ollama (0.3.0+ with compatible models)
         tools = None
-        if enable_tools and db and meeting_id and config.provider == "openai":
+        if enable_tools and db:
             tools = tool_registry.get_tool_definitions()
+            if config.provider not in ["openai", "ollama"]:
+                logger.warning(f"Tool calling requested with provider '{config.provider}' - compatibility not guaranteed")
         
         # Tool calling loop
         iteration = 0
@@ -193,7 +224,8 @@ async def chat_with_meeting(
                     # Execute the tool
                     tool_context = {
                         "db": db,
-                        "meeting_id": meeting_id
+                        "meeting_id": meeting_id,
+                        "llm_config": config
                     }
                     
                     result = await tool_registry.execute_tool(

@@ -12,7 +12,7 @@ class APIKeyBase(BaseModel):
     is_active: bool = True
 
 class APIKeyCreate(APIKeyBase):
-    pass
+    key_value: Optional[str] = None  # Optional: actual API key value to save to .env
 
 class APIKeyUpdate(BaseModel):
     name: Optional[str] = None
@@ -20,6 +20,7 @@ class APIKeyUpdate(BaseModel):
     environment_variable: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    key_value: Optional[str] = None  # Optional: actual API key value to update in .env
 
 class APIKey(APIKeyBase):
     id: int
@@ -45,6 +46,7 @@ class ModelConfigurationBase(BaseModel):
     analysis_base_url: Optional[str] = None
     analysis_api_key_id: Optional[int] = None
     max_tokens: int = 4000
+    max_reasoning_depth: int = 3
     is_default: bool = False
 
 class ModelConfigurationCreate(ModelConfigurationBase):
@@ -63,6 +65,7 @@ class ModelConfigurationUpdate(BaseModel):
     analysis_base_url: Optional[str] = None
     analysis_api_key_id: Optional[int] = None
     max_tokens: Optional[int] = None
+    max_reasoning_depth: Optional[int] = None
     is_default: Optional[bool] = None
 
 class ModelConfiguration(ModelConfigurationBase):
@@ -334,6 +337,8 @@ class GlobalChatSession(BaseModel):
     tags: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    filter_folder: Optional[str] = None
+    filter_tags: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -352,10 +357,14 @@ class GlobalChatMessage(BaseModel):
 class GlobalChatSessionCreate(BaseModel):
     title: Optional[str] = None
     tags: Optional[str] = None
+    filter_folder: Optional[str] = None
+    filter_tags: Optional[str] = None
 
 class GlobalChatSessionUpdate(BaseModel):
     title: Optional[str] = None
     tags: Optional[str] = None
+    filter_folder: Optional[str] = None
+    filter_tags: Optional[str] = None
 
 class GlobalChatMessageCreate(BaseModel):
     message: str

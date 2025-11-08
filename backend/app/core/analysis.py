@@ -38,9 +38,26 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
         base_url = model_config.chat_base_url
         api_key_id = model_config.chat_api_key_id
     
-    # Get API key if needed
+    # Get API key from the associated API key configuration or environment
     api_key = None
-    if provider == "openai":
+    api_key_env = None
+    
+    if api_key_id:
+        # Load the API key configuration from the relationship
+        if use_analysis and model_config.analysis_api_key:
+            api_key_config = model_config.analysis_api_key
+        elif not use_analysis and model_config.chat_api_key:
+            api_key_config = model_config.chat_api_key
+        else:
+            api_key_config = None
+            
+        if api_key_config:
+            # Get the environment variable name and load the key from environment
+            api_key_env = api_key_config.environment_variable
+            api_key = config.get_api_key(api_key_env)
+    
+    # Fallback to hardcoded OpenAI key if provider is openai and no key found
+    if not api_key and provider == "openai":
         api_key = config.get_api_key("OPENAI_API_KEY")
     
     return LLMConfig(
@@ -48,6 +65,7 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
         model=model,
         base_url=base_url,
         api_key=api_key,
+        api_key_env=api_key_env,
         max_tokens=model_config.max_tokens,
     )
 

@@ -48,6 +48,7 @@ const APIKeyManagement = () => {
     name: '',
     provider: 'openai',
     environment_variable: '',
+    key_value: '',
     description: '',
     is_active: true
   });
@@ -102,6 +103,7 @@ const APIKeyManagement = () => {
         name: '',
         provider: 'openai',
         environment_variable: '',
+        key_value: '',
         description: '',
         is_active: true
       });
@@ -118,6 +120,7 @@ const APIKeyManagement = () => {
       name: '',
       provider: 'openai',
       environment_variable: '',
+      key_value: '',
       description: '',
       is_active: true
     });
@@ -343,6 +346,17 @@ const APIKeyManagement = () => {
                 required
                 placeholder="e.g., OPENAI_API_KEY"
                 helperText="The environment variable name that contains the actual API key"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="password"
+                label="API Key Value"
+                value={formData.key_value}
+                onChange={(e) => handleFormChange('key_value', e.target.value)}
+                placeholder="Enter your API key"
+                helperText={isEditing ? "Leave blank to keep the existing key value" : "The actual API key that will be saved to the environment"}
               />
             </Grid>
             <Grid item xs={12}>

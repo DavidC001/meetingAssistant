@@ -63,6 +63,13 @@ const GlobalChat = () => {
   const navigate = useNavigate();
 
   const [allTags, setAllTags] = useState([]);
+  
+  // Filter states
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [availableFolders, setAvailableFolders] = useState([]);
+  const [availableFilterTags, setAvailableFilterTags] = useState([]);
+  const [tempFilterFolder, setTempFilterFolder] = useState('');
+  const [tempFilterTags, setTempFilterTags] = useState([]);
 
   const loadSessions = async () => {
     setInitialising(true);
@@ -88,6 +95,75 @@ const GlobalChat = () => {
       setAllTags(response.data || []);
     } catch (error) {
       console.error('Failed to load tags', error);
+    }
+  };
+
+  const loadFilterOptions = async () => {
+    try {
+      const [foldersRes, tagsRes] = await Promise.all([
+        api.globalChat.getAvailableFolders(),
+        api.globalChat.getAvailableFilterTags()
+      ]);
+      setAvailableFolders(foldersRes.data || []);
+      setAvailableFilterTags(tagsRes.data || []);
+    } catch (error) {
+      console.error('Failed to load filter options', error);
+    }
+  };
+
+  const handleOpenFilterDialog = () => {
+    const session = sessions.find(s => s.id === activeSessionId);
+    if (session) {
+      setTempFilterFolder(session.filter_folder || '');
+      const filterTagsArray = session.filter_tags ? 
+        session.filter_tags.split(',').map(t => t.trim()).filter(t => t) : [];
+      setTempFilterTags(filterTagsArray);
+    }
+    loadFilterOptions();
+    setFilterDialogOpen(true);
+  };
+
+  const handleApplyFilters = async () => {
+    if (!activeSessionId) return;
+    
+    try {
+      const session = sessions.find(s => s.id === activeSessionId);
+      const filterTagsString = Array.isArray(tempFilterTags) 
+        ? tempFilterTags.filter(t => t && t.trim()).join(', ')
+        : '';
+      
+      await api.globalChat.updateSession(
+        activeSessionId, 
+        session?.title,
+        session?.tags,
+        tempFilterFolder || null,
+        filterTagsString || null
+      );
+      await loadSessions();
+      setFilterDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to apply filters', error);
+    }
+  };
+
+  const handleClearFilters = async () => {
+    if (!activeSessionId) return;
+    
+    try {
+      const session = sessions.find(s => s.id === activeSessionId);
+      await api.globalChat.updateSession(
+        activeSessionId, 
+        session?.title,
+        session?.tags,
+        null,
+        null
+      );
+      setTempFilterFolder('');
+      setTempFilterTags([]);
+      await loadSessions();
+      setFilterDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to clear filters', error);
     }
   };
 
@@ -403,6 +479,32 @@ const GlobalChat = () => {
           <Box className="global-chat-header">
             <Typography variant="h5">AI Meeting Assistant</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Tooltip title="Filter meetings by folder or tags">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<TuneIcon />}
+                  onClick={handleOpenFilterDialog}
+                  disabled={!activeSessionId}
+                  color={
+                    activeSessionId && sessions.find(s => s.id === activeSessionId)?.filter_folder || 
+                    sessions.find(s => s.id === activeSessionId)?.filter_tags
+                      ? 'primary'
+                      : 'inherit'
+                  }
+                >
+                  Filters
+                  {activeSessionId && (sessions.find(s => s.id === activeSessionId)?.filter_folder || 
+                   sessions.find(s => s.id === activeSessionId)?.filter_tags) && (
+                    <Chip 
+                      size="small" 
+                      label="ON" 
+                      sx={{ ml: 1, height: 16, fontSize: '0.65rem' }} 
+                      color="primary"
+                    />
+                  )}
+                </Button>
+              </Tooltip>
               <Tooltip title="Number of sources to retrieve for each question">
                 <FormControl size="small" sx={{ minWidth: 120 }}>
                   <InputLabel>Top-K Sources</InputLabel>
@@ -561,6 +663,121 @@ const GlobalChat = () => {
             disabled={!newSessionName.trim()}
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Filter Dialog */}
+      <Dialog open={filterDialogOpen} onClose={() => setFilterDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Filter Meetings</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Constrain the AI to use only meetings matching these filters. Leave blank to search all meetings.
+          </Typography>
+          
+          {/* Active Filters Display */}
+          {activeSessionId && (
+            (() => {
+              const session = sessions.find(s => s.id === activeSessionId);
+              const hasFilters = session?.filter_folder || session?.filter_tags;
+              return hasFilters ? (
+                <Paper sx={{ p: 2, mb: 2, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
+                  <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+                    Active Filters:
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap">
+                    {session.filter_folder && (
+                      <Chip 
+                        label={`Folder: ${session.filter_folder}`} 
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    )}
+                    {session.filter_tags && session.filter_tags.split(',').map((tag, idx) => (
+                      <Chip 
+                        key={idx}
+                        label={`Tag: ${tag.trim()}`} 
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        icon={<LabelIcon />}
+                      />
+                    ))}
+                  </Stack>
+                </Paper>
+              ) : null;
+            })()
+          )}
+
+          <Autocomplete
+            options={availableFolders}
+            value={tempFilterFolder}
+            onChange={(event, newValue) => setTempFilterFolder(newValue || '')}
+            freeSolo
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Filter by Folder"
+                placeholder="Select or type folder name"
+                helperText="Only include meetings from this folder"
+                variant="outlined"
+                margin="dense"
+              />
+            )}
+            sx={{ mb: 2 }}
+          />
+
+          <Autocomplete
+            multiple
+            freeSolo
+            options={availableFilterTags}
+            value={tempFilterTags}
+            onChange={(event, newValue) => setTempFilterTags(newValue)}
+            filterOptions={(options, params) => {
+              const filtered = options.filter(option =>
+                option.toLowerCase().includes(params.inputValue.toLowerCase())
+              );
+              
+              if (params.inputValue !== '' && !filtered.includes(params.inputValue)) {
+                filtered.push(params.inputValue);
+              }
+              
+              return filtered;
+            }}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip
+                  icon={<LabelIcon />}
+                  label={option}
+                  {...getTagProps({ index })}
+                  size="small"
+                  color="primary"
+                />
+              ))
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Filter by Tags"
+                placeholder="Select or type tags..."
+                helperText="Only include meetings with these tags (OR logic)"
+                variant="outlined"
+                margin="dense"
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClearFilters} color="warning">
+            Clear All Filters
+          </Button>
+          <Button onClick={() => setFilterDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleApplyFilters} 
+            variant="contained"
+          >
+            Apply Filters
           </Button>
         </DialogActions>
       </Dialog>

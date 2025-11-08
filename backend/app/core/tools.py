@@ -279,6 +279,35 @@ class ToolRegistry:
             },
             handler=self._handle_get_meeting_speakers
         )
+        
+        # Tool: Iterative Research
+        self.register_tool(
+            name="iterative_research",
+            definition={
+                "type": "function",
+                "function": {
+                    "name": "iterative_research",
+                    "description": "Perform deep research on a complex question by iteratively generating follow-up questions and retrieving sources until reaching a satisfactory answer. Use this when the user asks for in-depth analysis, comprehensive research, or when a question requires multiple steps to answer thoroughly.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "The research question to investigate deeply"
+                            },
+                            "max_depth": {
+                                "type": "integer",
+                                "description": "Maximum number of research steps to perform (1-10, defaults to 3)",
+                                "minimum": 1,
+                                "maximum": 10
+                            }
+                        },
+                        "required": ["question"]
+                    }
+                }
+            },
+            handler=self._handle_iterative_research
+        )
     
     # Tool Handlers
     
@@ -498,6 +527,161 @@ class ToolRegistry:
             if speaker.label:
                 result += f" ({speaker.label})"
             result += "\n"
+        
+        return result
+    
+    async def _handle_iterative_research(self, args: Dict[str, Any], context: Dict[str, Any]) -> str:
+        """Handler for iterative research with multi-step reasoning.
+        
+        This tool performs deep research by:
+        1. Taking an initial question
+        2. Retrieving relevant sources
+        3. Analyzing results and generating follow-up questions
+        4. Repeating the process until reaching a satisfactory answer or depth limit
+        
+        Returns a structured response showing the reasoning chain.
+        """
+        from ..core import rag, embeddings
+        
+        db: Session = context["db"]
+        meeting_id: Optional[int] = context.get("meeting_id")
+        llm_config = context.get("llm_config")
+        
+        initial_question = args["question"]
+        max_depth = args.get("max_depth", 3)
+        
+        # Validate max_depth
+        if max_depth < 1:
+            max_depth = 1
+        elif max_depth > 10:
+            max_depth = 10  # Safety limit
+        
+        reasoning_chain = []
+        current_question = initial_question
+        
+        logger.info(f"Starting iterative research with max_depth={max_depth}")
+        
+        for step in range(max_depth):
+            logger.info(f"Iterative research step {step + 1}/{max_depth}: {current_question}")
+            
+            # Retrieve relevant sources for current question
+            try:
+                chunks = rag.retrieve_relevant_chunks(
+                    db,
+                    query=current_question,
+                    meeting_id=meeting_id,
+                    top_k=5
+                )
+                
+                sources_text = rag._format_context(chunks)
+                source_summaries = [
+                    {
+                        "meeting_id": chunk.chunk.meeting_id,
+                        "content_type": chunk.chunk.content_type,
+                        "snippet": chunk.chunk.content[:150] + "..." if len(chunk.chunk.content) > 150 else chunk.chunk.content,
+                        "similarity": chunk.similarity
+                    }
+                    for chunk in chunks[:3]  # Include top 3 sources
+                ]
+                
+            except Exception as e:
+                logger.error(f"Error retrieving sources in iterative research: {e}", exc_info=True)
+                sources_text = "Error retrieving sources"
+                source_summaries = []
+            
+            # Analyze the sources and determine if we need to go deeper
+            analysis_prompt = f"""Based on the following sources, analyze the answer to this question: "{current_question}"
+
+Sources:
+{sources_text}
+
+Provide:
+1. A concise answer based on the sources (2-3 sentences)
+2. Your confidence in the answer (low/medium/high)
+3. If confidence is not high AND we haven't reached the depth limit, suggest ONE specific follow-up question that would help get a better answer. If confidence is high or we're at the limit, say "COMPLETE".
+
+Format your response as:
+ANSWER: [your answer]
+CONFIDENCE: [low/medium/high]
+FOLLOW_UP: [next question or "COMPLETE"]"""
+            
+            try:
+                # Use the chat provider to analyze
+                from ..core import chat
+                if not llm_config:
+                    llm_config = chat.get_default_chat_config()
+                
+                provider = chat.ProviderFactory.create_provider(llm_config)
+                analysis_response = await provider.chat_completion(
+                    messages=[{"role": "user", "content": analysis_prompt}],
+                    system_prompt="You are a research assistant analyzing information to answer questions. Be concise and specific."
+                )
+                
+                # Parse the response
+                answer_line = ""
+                confidence_line = ""
+                follow_up_line = ""
+                
+                for line in analysis_response.split('\n'):
+                    if line.startswith('ANSWER:'):
+                        answer_line = line.replace('ANSWER:', '').strip()
+                    elif line.startswith('CONFIDENCE:'):
+                        confidence_line = line.replace('CONFIDENCE:', '').strip()
+                    elif line.startswith('FOLLOW_UP:'):
+                        follow_up_line = line.replace('FOLLOW_UP:', '').strip()
+                
+                step_info = {
+                    "step": step + 1,
+                    "question": current_question,
+                    "answer": answer_line or "Unable to determine answer",
+                    "confidence": confidence_line or "unknown",
+                    "sources": source_summaries,
+                    "follow_up": follow_up_line or "COMPLETE"
+                }
+                
+                reasoning_chain.append(step_info)
+                
+                # Check if we should continue
+                if follow_up_line.upper() == "COMPLETE" or not follow_up_line or step == max_depth - 1:
+                    logger.info(f"Iterative research complete at step {step + 1}")
+                    break
+                
+                # Use the follow-up question for next iteration
+                current_question = follow_up_line
+                
+            except Exception as e:
+                logger.error(f"Error in iterative research analysis: {e}", exc_info=True)
+                reasoning_chain.append({
+                    "step": step + 1,
+                    "question": current_question,
+                    "answer": f"Error during analysis: {str(e)}",
+                    "confidence": "low",
+                    "sources": source_summaries,
+                    "follow_up": "COMPLETE"
+                })
+                break
+        
+        # Format the final response
+        result = f"🔍 **Iterative Research Results**\n\n"
+        result += f"**Initial Question:** {initial_question}\n"
+        result += f"**Research Depth:** {len(reasoning_chain)} step(s)\n\n"
+        
+        for step_info in reasoning_chain:
+            result += f"### Step {step_info['step']}: {step_info['question']}\n\n"
+            result += f"**Answer:** {step_info['answer']}\n\n"
+            result += f"**Confidence:** {step_info['confidence']}\n\n"
+            
+            if step_info['sources']:
+                result += f"**Sources:** {len(step_info['sources'])} relevant chunks found\n\n"
+            
+            if step_info['follow_up'] and step_info['follow_up'].upper() != "COMPLETE":
+                result += f"**Follow-up:** {step_info['follow_up']}\n\n"
+            
+            result += "---\n\n"
+        
+        # Add final conclusion
+        final_answer = reasoning_chain[-1]['answer'] if reasoning_chain else "No conclusion reached"
+        result += f"### Final Conclusion\n\n{final_answer}\n"
         
         return result
 
