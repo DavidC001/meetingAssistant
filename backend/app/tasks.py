@@ -1,10 +1,10 @@
 from .worker import celery_app
 from .database import SessionLocal
 from . import crud, models, schemas
-from .core import chunking
-from .core.embeddings import batched_embeddings, get_embedding_provider
-from .core.document_processor import extract_text
-from .core.vector_store import DEFAULT_VECTOR_STORE
+from .core.processing import chunking
+from .core.storage.embeddings import batched_embeddings, get_embedding_provider
+from .core.processing.document_processor import extract_text
+from .core.storage.vector_store import DEFAULT_VECTOR_STORE
 from typing import Any, Dict, List
 import time
 import logging
@@ -131,7 +131,7 @@ def process_meeting_task(self, meeting_id: int):
             raise ValueError("Meeting not found")
 
         # 3. Run the actual processing pipeline
-        from .core.pipeline import run_processing_pipeline
+        from .core.processing.pipeline import run_processing_pipeline
         run_processing_pipeline(db=db, meeting_id=meeting_id)
 
         # The status is updated to COMPLETED inside the pipeline/crud function.

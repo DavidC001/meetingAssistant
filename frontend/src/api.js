@@ -22,6 +22,7 @@ const api = {
   // Speaker API
   addSpeaker: (meetingId, speaker) => client.post(`/api/v1/meetings/${meetingId}/speakers`, speaker),
   getSpeakers: (meetingId) => client.get(`/api/v1/meetings/${meetingId}/speakers`),
+  getAllSpeakers: () => client.get('/api/v1/meetings/speakers/all'),
   updateSpeaker: (speakerId, speaker) => client.put(`/api/v1/meetings/speakers/${speakerId}`, speaker),
   deleteSpeaker: (speakerId) => client.delete(`/api/v1/meetings/speakers/${speakerId}`),
 

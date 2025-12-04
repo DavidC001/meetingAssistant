@@ -1,58 +1,54 @@
-FROM python:3.10-slim
+# ==============================================
+# Default Dockerfile - GPU version
+# ==============================================
+# For CPU-only builds, use: docker build -f Dockerfile.cpu
+# For explicit GPU builds, use: docker build -f Dockerfile.gpu
+#
+# This file uses the NVIDIA PyTorch base image with CUDA pre-installed
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 
-# Install system dependencies including CUDA detection tools and Docker CLI
+# Install system dependencies and Docker CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    pkg-config \
     ffmpeg \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavfilter-dev \
     curl \
     wget \
     gnupg2 \
     ca-certificates \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
+# Install cuDNN 9 libraries required by ctranslate2/faster-whisper
+# This ensures the libraries are in the standard library path
+RUN pip install --no-cache-dir nvidia-cudnn-cu12==9.1.0.70
+
+# Set LD_LIBRARY_PATH to include the cuDNN libraries installed via pip
+ENV LD_LIBRARY_PATH="/opt/conda/lib/python3.11/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
+
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and installation script
+# Copy and install Python dependencies (PyTorch already installed in base image)
 COPY ./requirements.txt /app/requirements.txt
-COPY ./install_pytorch.py /app/install_pytorch.py
-
-# Install Python dependencies with smart CUDA detection
 RUN pip install --no-cache-dir --upgrade pip && \
-    python /app/install_pytorch.py && \
-    pip install --no-cache-dir -r /app/requirements.txt && \
-    # Set up cuDNN library paths after installation \
-    if [ -d "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" ]; then \
-        cd /usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib && \
-        # Create versioned symlinks for cuDNN libraries \
-        for lib in libcudnn*.so.*; do \
-            base=$(echo $lib | sed 's/\.so\..*/\.so/'); \
-            ln -sf $lib ${base}.9.1.0 2>/dev/null || true; \
-            ln -sf $lib ${base}.9.1 2>/dev/null || true; \
-            ln -sf $lib ${base}.9 2>/dev/null || true; \
-        done && \
-        # Add cuDNN library path to system library path \
-        echo "/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib" > /etc/ld.so.conf.d/cudnn.conf && \
-        ldconfig && \
-        # Verify cuDNN libraries \
-        echo "cuDNN libraries found:" && \
-        ls -la /usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib/; \
-    else \
-        echo "Warning: cuDNN library directory not found"; \
-    fi
+    pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy the rest of the application code
 COPY . /app
 
 # Create necessary directories
 RUN mkdir -p /app/cache /app/uploads
-
-# Set environment variable for cuDNN library path
-ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/site-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
 
 # Expose the port the app runs on
 EXPOSE 8000

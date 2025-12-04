@@ -30,6 +30,7 @@ import {
   VisibilityOff as HideIcon,
   Visibility as ShowIcon,
   OpenInNew as OpenIcon,
+  PauseCircle as PauseCircleIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import ForceGraph2D from 'react-force-graph-2d';
@@ -52,24 +53,24 @@ const MeetingsGraph = () => {
   const graphRef = useRef();
   const containerRef = useRef();
 
-  // Disable scroll zoom, require Ctrl/Cmd key
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  // Removed custom wheel handler to fix scrolling issues
+  // useEffect(() => {
+  //   const container = containerRef.current;
+  //   if (!container) return;
 
-    const handleWheel = (e) => {
-      // Only allow zoom if Ctrl (Windows/Linux) or Cmd (Mac) is pressed
-      if (!e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
+  //   const handleWheel = (e) => {
+  //     // Only allow zoom if Ctrl (Windows/Linux) or Cmd (Mac) is pressed
+  //     if (!e.ctrlKey && !e.metaKey) {
+  //       e.preventDefault();
+  //       e.stopPropagation();
+  //     }
+  //   };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
+  //   container.addEventListener('wheel', handleWheel, { passive: false });
+  //   return () => {
+  //     container.removeEventListener('wheel', handleWheel);
+  //   };
+  // }, []);
 
   const fetchGraphData = useCallback(async () => {
     setLoading(true);
@@ -98,6 +99,14 @@ const MeetingsGraph = () => {
   useEffect(() => {
     fetchGraphData();
   }, [fetchGraphData]);
+
+  const handleStopSimulation = () => {
+    if (graphRef.current) {
+      graphRef.current.d3Force('charge').strength(0);
+      graphRef.current.d3Force('link').strength(0);
+      graphRef.current.d3Force('center', null);
+    }
+  };
 
   const getNodeColor = (node) => {
     switch (node.type) {
@@ -271,17 +280,26 @@ const MeetingsGraph = () => {
     }
   };
 
-  const filteredData = {
-    nodes: graphData.nodes.filter(node => 
-      visibleTypes.includes(node.type) && !hiddenNodes.has(node.id)
-    ),
-    links: graphData.links.filter(link => {
-      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-      return graphData.nodes.some(n => n.id === sourceId && visibleTypes.includes(n.type) && !hiddenNodes.has(n.id)) &&
-             graphData.nodes.some(n => n.id === targetId && visibleTypes.includes(n.type) && !hiddenNodes.has(n.id));
-    })
-  };
+  const filteredData = React.useMemo(() => {
+    return {
+      nodes: graphData.nodes.filter(node => 
+        visibleTypes.includes(node.type) && !hiddenNodes.has(node.id)
+      ),
+      links: graphData.links.filter(link => {
+        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+        return graphData.nodes.some(n => n.id === sourceId && visibleTypes.includes(n.type) && !hiddenNodes.has(n.id)) &&
+               graphData.nodes.some(n => n.id === targetId && visibleTypes.includes(n.type) && !hiddenNodes.has(n.id));
+      })
+    };
+  }, [graphData, visibleTypes, hiddenNodes]);
+
+  useEffect(() => {
+    if (graphRef.current && filteredData.nodes.length > 0) {
+      // Zoom to fit only when data changes significantly or initially
+      graphRef.current.zoomToFit(1000, 50);
+    }
+  }, [filteredData.nodes.length]); // Only re-zoom if node count changes
 
   if (loading) {
     return (
@@ -428,6 +446,11 @@ const MeetingsGraph = () => {
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Stop Movement">
+              <IconButton onClick={handleStopSimulation} size="small" color="error">
+                <PauseCircleIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
       </Paper>
@@ -442,6 +465,7 @@ const MeetingsGraph = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              border: '1px solid #e0e0e0'
             }}
           >
             <Box
@@ -452,6 +476,7 @@ const MeetingsGraph = () => {
                 position: 'relative',
                 '& canvas': {
                   display: 'block',
+                  outline: 'none'
                 },
               }}
             >
@@ -467,15 +492,14 @@ const MeetingsGraph = () => {
                 onBackgroundClick={handleBackgroundClick}
                 onNodeRightClick={handleNodeDoubleClick}
                 cooldownTicks={100}
-                onEngineStop={() => graphRef.current && graphRef.current.zoomToFit(400, 50)}
+                warmupTicks={100}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
-                enablePointerInteraction={true}
                 minZoom={0.5}
                 maxZoom={8}
-                d3AlphaDecay={0.02}
-                d3VelocityDecay={0.3}
+                d3AlphaDecay={0.05}
+                d3VelocityDecay={0.4}
                 width={containerRef.current?.offsetWidth}
                 height={containerRef.current?.offsetHeight}
               />

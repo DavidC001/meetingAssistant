@@ -24,12 +24,12 @@ try:
     # Try Docker/production import path first
     from app.database import SessionLocal
     from app import models
-    from app.core.transcript_formatter import convert_old_transcript_format
+    from app.core.processing.transcript_formatter import convert_old_transcript_format
 except ImportError:
     # Fallback to development import path
     from backend.app.database import SessionLocal
     from backend.app import models
-    from backend.app.core.transcript_formatter import convert_old_transcript_format
+    from backend.app.core.processing.transcript_formatter import convert_old_transcript_format
 
 # Setup logging
 logging.basicConfig(

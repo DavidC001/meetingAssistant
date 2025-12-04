@@ -47,8 +47,17 @@ backend/
 │   │   ├── analysis.py # AI analysis pipeline
 │   │   ├── pipeline.py # Processing orchestration
 │   │   └── exceptions.py # Custom exceptions
-│   ├── routers/        # API endpoints
-│   ├── models.py       # Database models
+│   ├── modules/        # Feature-based modules
+│   │   ├── meetings/   # Meeting management
+│   │   ├── chat/       # Chat functionality
+│   │   ├── calendar/   # Calendar & action items
+│   │   ├── settings/   # API keys & model configs
+│   │   ├── users/      # User management
+│   │   ├── admin/      # Admin endpoints
+│   │   ├── graph/      # Graph visualization
+│   │   └── ollama/     # Ollama integration
+│   ├── models.py       # Aggregated database models
+│   ├── schemas.py      # Aggregated Pydantic schemas
 │   └── main.py         # Application entry point
 ├── requirements.txt    # Production dependencies
 ```

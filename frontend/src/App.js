@@ -18,9 +18,11 @@ import {
   CalendarMonth as CalendarIcon,
   ChatBubbleOutline as ChatIcon,
   Event as EventIcon,
-  AccountTree as GraphIcon
+  AccountTree as GraphIcon,
+  FolderOpen as FolderOpenIcon
 } from '@mui/icons-material';
 import MeetingsDashboard from './components/MeetingsDashboard';
+import MeetingsBrowser from './components/MeetingsBrowser';
 import MeetingDetails from './components/MeetingDetails';
 import Settings from './components/Settings';
 import Calendar from './components/Calendar';
@@ -82,21 +84,29 @@ function NavigationTabs() {
   const [value, setValue] = React.useState(0);
 
   React.useEffect(() => {
-    if (location.pathname === '/' || location.pathname.startsWith('/meetings')) setValue(0);
-    else if (location.pathname.startsWith('/global-chat')) setValue(1);
-    else if (location.pathname.startsWith('/scheduled-meetings')) setValue(2);
-    else if (location.pathname.startsWith('/graph')) setValue(3);
-    else if (location.pathname.startsWith('/calendar')) setValue(4);
-    else if (location.pathname.startsWith('/settings')) setValue(5);
+    if (location.pathname === '/') setValue(0);
+    else if (location.pathname.startsWith('/meetings') && !location.pathname.startsWith('/meetings/browse')) setValue(0);
+    else if (location.pathname.startsWith('/meetings/browse')) setValue(1);
+    else if (location.pathname.startsWith('/global-chat')) setValue(2);
+    else if (location.pathname.startsWith('/scheduled-meetings')) setValue(3);
+    else if (location.pathname.startsWith('/graph')) setValue(4);
+    else if (location.pathname.startsWith('/calendar')) setValue(5);
+    else if (location.pathname.startsWith('/settings')) setValue(6);
   }, [location.pathname]);
 
   return (
-    <Tabs value={value} textColor="inherit" indicatorColor="secondary">
+    <Tabs value={value} textColor="inherit" indicatorColor="secondary" variant="scrollable" scrollButtons="auto">
       <Tab
         icon={<DashboardIcon />}
         label="Dashboard"
         component={Link}
         to="/"
+      />
+      <Tab
+        icon={<FolderOpenIcon />}
+        label="Meetings"
+        component={Link}
+        to="/meetings/browse"
       />
       <Tab
         icon={<ChatIcon />}
@@ -152,6 +162,7 @@ function App() {
           <Container maxWidth="xl" sx={{ mt: 4, mb: 4, height: 'calc(100vh - 120px)' }}>
             <Routes>
               <Route path="/" element={<MeetingsDashboard />} />
+              <Route path="/meetings/browse" element={<MeetingsBrowser />} />
               <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
               <Route path="/global-chat" element={<GlobalChat />} />
               <Route path="/scheduled-meetings" element={<ScheduledMeetings />} />

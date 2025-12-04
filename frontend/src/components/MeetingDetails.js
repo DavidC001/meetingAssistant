@@ -1,75 +1,81 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  Box,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  Box,
-  Chip,
-  LinearProgress,
-  Stepper,
-  Step,
-  StepLabel,
-  StepIcon,
   Grid,
+  Chip,
+  Button,
+  IconButton,
+  Tabs,
+  Tab,
   Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Skeleton,
+  Divider,
+  CircularProgress,
+  LinearProgress,
   Alert,
   AlertTitle,
-  Button,
-  Divider,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  CircularProgress,
+  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  Autocomplete,
   Menu,
   MenuItem,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Tooltip,
+  Stepper,
+  Step,
+  StepLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Autocomplete,
   Popper,
   ClickAwayListener,
-  Tooltip,
-  IconButton
+  Stack,
+  useTheme
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
-  CheckCircle as CheckCircleIcon,
-  Schedule as ScheduleIcon,
-  Error as ErrorIcon,
-  PlayArrow as PlayArrowIcon,
-  Assignment as AssignmentIcon,
-  Person as PersonIcon,
-  CalendarToday as CalendarIcon,
-  ExpandMore as ExpandMoreIcon,
-  Summarize as SummarizeIcon,
-  Transcribe as TranscribeIcon,
-  AccessTime as AccessTimeIcon,
-  Edit as EditIcon,
-  Save as SaveIcon,
-  Close as CloseIcon,
   PlayCircle as PlayCircleIcon,
-  Info as InfoIcon,
-  Refresh as RefreshIcon,
-  RestartAlt as RestartAltIcon,
+  PauseCircle as PauseCircleIcon,
+  Summarize as SummarizeIcon,
+  Description as DescriptionIcon,
+  Assignment as AssignmentIcon,
+  Chat as ChatIcon,
+  AttachFile as AttachFileIcon,
+  Edit as EditIcon,
   Delete as DeleteIcon,
   Download as DownloadIcon,
-  AttachFile as AttachFileIcon,
+  Save as SaveIcon,
+  Close as CloseIcon,
+  Refresh as RefreshIcon,
+  RestartAlt as RestartAltIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Schedule as ScheduleIcon,
+  Person as PersonIcon,
+  CalendarToday as CalendarIcon,
+  Folder as FolderIcon,
+  Label as LabelIcon,
+  ExpandMore as ExpandMoreIcon,
   CloudUpload as CloudUploadIcon,
-  Description as DescriptionIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  AccessTime as AccessTimeIcon,
+  Info as InfoIcon,
+  Note as NoteIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
 import Chat from './Chat';
 
+// Styled components
 const ProcessingCard = styled(Card)(({ theme }) => ({
   background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
   color: 'white',
@@ -81,500 +87,116 @@ const ProcessingCard = styled(Card)(({ theme }) => ({
   },
 }));
 
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`meeting-tabpanel-${index}`}
+      aria-labelledby={`meeting-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+};
+
 const MeetingDetails = () => {
   const { meetingId } = useParams();
   const navigate = useNavigate();
+  const theme = useTheme();
+  
+  // State
   const [meeting, setMeeting] = useState(null);
-  const [speakers, setSpeakers] = useState([]);
-  const [newSpeaker, setNewSpeaker] = useState({ name: '', label: '' });
-  const [editingSpeaker, setEditingSpeaker] = useState(null);
-  const [tags, setTags] = useState('');
-  const [folder, setFolder] = useState('');
-  const [notes, setNotes] = useState('');
-  const [newActionItem, setNewActionItem] = useState({ task: '', owner: '', due_date: '', isAdding: false });
-  const [editingActionItem, setEditingActionItem] = useState(null);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const [newName, setNewName] = useState('');
+  
+  // Speakers
+  const [speakers, setSpeakers] = useState([]);
+  const [editingSpeaker, setEditingSpeaker] = useState(null);
+  const [allSpeakers, setAllSpeakers] = useState([]);
+
+  // Action Items
+  const [newActionItem, setNewActionItem] = useState({ task: '', owner: '', due_date: '', isAdding: false });
+  const [editingActionItem, setEditingActionItem] = useState(null);
+  
+  // Meta
+  const [tags, setTags] = useState([]);
+  const [folder, setFolder] = useState('');
   const [availableFolders, setAvailableFolders] = useState([]);
-  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
-  const [attachments, setAttachments] = useState([]);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
-  const [allMeetings, setAllMeetings] = useState([]);
+  const [availableTags, setAvailableTags] = useState([]);
+  
+  // Notes
+  const [notes, setNotes] = useState('');
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [showMeetingSuggestions, setShowMeetingSuggestions] = useState(false);
   const [meetingSuggestions, setMeetingSuggestions] = useState([]);
+  const [allMeetings, setAllMeetings] = useState([]);
   const [cursorPosition, setCursorPosition] = useState(0);
-  const notesRef = React.useRef(null);
+  const notesRef = useRef(null);
+  const [meetingPreviews, setMeetingPreviews] = useState({});
+  const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
+
+  // Attachments
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [attachmentDescription, setAttachmentDescription] = useState('');
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [editingAttachment, setEditingAttachment] = useState(null);
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
-  const [meetingPreviews, setMeetingPreviews] = useState({});
 
-  // Add manual refresh function
-  const handleManualRefresh = async () => {
+  // Dialogs
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
+
+  // --- Fetching Logic ---
+
+  const fetchMeetingDetails = async (isInitial = false) => {
     try {
-      setIsUpdating(true);
+      if (isInitial) setIsLoading(true);
+      else setIsUpdating(true);
+
       const response = await api.get(`/api/v1/meetings/${meetingId}`);
       setMeeting(response.data);
+      setTags(response.data.tags ? response.data.tags.split(',').map(t => t.trim()).filter(t => t) : []);
+      setFolder(response.data.folder || '');
+      setNotes(response.data.notes || '');
       setError(null);
+      
+      return response.data;
     } catch (err) {
-      setError('Failed to refresh meeting details.');
+      setError('Failed to fetch meeting details.');
       console.error(err);
+      return null;
     } finally {
-      setIsUpdating(false);
+      if (isInitial) setIsLoading(false);
+      else setIsUpdating(false);
     }
   };
 
-  // Add restart processing function
-  const handleRestartProcessing = async () => {
-    console.log('handleRestartProcessing called'); // Debug log
-    if (!window.confirm('Are you sure you want to restart processing? This will cancel any current processing and start over.')) {
-      console.log('User cancelled restart'); // Debug log
-      return;
-    }
-    
+  const fetchSpeakers = async () => {
     try {
-      console.log('Starting restart processing request...'); // Debug log
-      setIsUpdating(true);
-      const response = await api.post(`/api/v1/meetings/${meetingId}/restart-processing`);
-      console.log('Restart processing response:', response.data); // Debug log
-      setMeeting(response.data);
-      setError(null);
+      const res = await api.getSpeakers(meetingId);
+      setSpeakers(res.data);
     } catch (err) {
-      console.error('Restart processing error:', err); // Enhanced debug log
-      setError('Failed to restart processing.');
-    } finally {
-      setIsUpdating(false);
+      console.error('Failed to fetch speakers', err);
     }
   };
 
-  const stageDisplayNames = {
-    'conversion': 'Converting Audio',
-    'diarization': 'Speaker Identification', 
-    'transcription': 'Speech Recognition',
-    'analysis': 'AI Analysis'
-  };
-
-  const stageOrder = ['conversion', 'diarization', 'transcription', 'analysis'];
-
-  const getStageStatus = (stageName, currentStage, overallProgress) => {
-    const currentIndex = stageOrder.indexOf(currentStage);
-    const targetIndex = stageOrder.indexOf(stageName);
-    
-    if (overallProgress >= 100) return 'completed';
-    if (currentIndex > targetIndex) return 'completed';
-    if (currentIndex === targetIndex) return 'active';
-    return 'pending';
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'processing':
-        return 'primary';
-      case 'failed':
-        return 'error';
-      case 'pending':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
-
-  const getActiveStep = (currentStage) => {
-    const stages = ['conversion', 'diarization', 'transcription', 'analysis'];
-    const index = stages.indexOf(currentStage);
-    return index >= 0 ? index : 0;
-  };
-
-  // Speaker handlers
-  const handleAddSpeaker = async () => {
-    if (!newSpeaker.name) return;
+  const fetchAllSpeakers = async () => {
     try {
-      const res = await api.addSpeaker(meetingId, newSpeaker);
-      setSpeakers([...speakers, res.data]);
-      setNewSpeaker({ name: '', label: '' });
-    } catch (err) { setError('Failed to add speaker'); }
-  };
-
-  const handleUpdateSpeaker = async () => {
-    if (!editingSpeaker) return;
-    try {
-      const res = await api.updateSpeaker(editingSpeaker.id, editingSpeaker);
-      setSpeakers(speakers.map(s => s.id === res.data.id ? res.data : s));
-      setEditingSpeaker(null);
-      // Refresh meeting data to show updated transcript and action items
-      await handleManualRefresh();
-    } catch (err) { 
-      setError('Failed to update speaker');
-      console.error('Update speaker error:', err);
-    }
-  };
-
-  const handleDeleteSpeaker = async (id) => {
-    try {
-      await api.deleteSpeaker(id);
-      setSpeakers(speakers.filter(s => s.id !== id));
-    } catch (err) { setError('Failed to delete speaker'); }
-  };
-
-  // Action Item handlers
-  const handleAddActionItem = async () => {
-    if (!newActionItem.task || !newActionItem.task.trim()) return;
-    try {
-      const itemData = {
-        task: newActionItem.task,
-        owner: newActionItem.owner,
-        due_date: newActionItem.due_date
-      };
-      const res = await api.addActionItem(meeting.transcription.id, itemData);
-      setMeeting({ ...meeting, transcription: { ...meeting.transcription, action_items: [...meeting.transcription.action_items, res.data] } });
-      setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false });
-    } catch (err) { 
-      setError('Failed to add action item'); 
-      console.error('Add action item error:', err);
-    }
-  };
-
-  const handleUpdateActionItem = async () => {
-    if (!editingActionItem || !editingActionItem.task || !editingActionItem.task.trim()) return;
-    try {
-      const itemData = {
-        task: editingActionItem.task,
-        owner: editingActionItem.owner,
-        due_date: editingActionItem.due_date
-      };
-      const res = await api.updateActionItem(editingActionItem.id, itemData);
-      setMeeting({ ...meeting, transcription: { ...meeting.transcription, action_items: meeting.transcription.action_items.map(a => a.id === res.data.id ? res.data : a) } });
-      setEditingActionItem(null);
-    } catch (err) { 
-      setError('Failed to update action item'); 
-      console.error('Update action item error:', err);
-    }
-  };
-
-  const handleDeleteActionItem = async (id) => {
-    try {
-      await api.deleteActionItem(id);
-      setMeeting({ ...meeting, transcription: { ...meeting.transcription, action_items: meeting.transcription.action_items.filter(a => a.id !== id) } });
-    } catch (err) { setError('Failed to delete action item'); }
-  };
-
-  // Tags/Folder handlers
-  const handleUpdateTagsFolder = async () => {
-    try {
-      const res = await api.updateMeetingTagsFolder(meetingId, tags, folder);
-      setMeeting(res.data);
-    } catch (err) { setError('Failed to update tags/folder'); }
-  };
-
-  // Notes handler
-  const handleUpdateNotes = async () => {
-    try {
-      const res = await api.updateMeetingNotes(meetingId, notes);
-      setMeeting(res.data);
-      setShowMeetingSuggestions(false);
-    } catch (err) { setError('Failed to update notes'); }
-  };
-
-  // Handle notes change with autocomplete detection
-  const handleNotesChange = (e) => {
-    const value = e.target.value;
-    const cursorPos = e.target.selectionStart;
-    
-    setNotes(value);
-    setCursorPosition(cursorPos);
-
-    // Check if user typed # and show suggestions
-    const textBeforeCursor = value.substring(0, cursorPos);
-    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
-    
-    if (lastHashIndex !== -1) {
-      const textAfterHash = textBeforeCursor.substring(lastHashIndex + 1);
-      
-      // Allow # followed by letters, numbers, spaces, hyphens, or nothing
-      // This allows filtering by name like "#KG" or by ID like "#123" or "#meeting-123"
-      const hashPattern = /^[a-zA-Z0-9\s-]*$/;
-      
-      if (hashPattern.test(textAfterHash)) {
-        // Filter meetings based on what's typed after #
-        const searchTerm = textAfterHash.replace('meeting-', '').toLowerCase().trim();
-        
-        const filtered = allMeetings.filter(m => {
-          // Search by ID
-          if (m.id.toString().includes(searchTerm)) {
-            return true;
-          }
-          // Search by filename/name
-          if (m.filename && m.filename.toLowerCase().includes(searchTerm)) {
-            return true;
-          }
-          return false;
-        }).slice(0, 10); // Limit to 10 suggestions
-        
-        setMeetingSuggestions(filtered);
-        setShowMeetingSuggestions(filtered.length > 0);
-        return;
-      }
-    }
-    
-    setShowMeetingSuggestions(false);
-  };
-
-  // Insert meeting reference
-  const insertMeetingReference = (meeting) => {
-    const textBeforeCursor = notes.substring(0, cursorPosition);
-    const textAfterCursor = notes.substring(cursorPosition);
-    const lastHashIndex = textBeforeCursor.lastIndexOf('#');
-    
-    if (lastHashIndex !== -1) {
-      const beforeHash = notes.substring(0, lastHashIndex);
-      const reference = `#meeting-${meeting.id}`;
-      const newNotes = beforeHash + reference + ' ' + textAfterCursor;
-      
-      setNotes(newNotes);
-      setShowMeetingSuggestions(false);
-      
-      // Set focus back to textarea
-      setTimeout(() => {
-        if (notesRef.current) {
-          const newCursorPos = beforeHash.length + reference.length + 1;
-          notesRef.current.focus();
-          notesRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
-    }
-  };
-
-  // Fetch meeting preview on hover
-  const fetchMeetingPreview = async (meetingId) => {
-    if (meetingPreviews[meetingId]) return; // Already cached
-    
-    try {
-      const response = await api.get(`/api/v1/meetings/${meetingId}`);
-      setMeetingPreviews(prev => ({
-        ...prev,
-        [meetingId]: response.data
-      }));
-    } catch (error) {
-      console.error('Error fetching meeting preview:', error);
-    }
-  };
-
-  // Render notes with clickable meeting references
-  const renderNotesWithPills = (notesText) => {
-    if (!notesText) {
-      return <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>No notes yet. Click Edit to add notes.</Typography>;
-    }
-
-    const parts = [];
-    let lastIndex = 0;
-    
-    // Combined pattern to match all reference formats
-    const pattern = /#(?:meeting-)?(\d+)|\[\[(\d+)\]\]|meeting:\s*(\d+)/gi;
-    let match;
-    
-    while ((match = pattern.exec(notesText)) !== null) {
-      const meetingId = match[1] || match[2] || match[3];
-      const matchedText = match[0];
-      
-      // Add text before the match
-      if (match.index > lastIndex) {
-        parts.push(
-          <span key={`text-${lastIndex}`}>
-            {notesText.substring(lastIndex, match.index)}
-          </span>
-        );
-      }
-      
-      // Find meeting info
-      const referencedMeeting = allMeetings.find(m => m.id === parseInt(meetingId));
-      const preview = meetingPreviews[meetingId];
-      
-      // Add clickable pill
-      parts.push(
-        <Tooltip
-          key={`pill-${match.index}`}
-          title={
-            preview ? (
-              <Box sx={{ p: 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                  {preview.filename || 'Untitled'}
-                </Typography>
-                {preview.meeting_date && (
-                  <Typography variant="caption" display="block">
-                    📅 {new Date(preview.meeting_date).toLocaleDateString()}
-                  </Typography>
-                )}
-                {preview.summary && (
-                  <Typography variant="caption" display="block" sx={{ mt: 0.5, maxWidth: 300 }}>
-                    {preview.summary.substring(0, 150)}...
-                  </Typography>
-                )}
-                <Typography variant="caption" display="block" sx={{ mt: 0.5, color: 'primary.light' }}>
-                  Click to open meeting
-                </Typography>
-              </Box>
-            ) : (
-              referencedMeeting ? `Meeting: ${referencedMeeting.filename || 'Untitled'}` : 'Loading...'
-            )
-          }
-          arrow
-          placement="top"
-          onOpen={() => fetchMeetingPreview(meetingId)}
-        >
-          <Chip
-            label={`#${meetingId}`}
-            size="small"
-            clickable
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              // Navigate to the meeting details page
-              navigate(`/meetings/${meetingId}`);
-            }}
-            onMouseEnter={() => setHoveredMeetingId(parseInt(meetingId))}
-            onMouseLeave={() => setHoveredMeetingId(null)}
-            icon={<CalendarIcon fontSize="small" />}
-            color={hoveredMeetingId === parseInt(meetingId) ? "primary" : "default"}
-            sx={{
-              mx: 0.5,
-              fontWeight: 'medium',
-              cursor: 'pointer',
-              '&:hover': {
-                transform: 'scale(1.05)',
-                transition: 'transform 0.2s',
-              }
-            }}
-          />
-        </Tooltip>
-      );
-      
-      lastIndex = match.index + matchedText.length;
-    }
-    
-    // Add remaining text
-    if (lastIndex < notesText.length) {
-      parts.push(
-        <span key={`text-${lastIndex}`}>
-          {notesText.substring(lastIndex)}
-        </span>
-      );
-    }
-    
-    return <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{parts}</Typography>;
-  };
-
-  // Delete meeting handlers
-  const handleDeleteMeeting = () => {
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteMeetingConfirm = async () => {
-    try {
-      setIsUpdating(true);
-      await api.deleteMeeting(meetingId);
-      setDeleteDialogOpen(false);
-      navigate('/'); // Navigate back to the main page
+      const res = await api.getAllSpeakers();
+      setAllSpeakers(res.data);
     } catch (err) {
-      console.error('Delete meeting error:', err);
-      const errorMessage = err.response?.data?.detail || 'Failed to delete meeting. Please try again.';
-      setError(errorMessage);
-      setDeleteDialogOpen(false);
-    } finally {
-      setIsUpdating(false);
+      console.error('Failed to fetch all speakers', err);
     }
   };
 
-  // Rename meeting handlers
-  const handleRenameMeeting = () => {
-    setNewName(meeting.filename);
-    setRenameDialogOpen(true);
-  };
-
-  const handleRenameMeetingConfirm = async () => {
-    if (!newName || !newName.trim()) {
-      setError('Please enter a valid name.');
-      return;
-    }
-    
-    const trimmedName = newName.trim();
-    if (trimmedName === meeting.filename) {
-      setRenameDialogOpen(false);
-      setNewName('');
-      return; // No change needed
-    }
-
-    try {
-      setIsUpdating(true);
-      const response = await api.renameMeeting(meetingId, trimmedName);
-      console.log('Rename response:', response);
-      setMeeting({ ...meeting, filename: trimmedName });
-      setError(null);
-      setRenameDialogOpen(false);
-      setNewName('');
-    } catch (err) {
-      console.error('Rename meeting error:', err);
-      const errorMessage = err.response?.data?.detail || 'Failed to rename meeting. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Download meeting handlers
-  const handleDownloadMenuOpen = (event) => {
-    setDownloadMenuAnchor(event.currentTarget);
-  };
-
-  const handleDownloadMenuClose = () => {
-    setDownloadMenuAnchor(null);
-  };
-
-  const handleDownloadMeeting = async (format) => {
-    handleDownloadMenuClose();
-    
-    try {
-      setIsUpdating(true);
-      const response = await api.downloadMeeting(meetingId, format);
-      
-      // Create a blob from the response data
-      const blob = new Blob([response.data], { type: response.headers['content-type'] });
-      
-      // Create a link element and trigger download
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      // Get filename from meeting name
-      const baseName = meeting.filename.replace(/\.[^/.]+$/, ""); // Remove extension
-      link.download = `${baseName}.${format}`;
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      setError(null);
-    } catch (err) {
-      console.error('Download meeting error:', err);
-      const errorMessage = err.response?.data?.detail || 'Failed to download meeting. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Attachment handlers
   const fetchAttachments = async () => {
     try {
       const response = await api.getMeetingAttachments(meetingId);
@@ -584,1624 +206,849 @@ const MeetingDetails = () => {
     }
   };
 
-  const handleAttachmentDialogOpen = () => {
-    setAttachmentDialogOpen(true);
-    setSelectedFile(null);
-    setAttachmentDescription('');
-  };
-
-  const handleAttachmentDialogClose = () => {
-    setAttachmentDialogOpen(false);
-    setSelectedFile(null);
-    setAttachmentDescription('');
-  };
-
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
-
-  const handleUploadAttachment = async () => {
-    if (!selectedFile) return;
-    
-    try {
-      setUploadingAttachment(true);
-      await api.uploadAttachment(meetingId, selectedFile, attachmentDescription);
-      await fetchAttachments();
-      handleAttachmentDialogClose();
-      setError(null);
-    } catch (err) {
-      console.error('Upload attachment error:', err);
-      setError('Failed to upload attachment. Please try again.');
-    } finally {
-      setUploadingAttachment(false);
-    }
-  };
-
-  const handleDownloadAttachment = async (attachmentId, filename) => {
-    try {
-      const response = await api.downloadAttachment(attachmentId);
-      
-      // Create a blob and download
-      const blob = new Blob([response.data], { type: response.headers['content-type'] });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Download attachment error:', err);
-      setError('Failed to download attachment.');
-    }
-  };
-
-  const handlePreviewAttachment = (attachmentId) => {
-    // Open preview in new tab
-    const previewUrl = api.previewAttachment(attachmentId);
-    window.open(previewUrl, '_blank');
-  };
-
-  const handleDeleteAttachment = async (attachmentId) => {
-    if (!window.confirm('Are you sure you want to delete this attachment?')) {
-      return;
-    }
-    
-    try {
-      await api.deleteAttachment(attachmentId);
-      await fetchAttachments();
-      setError(null);
-    } catch (err) {
-      console.error('Delete attachment error:', err);
-      setError('Failed to delete attachment.');
-    }
-  };
-
-  const handleEditAttachmentDescription = (attachment) => {
-    setEditingAttachment(attachment);
-  };
-
-  const handleUpdateAttachmentDescription = async () => {
-    if (!editingAttachment) return;
-    
-    try {
-      await api.updateAttachment(editingAttachment.id, editingAttachment.description);
-      await fetchAttachments();
-      setEditingAttachment(null);
-      setError(null);
-    } catch (err) {
-      console.error('Update attachment error:', err);
-      setError('Failed to update attachment description.');
-    }
-  };
-
   const fetchAvailableFolders = async () => {
     try {
       const response = await api.get('/api/v1/meetings/');
       const folders = [...new Set(response.data.map(m => m.folder).filter(f => f && f !== 'Uncategorized'))];
       setAvailableFolders(folders.sort());
-      // Also store all meetings for autocomplete
       setAllMeetings(response.data.filter(m => m.id !== parseInt(meetingId)));
     } catch (err) {
       console.error('Error fetching folders:', err);
     }
   };
 
+  const fetchAvailableTags = async () => {
+    try {
+      const response = await api.getAllTags();
+      setAvailableTags(response.data);
+    } catch (err) {
+      console.error('Error fetching tags:', err);
+    }
+  };
+
   useEffect(() => {
-  const fetchMeetingDetails = async (isInitial = false) => {
-      try {
-        if (isInitial) {
-          setIsInitialLoading(true);
-        } else {
-          setIsUpdating(true);
-        }
-        const response = await api.get(`/api/v1/meetings/${meetingId}`);
-  setMeeting(response.data);
-  setTags(response.data.tags || '');
-  setFolder(response.data.folder || '');
-  setNotes(response.data.notes || '');
-        setError(null);
-        
-        // Fetch available folders for autocomplete
-        await fetchAvailableFolders();
-        
-        // Fetch attachments
-        await fetchAttachments();
-        
-        return response.data;
-      } catch (err) {
-        setError('Failed to fetch meeting details.');
-        console.error(err);
-        return null;
-      } finally {
-        if (isInitial) {
-          setIsInitialLoading(false);
-        } else {
-          setIsUpdating(false);
-        }
-      }
-    };
-
-    let pollTimeout = null;
-    let isPolling = false;
-
-    const startSmartPolling = (currentMeeting) => {
-      if (isPolling || !currentMeeting || (currentMeeting.status !== 'pending' && currentMeeting.status !== 'processing')) {
-        return;
-      }
-
-      isPolling = true;
-      
-      // Smart polling intervals based on status and progress
-      let pollInterval;
-      if (currentMeeting.status === 'pending') {
-        pollInterval = 10000; // 10 seconds for pending
-      } else if (currentMeeting.overall_progress && currentMeeting.overall_progress > 80) {
-        pollInterval = 3000; // 3 seconds when close to completion
-      } else if (currentMeeting.overall_progress && currentMeeting.overall_progress > 50) {
-        pollInterval = 5000; // 5 seconds in middle stages
-      } else {
-        pollInterval = 8000; // 8 seconds for early stages
-      }
-
-      const doPoll = async () => {
-        try {
-          const updatedMeeting = await fetchMeetingDetails(false);
-          if (updatedMeeting && (updatedMeeting.status === 'pending' || updatedMeeting.status === 'processing')) {
-            // Continue polling with updated intervals
-            pollTimeout = setTimeout(doPoll, pollInterval);
-          } else {
-            // Processing completed or failed, stop polling
-            isPolling = false;
-          }
-        } catch (err) {
-          console.error('Error during polling:', err);
-          // On error, stop polling and let user manually refresh
-          isPolling = false;
-        }
-      };
-
-      pollTimeout = setTimeout(doPoll, pollInterval);
-    };
-
-    // Initial fetch
     fetchMeetingDetails(true).then((initialMeeting) => {
       if (initialMeeting) {
-        // Fetch speakers
-        api.getSpeakers(meetingId).then(res => setSpeakers(res.data)).catch(() => setSpeakers([]));
-        // Start polling only if meeting is processing
-        setTimeout(() => startSmartPolling(initialMeeting), 2000);
+        fetchSpeakers();
+        fetchAllSpeakers();
+        fetchAttachments();
+        fetchAvailableFolders();
+        fetchAvailableTags();
+        
+        // Smart polling if processing
+        if (initialMeeting.status === 'pending' || initialMeeting.status === 'processing') {
+          startSmartPolling(initialMeeting);
+        }
       }
     });
-
-    return () => {
-      isPolling = false;
-      if (pollTimeout) {
-        clearTimeout(pollTimeout);
-      }
-    };
-
   }, [meetingId]);
 
-  if (isInitialLoading) {
+  let pollTimeout = null;
+  const startSmartPolling = (currentMeeting) => {
+    let pollInterval = 5000;
+    if (currentMeeting.status === 'pending') pollInterval = 10000;
+    else if (currentMeeting.overall_progress > 80) pollInterval = 3000;
+
+    const doPoll = async () => {
+      const updated = await fetchMeetingDetails(false);
+      if (updated && (updated.status === 'pending' || updated.status === 'processing')) {
+        pollTimeout = setTimeout(doPoll, pollInterval);
+      }
+    };
+    pollTimeout = setTimeout(doPoll, pollInterval);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollTimeout) clearTimeout(pollTimeout);
+    };
+  }, []);
+
+  // --- Handlers ---
+
+  const handleTabChange = (event, newValue) => setActiveTab(newValue);
+
+  const handleManualRefresh = () => fetchMeetingDetails(false);
+
+  const handleRestartProcessing = async () => {
+    if (!window.confirm('Restart processing? This will cancel current progress.')) return;
+    try {
+      setIsUpdating(true);
+      const response = await api.post(`/api/v1/meetings/${meetingId}/restart-processing`);
+      setMeeting(response.data);
+      startSmartPolling(response.data);
+    } catch (err) {
+      setError('Failed to restart processing.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRenameMeeting = async () => {
+    if (!newName.trim()) return;
+    try {
+      setIsUpdating(true);
+      await api.renameMeeting(meetingId, newName.trim());
+      setMeeting(prev => ({ ...prev, filename: newName.trim() }));
+      setRenameDialogOpen(false);
+    } catch (err) {
+      setError('Failed to rename meeting.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteMeeting = async () => {
+    try {
+      setIsUpdating(true);
+      await api.deleteMeeting(meetingId);
+      navigate('/');
+    } catch (err) {
+      setError('Failed to delete meeting.');
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUpdateTagsFolder = async () => {
+    try {
+      const res = await api.updateMeetingTagsFolder(meetingId, tags.join(','), folder);
+      setMeeting(res.data);
+    } catch (err) {
+      setError('Failed to update tags/folder');
+    }
+  };
+
+  // Speaker Handlers
+  const handleUpdateSpeaker = async () => {
+    if (!editingSpeaker) return;
+    try {
+      const res = await api.updateSpeaker(editingSpeaker.id, editingSpeaker);
+      setSpeakers(speakers.map(s => s.id === res.data.id ? res.data : s));
+      setEditingSpeaker(null);
+      fetchMeetingDetails(false); // Refresh transcript
+    } catch (err) {
+      setError('Failed to update speaker');
+    }
+  };
+
+  // Action Item Handlers
+  const handleAddActionItem = async () => {
+    if (!newActionItem.task.trim()) return;
+    try {
+      const res = await api.addActionItem(meeting.transcription.id, newActionItem);
+      setMeeting(prev => ({
+        ...prev,
+        transcription: {
+          ...prev.transcription,
+          action_items: [...prev.transcription.action_items, res.data]
+        }
+      }));
+      setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false });
+    } catch (err) {
+      setError('Failed to add action item');
+    }
+  };
+
+  const handleUpdateActionItem = async () => {
+    if (!editingActionItem) return;
+    try {
+      const res = await api.updateActionItem(editingActionItem.id, editingActionItem);
+      setMeeting(prev => ({
+        ...prev,
+        transcription: {
+          ...prev.transcription,
+          action_items: prev.transcription.action_items.map(a => a.id === res.data.id ? res.data : a)
+        }
+      }));
+      setEditingActionItem(null);
+    } catch (err) {
+      setError('Failed to update action item');
+    }
+  };
+
+  const handleDeleteActionItem = async (id) => {
+    try {
+      await api.deleteActionItem(id);
+      setMeeting(prev => ({
+        ...prev,
+        transcription: {
+          ...prev.transcription,
+          action_items: prev.transcription.action_items.filter(a => a.id !== id)
+        }
+      }));
+    } catch (err) {
+      setError('Failed to delete action item');
+    }
+  };
+
+  // Notes Handlers
+  const handleUpdateNotes = async () => {
+    try {
+      const res = await api.updateMeetingNotes(meetingId, notes);
+      setMeeting(res.data);
+      setIsEditingNotes(false);
+    } catch (err) {
+      setError('Failed to update notes');
+    }
+  };
+
+  const handleNotesChange = (e) => {
+    const value = e.target.value;
+    setNotes(value);
+    setCursorPosition(e.target.selectionStart);
+    
+    // Simple suggestion logic
+    const textBefore = value.substring(0, e.target.selectionStart);
+    const lastHash = textBefore.lastIndexOf('#');
+    if (lastHash !== -1) {
+      const query = textBefore.substring(lastHash + 1);
+      if (/^[a-zA-Z0-9\s-]*$/.test(query)) {
+        const term = query.replace('meeting-', '').toLowerCase().trim();
+        const matches = allMeetings.filter(m => 
+          m.id.toString().includes(term) || m.filename.toLowerCase().includes(term)
+        ).slice(0, 10);
+        setMeetingSuggestions(matches);
+        setShowMeetingSuggestions(matches.length > 0);
+        return;
+      }
+    }
+    setShowMeetingSuggestions(false);
+  };
+
+  const insertMeetingReference = (m) => {
+    const textBefore = notes.substring(0, cursorPosition);
+    const lastHash = textBefore.lastIndexOf('#');
+    if (lastHash !== -1) {
+      const newNotes = notes.substring(0, lastHash) + `#meeting-${m.id} ` + notes.substring(cursorPosition);
+      setNotes(newNotes);
+      setShowMeetingSuggestions(false);
+    }
+  };
+
+  // Attachment Handlers
+  const handleUploadAttachment = async () => {
+    if (!selectedFile) return;
+    try {
+      setUploadingAttachment(true);
+      await api.uploadAttachment(meetingId, selectedFile, attachmentDescription);
+      await fetchAttachments();
+      setAttachmentDialogOpen(false);
+      setSelectedFile(null);
+      setAttachmentDescription('');
+    } catch (err) {
+      setError('Failed to upload attachment');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (id) => {
+    if (!window.confirm('Delete attachment?')) return;
+    try {
+      await api.deleteAttachment(id);
+      fetchAttachments();
+    } catch (err) {
+      setError('Failed to delete attachment');
+    }
+  };
+
+  const handleDownloadMeeting = async (format) => {
+    setDownloadMenuAnchor(null);
+    try {
+      const response = await api.downloadMeeting(meetingId, format);
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${meeting.filename.replace(/\.[^/.]+$/, "")}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      setError('Failed to download meeting');
+    }
+  };
+
+  // --- Render Helpers ---
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'success';
+      case 'processing': return 'primary';
+      case 'failed': return 'error';
+      default: return 'warning';
+    }
+  };
+
+  if (isLoading) {
     return (
-      <Box>
-        <Button 
-          startIcon={<ArrowBackIcon />} 
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Back to Dashboard
-        </Button>
-        <Card elevation={3}>
-          <CardContent>
-            <Skeleton variant="text" height={40} width="60%" />
-            <Skeleton variant="text" height={20} width="40%" sx={{ mb: 2 }} />
-            <Skeleton variant="rectangular" height={200} />
-          </CardContent>
-        </Card>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
       </Box>
     );
   }
 
-  if (error) {
-    return (
-      <Box>
-        <Button 
-          startIcon={<ArrowBackIcon />} 
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Back to Dashboard
-        </Button>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
-
-  if (!meeting) {
-    return (
-      <Box>
-        <Button 
-          startIcon={<ArrowBackIcon />} 
-          onClick={() => navigate('/')}
-          sx={{ mb: 2 }}
-        >
-          Back to Dashboard
-        </Button>
-        <Alert severity="info">No meeting data found.</Alert>
-      </Box>
-    );
-  }
+  if (!meeting) return <Alert severity="error">Meeting not found</Alert>;
 
   return (
-    <Box>
-      <Button 
-        startIcon={<ArrowBackIcon />} 
-        onClick={() => navigate('/')}
-        sx={{ mb: 2 }}
-        variant="outlined"
-      >
-        Back to Dashboard
-      </Button>
-
-      <Card elevation={3} sx={{ mb: 3 }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h4" component="h1">
+    <Box sx={{ pb: 4 }}>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Button 
+          startIcon={<ArrowBackIcon />} 
+          onClick={() => navigate('/meetings/browse')}
+          sx={{ mb: 2 }}
+        >
+          Back to Meetings
+        </Button>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="h4" fontWeight="700" gutterBottom>
               {meeting.filename}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {isUpdating && (
-                <CircularProgress size={16} sx={{ mr: 1 }} />
-              )}
-              {meeting.transcription && (
-                <>
-                  <Button 
-                    variant="contained" 
-                    size="small"
-                    startIcon={<DownloadIcon />}
-                    onClick={handleDownloadMenuOpen}
-                    sx={{ mr: 1 }}
-                  >
-                    Download
-                  </Button>
-                  <Menu
-                    anchorEl={downloadMenuAnchor}
-                    open={Boolean(downloadMenuAnchor)}
-                    onClose={handleDownloadMenuClose}
-                  >
-                    <MenuItem onClick={() => handleDownloadMeeting('txt')}>
-                      Text (.txt)
-                    </MenuItem>
-                    <MenuItem onClick={() => handleDownloadMeeting('json')}>
-                      JSON (.json)
-                    </MenuItem>
-                    <MenuItem onClick={() => handleDownloadMeeting('docx')}>
-                      Word Document (.docx)
-                    </MenuItem>
-                    <MenuItem onClick={() => handleDownloadMeeting('pdf')}>
-                      PDF (.pdf)
-                    </MenuItem>
-                  </Menu>
-                </>
-              )}
-              <Button 
-                variant="outlined" 
-                size="small"
-                startIcon={<EditIcon />}
-                onClick={handleRenameMeeting}
-                sx={{ mr: 1 }}
-              >
-                Rename
-              </Button>
-              <Button 
-                variant="outlined" 
-                color="error" 
-                size="small"
-                startIcon={<DeleteIcon />}
-                onClick={handleDeleteMeeting}
-                sx={{ mr: 1 }}
-              >
-                Delete Meeting
-              </Button>
-              <Chip
-                label={meeting.status}
-                color={getStatusColor(meeting.status)}
-                variant="filled"
-                size="large"
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Chip 
+                label={meeting.status.toUpperCase()} 
+                color={getStatusColor(meeting.status)} 
+                size="small" 
+                icon={meeting.status === 'completed' ? <CheckCircleIcon /> : <ScheduleIcon />}
               />
-              {meeting.status === 'completed' && (
-                <Chip
-                  label={meeting.embeddings_computed ? '✓ RAG Ready' : '⏳ Indexing...'}
-                  color={meeting.embeddings_computed ? 'success' : 'warning'}
-                  variant="outlined"
-                  size="medium"
-                  sx={{ ml: 1 }}
-                />
+              <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                <CalendarIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                {new Date(meeting.created_at).toLocaleString()}
+              </Typography>
+              {meeting.folder && (
+                <Chip icon={<FolderIcon />} label={meeting.folder} size="small" variant="outlined" />
               )}
-            </Box>
+            </Stack>
           </Box>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            <CalendarIcon sx={{ fontSize: 16, mr: 1, verticalAlign: 'middle' }} />
-            Uploaded on: {new Date(meeting.created_at).toLocaleString()}
-          </Typography>
-          {meeting.status === 'completed' && !meeting.embeddings_computed && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              This meeting is being indexed for chat retrieval. The chat feature will be available shortly.
-            </Alert>
-          )}
-          
-          {/* Tags and Folder Edit - Improved UI */}
-          <Paper elevation={0} sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2, mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom fontWeight="medium">
-              Organization
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' } }}>
-              <Autocomplete
-                freeSolo
-                options={availableFolders}
-                value={folder}
-                onChange={(event, newValue) => {
-                  setFolder(newValue || '');
-                }}
-                onInputChange={(event, newInputValue) => {
-                  setFolder(newInputValue);
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Folder"
-                    placeholder="e.g., Team Meetings, Q1 2024"
-                    size="small"
-                    InputProps={{
-                      ...params.InputProps,
-                      startAdornment: (
-                        <>
-                          <Box component="span" sx={{ mr: 1 }}>
-                            📁
-                          </Box>
-                          {params.InputProps.startAdornment}
-                        </>
-                      ),
-                    }}
-                  />
-                )}
-                fullWidth
-              />
-              <TextField
-                label="Tags"
-                value={tags}
-                onChange={e => setTags(e.target.value)}
-                placeholder="e.g., urgent, planning, review"
-                helperText="Comma separated"
-                size="small"
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <Box component="span" sx={{ mr: 1 }}>
-                      🏷️
-                    </Box>
-                  ),
-                }}
-              />
-              <Button 
-                onClick={handleUpdateTagsFolder} 
-                size="medium" 
-                variant="contained"
-                sx={{ minWidth: 100, height: 40 }}
-              >
-                Save
-              </Button>
-            </Box>
-          </Paper>
 
-          {/* Notes Section */}
-          <Paper elevation={0} sx={{ p: 2, bgcolor: 'info.lighter', borderRadius: 2, mb: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight="medium">
-                Meeting Notes
-              </Typography>
-              {!isEditingNotes ? (
-                <IconButton 
-                  size="small" 
-                  onClick={() => setIsEditingNotes(true)}
-                  sx={{ color: 'primary.main' }}
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {meeting.status === 'completed' && (
+              <>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<DownloadIcon />}
+                  onClick={(e) => setDownloadMenuAnchor(e.currentTarget)}
                 >
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              ) : (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => {
-                      handleUpdateNotes();
-                      setIsEditingNotes(false);
-                    }}
-                    sx={{ color: 'success.main' }}
-                  >
-                    <SaveIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => {
-                      setNotes(meeting.notes || '');
-                      setIsEditingNotes(false);
-                      setShowMeetingSuggestions(false);
-                    }}
-                    sx={{ color: 'error.main' }}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              )}
-            </Box>
-
-            {isEditingNotes ? (
-              <Box>
-                <TextField
-                  label="Notes"
-                  value={notes}
-                  onChange={handleNotesChange}
-                  placeholder="Add notes about this meeting..."
-                  multiline
-                  rows={4}
-                  fullWidth
-                  inputRef={notesRef}
-                  autoFocus
-                  InputProps={{
-                    startAdornment: (
-                      <Box component="span" sx={{ mr: 1, alignSelf: 'flex-start', mt: 1 }}>
-                        📝
-                      </Box>
-                    ),
-                  }}
-                  sx={{ bgcolor: 'white' }}
-                />
-                
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, ml: 1 }}>
-                  💡 Type # to filter by ID or name (e.g., #123 or #KGE), then select a meeting
-                </Typography>
-              </Box>
-            ) : (
-              <Box sx={{ 
-                p: 2, 
-                bgcolor: 'white', 
-                borderRadius: 1,
-                minHeight: 80,
-                border: '1px solid',
-                borderColor: 'divider'
-              }}>
-                {renderNotesWithPills(meeting.notes)}
-              </Box>
-            )}
-          </Paper>
-
-          {/* Autocomplete Suggestions Popper - Renders independently */}
-          <Popper
-            open={showMeetingSuggestions && meetingSuggestions.length > 0}
-            anchorEl={notesRef.current}
-            placement="bottom-start"
-            style={{ zIndex: 1500 }}
-            modifiers={[
-              {
-                name: 'offset',
-                options: {
-                  offset: [0, 8],
-                },
-              },
-            ]}
-          >
-            <ClickAwayListener onClickAway={() => setShowMeetingSuggestions(false)}>
-              <Paper
-                elevation={8}
-                sx={{
-                  maxHeight: '300px',
-                  width: notesRef.current ? notesRef.current.offsetWidth : 400,
-                  overflow: 'auto',
-                  bgcolor: 'background.paper',
-                  border: '2px solid',
-                  borderColor: 'primary.main',
-                  borderRadius: 1,
-                }}
-              >
-                <List dense sx={{ py: 0 }}>
-                  {meetingSuggestions.map((m) => (
-                    <ListItem
-                      key={m.id}
-                      button
-                      onClick={() => insertMeetingReference(m)}
-                      sx={{
-                        borderBottom: '1px solid',
-                        borderColor: 'divider',
-                        '&:last-child': {
-                          borderBottom: 'none',
-                        },
-                        '&:hover': {
-                          bgcolor: 'primary.light',
-                          color: 'primary.contrastText',
-                          '& .MuiListItemIcon-root': {
-                            color: 'primary.contrastText',
-                          },
-                        },
-                        py: 1.5,
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <CalendarIcon fontSize="small" color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={`#${m.id} - ${m.filename || 'Untitled'}`}
-                        secondary={m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : 'No date'}
-                        primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                        secondaryTypographyProps={{ variant: 'caption' }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </ClickAwayListener>
-          </Popper>
-          <Grid container spacing={2} sx={{ mt: 2 }}>
-            {/* ...existing file info boxes... */}
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {/* Audio Player Section */}
-      {meeting.audio_filepath && (
-        <Card elevation={3} sx={{ mb: 3 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <PlayCircleIcon sx={{ mr: 1, color: 'primary.main' }} />
-              <Typography variant="h5">Audio Playback</Typography>
-            </Box>
-            <Box sx={{ 
-              bgcolor: 'grey.100', 
-              p: 2, 
-              borderRadius: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 1
-            }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Listen to the meeting audio
-              </Typography>
-              <audio 
-                controls 
-                style={{ width: '100%' }}
-                preload="metadata"
-              >
-                <source 
-                  src={`/api/v1/meetings/${meeting.id}/audio`} 
-                  type="audio/mpeg" 
-                />
-                Your browser does not support the audio element.
-              </audio>
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Processing Information Section */}
-      {(meeting.status === 'processing' || meeting.status === 'pending') && (
-        <Card elevation={3} sx={{ mb: 3 }}>
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <CircularProgress size={24} sx={{ mr: 2 }} />
-              <Typography variant="h5" sx={{ flexGrow: 1 }}>Processing Status</Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {(meeting.status === 'processing' || meeting.status === 'failed') && (
-                  <Button
-                    startIcon={<RestartAltIcon />}
-                    onClick={handleRestartProcessing}
-                    disabled={isUpdating}
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                  >
-                    Restart
-                  </Button>
-                )}
-                <Button
-                  startIcon={<RefreshIcon />}
-                  onClick={handleManualRefresh}
-                  disabled={isUpdating}
-                  size="small"
-                  variant="outlined"
-                >
-                  {isUpdating ? 'Refreshing...' : 'Refresh'}
+                  Export
                 </Button>
-              </Box>
-            </Box>
-            
-            <Stepper activeStep={getActiveStep(meeting.current_stage)} alternativeLabel sx={{ mb: 3 }}>
-              <Step>
-                <StepLabel>File Conversion</StepLabel>
-              </Step>
-              <Step>
-                <StepLabel>Speaker Diarization</StepLabel>
-              </Step>
-              <Step>
-                <StepLabel>Transcription</StepLabel>
-              </Step>
-              <Step>
-                <StepLabel>Analysis</StepLabel>
-              </Step>
-            </Stepper>
-            
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Overall Progress: {Math.round(meeting.overall_progress || 0)}%
-              </Typography>
-              <LinearProgress 
-                variant="determinate" 
-                value={meeting.overall_progress || 0} 
-                sx={{ height: 8, borderRadius: 4, mb: 2 }}
-              />
-              
-              {meeting.current_stage && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Current Stage: {stageDisplayNames[meeting.current_stage] || meeting.current_stage.replace('_', ' ').toUpperCase()} 
-                    {meeting.stage_progress ? ` (${meeting.stage_progress.toFixed(0)}%)` : ''}
-                  </Typography>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={meeting.stage_progress || 0} 
-                    sx={{ height: 6, borderRadius: 3 }}
-                    color="secondary"
-                  />
-                </Box>
-              )}
-            </Box>
-            
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              {meeting.processing_start_time && (
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={1} sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <AccessTimeIcon sx={{ fontSize: 18, mr: 1, color: 'primary.main' }} />
-                      <Typography variant="subtitle2">Processing Started</Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {new Date(meeting.processing_start_time).toLocaleString()}
-                    </Typography>
-                    {meeting.processing_start_time && (
-                      <Typography variant="caption" color="text.secondary">
-                        {Math.floor((new Date() - new Date(meeting.processing_start_time)) / (1000 * 60))} minutes ago
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-              )}
-              
-              {meeting.stage_start_time && meeting.current_stage && (
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={1} sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <PlayCircleIcon sx={{ fontSize: 18, mr: 1, color: 'secondary.main' }} />
-                      <Typography variant="subtitle2">Current Stage</Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {stageDisplayNames[meeting.current_stage] || meeting.current_stage}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Started {Math.floor((new Date() - new Date(meeting.stage_start_time)) / (1000 * 60))} min ago
-                    </Typography>
-                  </Paper>
-                </Grid>
-              )}
-              
-              {meeting.estimated_duration && (
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={1} sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <ScheduleIcon sx={{ fontSize: 18, mr: 1, color: 'info.main' }} />
-                      <Typography variant="subtitle2">Estimated Duration</Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      ~{meeting.estimated_duration} minutes
-                    </Typography>
-                    {meeting.processing_start_time && meeting.overall_progress > 0 && (
-                      <Typography variant="caption" color="text.secondary">
-                        {(() => {
-                          const elapsed = (new Date() - new Date(meeting.processing_start_time)) / (1000 * 60);
-                          const totalEstimated = elapsed / (meeting.overall_progress / 100);
-                          const remaining = Math.max(0, totalEstimated - elapsed);
-                          return `~${Math.ceil(remaining)} min remaining`;
-                        })()}
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-              )}
-              
-              {meeting.file_size && (
-                <Grid item xs={12} sm={6}>
-                  <Paper elevation={1} sx={{ p: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <InfoIcon sx={{ fontSize: 18, mr: 1, color: 'success.main' }} />
-                      <Typography variant="subtitle2">File Details</Typography>
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {(meeting.file_size / (1024 * 1024)).toFixed(1)} MB
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Processing rate: {meeting.processing_start_time && meeting.overall_progress > 0 ? 
-                        `${((meeting.file_size / (1024 * 1024)) / ((new Date() - new Date(meeting.processing_start_time)) / (1000 * 60)) * (meeting.overall_progress / 100)).toFixed(1)} MB/min` : 
-                        'Calculating...'}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              )}
-            </Grid>
-            
-            {meeting.processing_logs && (
-              <Accordion sx={{ mt: 2 }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                    <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
-                      Processing Logs & Details
-                    </Typography>
-                    <Chip 
-                      label={`${(Array.isArray(meeting.processing_logs) ? meeting.processing_logs : meeting.processing_logs.split('\n')).length} entries`} 
-                      size="small" 
-                      variant="outlined" 
-                    />
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Paper elevation={0} sx={{ bgcolor: 'grey.900', color: 'white', p: 2, borderRadius: 1 }}>
-                    <Typography variant="body2" component="pre" sx={{ 
-                      fontFamily: 'monospace', 
-                      whiteSpace: 'pre-wrap',
-                      fontSize: '0.75rem',
-                      lineHeight: 1.4,
-                      margin: 0
-                    }}>
-                      {Array.isArray(meeting.processing_logs) ? 
-                        meeting.processing_logs.join('\n') : 
-                        meeting.processing_logs}
-                    </Typography>
-                  </Paper>
-                  {meeting.current_stage && (
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Current Stage Details:</strong>
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        • Stage: {stageDisplayNames[meeting.current_stage] || meeting.current_stage}
-                      </Typography>
-                      {meeting.stage_progress && (
-                        <Typography variant="body2">
-                          • Stage Progress: {meeting.stage_progress.toFixed(1)}%
-                        </Typography>
-                      )}
-                      {meeting.stage_start_time && (
-                        <Typography variant="body2">
-                          • Stage Duration: {Math.floor((new Date() - new Date(meeting.stage_start_time)) / (1000 * 60))} minutes
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
-                </AccordionDetails>
-              </Accordion>
-            )}
-            
-            {meeting.error_message && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                <AlertTitle>Processing Error</AlertTitle>
-                {meeting.error_message}
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {meeting.status === 'completed' && meeting.transcription ? (
-        <Grid container spacing={3}>
-          {/* Speaker Management Section - Prominent at top */}
-          {speakers && speakers.length > 0 && (
-            <Grid item xs={12}>
-              <Card elevation={3}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <PersonIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h5">Speakers</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
-                      Rename speakers to update them throughout the transcript and action items
-                    </Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    {speakers.map(speaker => (
-                      <Grid item xs={12} sm={6} md={4} key={speaker.id}>
-                        <Paper 
-                          elevation={editingSpeaker?.id === speaker.id ? 3 : 1} 
-                          sx={{ 
-                            p: 2, 
-                            border: editingSpeaker?.id === speaker.id ? '2px solid' : '1px solid',
-                            borderColor: editingSpeaker?.id === speaker.id ? 'primary.main' : 'grey.300',
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          {editingSpeaker?.id === speaker.id ? (
-                            <Box>
-                              <Box sx={{ 
-                                mb: 2, 
-                                p: 1.5, 
-                                bgcolor: 'primary.light', 
-                                borderRadius: 1,
-                                textAlign: 'center'
-                              }}>
-                                <Typography variant="caption" sx={{ color: 'primary.contrastText', fontWeight: 'bold' }}>
-                                  DETECTED AS
-                                </Typography>
-                                <Typography variant="h6" sx={{ color: 'primary.contrastText', mt: 0.5 }}>
-                                  {editingSpeaker.label || 'Unknown'}
-                                </Typography>
-                              </Box>
-                              <TextField
-                                fullWidth
-                                label="Rename to"
-                                value={editingSpeaker.name}
-                                onChange={e => setEditingSpeaker({ ...editingSpeaker, name: e.target.value })}
-                                size="small"
-                                placeholder="Enter speaker's real name"
-                                autoFocus
-                                sx={{ mb: 2 }}
-                                helperText="This name will replace the speaker label throughout the transcript"
-                              />
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button 
-                                  onClick={handleUpdateSpeaker} 
-                                  size="small" 
-                                  variant="contained"
-                                  fullWidth
-                                  disabled={!editingSpeaker.name || !editingSpeaker.name.trim()}
-                                >
-                                  Save
-                                </Button>
-                                <Button 
-                                  onClick={() => setEditingSpeaker(null)} 
-                                  size="small" 
-                                  variant="outlined"
-                                  color="error"
-                                  fullWidth
-                                >
-                                  Cancel
-                                </Button>
-                              </Box>
-                            </Box>
-                          ) : (
-                            <Box>
-                              <Box sx={{ 
-                                mb: 2, 
-                                p: 1.5, 
-                                bgcolor: speaker.name === speaker.label ? 'warning.light' : 'success.light',
-                                borderRadius: 1,
-                                textAlign: 'center'
-                              }}>
-                                <Typography variant="caption" sx={{ 
-                                  color: speaker.name === speaker.label ? 'warning.contrastText' : 'success.contrastText',
-                                  fontWeight: 'bold' 
-                                }}>
-                                  {speaker.name === speaker.label ? 'NOT RENAMED YET' : 'RENAMED'}
-                                </Typography>
-                                <Typography variant="h6" sx={{ 
-                                  color: speaker.name === speaker.label ? 'warning.contrastText' : 'success.contrastText',
-                                  mt: 0.5 
-                                }}>
-                                  {speaker.label || 'Unknown'}
-                                </Typography>
-                              </Box>
-                              {speaker.name !== speaker.label && (
-                                <Box sx={{ mb: 2, textAlign: 'center' }}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Currently showing as
-                                  </Typography>
-                                  <Typography variant="h6" color="primary">
-                                    {speaker.name}
-                                  </Typography>
-                                </Box>
-                              )}
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button 
-                                  size="small" 
-                                  onClick={() => setEditingSpeaker({ ...speaker })}
-                                  startIcon={<EditIcon />}
-                                  variant="contained"
-                                  color={speaker.name === speaker.label ? 'warning' : 'primary'}
-                                  fullWidth
-                                >
-                                  {speaker.name === speaker.label ? 'Set Name' : 'Rename'}
-                                </Button>
-                              </Box>
-                            </Box>
-                          )}
-                        </Paper>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-          )}
-
-          <Grid item xs={12}>
-            <Card elevation={3}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <SummarizeIcon sx={{ mr: 1, color: 'primary.main', fontSize: 32 }} />
-                  <Typography variant="h4" fontWeight="600">Meeting Summary</Typography>
-                </Box>
-                <Paper 
-                  elevation={0} 
-                  sx={{ 
-                    p: 4, 
-                    bgcolor: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: 3
-                  }}
+                <Menu
+                  anchorEl={downloadMenuAnchor}
+                  open={Boolean(downloadMenuAnchor)}
+                  onClose={() => setDownloadMenuAnchor(null)}
                 >
-                  <Typography variant="body1" sx={{ lineHeight: 2, fontSize: '1.1rem', color: 'text.primary' }}>
-                    {meeting.transcription.summary.split('\n').map((line, index) => (
-                      <React.Fragment key={index}>
-                        {line}
-                        {index < meeting.transcription.summary.split('\n').length - 1 && <br />}
-                      </React.Fragment>
-                    ))}
-                  </Typography>
-                </Paper>
-              </CardContent>
-            </Card>
-          </Grid>
+                  <MenuItem onClick={() => handleDownloadMeeting('txt')}>Text (.txt)</MenuItem>
+                  <MenuItem onClick={() => handleDownloadMeeting('json')}>JSON (.json)</MenuItem>
+                  <MenuItem onClick={() => handleDownloadMeeting('docx')}>Word (.docx)</MenuItem>
+                  <MenuItem onClick={() => handleDownloadMeeting('pdf')}>PDF (.pdf)</MenuItem>
+                </Menu>
+              </>
+            )}
+            <Button 
+              variant="outlined" 
+              startIcon={<EditIcon />}
+              onClick={() => { setNewName(meeting.filename); setRenameDialogOpen(true); }}
+            >
+              Rename
+            </Button>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              startIcon={<DeleteIcon />}
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              Delete
+            </Button>
+          </Box>
+        </Box>
+      </Box>
 
-          {/* Chat Section - Full Width Card */}
-          <Grid item xs={12}>
-            <Card elevation={3} sx={{ minHeight: '700px' }}>
-              <Chat meetingId={meetingId} />
-            </Card>
-          </Grid>
+      {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 
-          <Grid item xs={12}>
-            <Card elevation={3}>
-              <CardContent sx={{ p: 4 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <AssignmentIcon sx={{ mr: 1, color: 'primary.main', fontSize: 32 }} />
-                    <Typography variant="h4" fontWeight="600">Action Items</Typography>
-                    {meeting.transcription.action_items.length > 0 && (
-                      <Chip 
-                        label={`${meeting.transcription.action_items.length} total`} 
-                        color="primary" 
-                        sx={{ ml: 2 }} 
-                      />
-                    )}
-                  </Box>
-                  <Button 
-                    variant="contained" 
-                    size="large" 
-                    startIcon={<AssignmentIcon />}
-                    onClick={() => setNewActionItem({ task: '', owner: '', due_date: '', isAdding: true })}
-                    disabled={newActionItem.isAdding}
-                    sx={{ borderRadius: 2, px: 3, py: 1.5 }}
-                  >
-                    Add New Action Item
-                  </Button>
-                </Box>
-
-                {/* Add new action item form */}
-                {newActionItem.isAdding && (
-                  <Paper elevation={2} sx={{ p: 2, mb: 2, bgcolor: 'primary.light', border: '2px solid', borderColor: 'primary.main' }}>
-                    <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: 'primary.contrastText' }}>
-                      Add New Action Item
-                    </Typography>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Task Description"
-                          value={newActionItem.task}
-                          onChange={e => setNewActionItem({ ...newActionItem, task: e.target.value })}
-                          placeholder="Enter the task to be completed..."
-                          multiline
-                          rows={2}
-                          required
-                          autoFocus
-                          variant="outlined"
-                          sx={{ bgcolor: 'white' }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Owner"
-                          value={newActionItem.owner}
-                          onChange={e => setNewActionItem({ ...newActionItem, owner: e.target.value })}
-                          placeholder="Who is responsible?"
-                          variant="outlined"
-                          sx={{ bgcolor: 'white' }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Due Date"
-                          type="date"
-                          value={newActionItem.due_date}
-                          onChange={e => setNewActionItem({ ...newActionItem, due_date: e.target.value })}
-                          InputLabelProps={{ shrink: true }}
-                          variant="outlined"
-                          sx={{ bgcolor: 'white' }}
-                        />
-                      </Grid>
-                      <Grid item xs={12}>
-                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                          <Button 
-                            onClick={handleAddActionItem} 
-                            variant="contained"
-                            disabled={!newActionItem.task || !newActionItem.task.trim()}
-                            startIcon={<CheckCircleIcon />}
-                          >
-                            Add Action Item
-                          </Button>
-                          <Button 
-                            onClick={() => setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false })} 
-                            variant="outlined"
-                            color="error"
-                          >
-                            Cancel
-                          </Button>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </Paper>
-                )}
-
-                {/* Action items list */}
-                {meeting.transcription.action_items.length > 0 ? (
-                  <List sx={{ p: 0 }}>
-                    {meeting.transcription.action_items.map((item) => (
-                      <React.Fragment key={item.id}>
-                        {editingActionItem?.id === item.id ? (
-                          // Edit mode
-                          <Paper elevation={2} sx={{ p: 2, mb: 2, bgcolor: 'warning.light', border: '2px solid', borderColor: 'warning.main' }}>
-                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: 'warning.contrastText' }}>
-                              Edit Action Item
-                            </Typography>
-                            <Grid container spacing={2}>
-                              <Grid item xs={12}>
-                                <TextField
-                                  fullWidth
-                                  label="Task Description"
-                                  value={editingActionItem.task}
-                                  onChange={e => setEditingActionItem({ ...editingActionItem, task: e.target.value })}
-                                  multiline
-                                  rows={2}
-                                  required
-                                  autoFocus
-                                  variant="outlined"
-                                  sx={{ bgcolor: 'white' }}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6}>
-                                <TextField
-                                  fullWidth
-                                  label="Owner"
-                                  value={editingActionItem.owner}
-                                  onChange={e => setEditingActionItem({ ...editingActionItem, owner: e.target.value })}
-                                  variant="outlined"
-                                  sx={{ bgcolor: 'white' }}
-                                />
-                              </Grid>
-                              <Grid item xs={12} sm={6}>
-                                <TextField
-                                  fullWidth
-                                  label="Due Date"
-                                  type="date"
-                                  value={editingActionItem.due_date}
-                                  onChange={e => setEditingActionItem({ ...editingActionItem, due_date: e.target.value })}
-                                  InputLabelProps={{ shrink: true }}
-                                  variant="outlined"
-                                  sx={{ bgcolor: 'white' }}
-                                />
-                              </Grid>
-                              <Grid item xs={12}>
-                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                                  <Button 
-                                    onClick={handleUpdateActionItem} 
-                                    variant="contained"
-                                    disabled={!editingActionItem.task || !editingActionItem.task.trim()}
-                                    startIcon={<CheckCircleIcon />}
-                                  >
-                                    Save Changes
-                                  </Button>
-                                  <Button 
-                                    onClick={() => setEditingActionItem(null)} 
-                                    variant="outlined"
-                                    color="error"
-                                  >
-                                    Cancel
-                                  </Button>
-                                </Box>
-                              </Grid>
-                            </Grid>
-                          </Paper>
-                        ) : (
-                          // Display mode
-                          <Paper 
-                            elevation={2} 
-                            sx={{ 
-                              p: 3, 
-                              mb: 3, 
-                              bgcolor: '#f8f9fa',
-                              border: '2px solid',
-                              borderColor: '#e0e0e0',
-                              borderRadius: 3,
-                              transition: 'all 0.3s',
-                              '&:hover': {
-                                elevation: 4,
-                                borderColor: 'primary.main',
-                                transform: 'translateY(-2px)',
-                                boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
-                              }
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 }}>
-                              <Box sx={{ display: 'flex', flex: 1, alignItems: 'flex-start', gap: 2 }}>
-                                <CheckCircleIcon 
-                                  color="success" 
-                                  sx={{ mt: 0.5, fontSize: 28 }} 
-                                />
-                                <Box sx={{ flex: 1 }}>
-                                  <Typography variant="h6" fontWeight="500" sx={{ mb: 2, lineHeight: 1.5 }}>
-                                    {item.task}
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                                    <Chip
-                                      icon={<PersonIcon />}
-                                      label={item.owner || 'Unassigned'}
-                                      size="medium"
-                                      variant={item.owner ? "filled" : "outlined"}
-                                      color={item.owner ? "primary" : "warning"}
-                                      sx={{ fontWeight: 500 }}
-                                    />
-                                    <Chip
-                                      icon={<CalendarIcon />}
-                                      label={item.due_date ? new Date(item.due_date).toLocaleDateString() : 'No deadline'}
-                                      size="medium"
-                                      variant={item.due_date ? "filled" : "outlined"}
-                                      color={item.due_date ? "primary" : "warning"}
-                                      sx={{ fontWeight: 500 }}
-                                    />
-                                  </Box>
-                                </Box>
-                              </Box>
-                              <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
-                                <Button 
-                                  size="medium" 
-                                  variant="outlined"
-                                  startIcon={<EditIcon />}
-                                  onClick={() => setEditingActionItem({ ...item })}
-                                  sx={{ borderRadius: 2 }}
-                                >
-                                  Edit
-                                </Button>
-                                <Button 
-                                  size="medium" 
-                                  variant="outlined"
-                                  color="error" 
-                                  startIcon={<DeleteIcon />}
-                                  onClick={() => handleDeleteActionItem(item.id)}
-                                  sx={{ borderRadius: 2 }}
-                                >
-                                  Delete
-                                </Button>
-                              </Box>
-                            </Box>
-                          </Paper>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </List>
-                ) : (
-                  <Alert severity="info" sx={{ mt: 2 }}>
-                    No action items identified in this meeting. Click "Add New" to create one.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Attachments Section */}
-          <Grid item xs={12}>
-            <Card elevation={3}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <AttachFileIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h5">Attachments</Typography>
-                    {attachments.length > 0 && (
-                      <Chip label={attachments.length} size="small" sx={{ ml: 1 }} />
-                    )}
-                  </Box>
-                  <Button 
-                    variant="contained" 
-                    size="small" 
-                    startIcon={<CloudUploadIcon />}
-                    onClick={handleAttachmentDialogOpen}
-                  >
-                    Upload File
-                  </Button>
-                </Box>
-
-                {attachments.length > 0 ? (
-                  <List>
-                    {attachments.map((attachment) => (
-                      <Paper key={attachment.id} elevation={1} sx={{ mb: 2, p: 2 }}>
-                        {editingAttachment?.id === attachment.id ? (
-                          <Box>
-                            <TextField
-                              fullWidth
-                              label="Description"
-                              value={editingAttachment.description || ''}
-                              onChange={(e) => setEditingAttachment({ ...editingAttachment, description: e.target.value })}
-                              sx={{ mb: 2 }}
-                              multiline
-                              rows={2}
-                            />
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                onClick={handleUpdateAttachmentDescription}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => setEditingAttachment(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </Box>
-                          </Box>
-                        ) : (
-                          <Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                                <DescriptionIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                                <Typography variant="subtitle1" fontWeight="bold">
-                                  {attachment.filename}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                {(attachment.mime_type === 'application/pdf' || 
-                                  attachment.mime_type?.startsWith('image/')) && (
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    startIcon={<VisibilityIcon />}
-                                    onClick={() => handlePreviewAttachment(attachment.id)}
-                                  >
-                                    Preview
-                                  </Button>
-                                )}
-                                <Button
-                                  size="small"
-                                  startIcon={<DownloadIcon />}
-                                  onClick={() => handleDownloadAttachment(attachment.id, attachment.filename)}
-                                >
-                                  Download
-                                </Button>
-                                <Button
-                                  size="small"
-                                  startIcon={<EditIcon />}
-                                  onClick={() => handleEditAttachmentDescription(attachment)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="small"
-                                  color="error"
-                                  startIcon={<DeleteIcon />}
-                                  onClick={() => handleDeleteAttachment(attachment.id)}
-                                >
-                                  Delete
-                                </Button>
-                              </Box>
-                            </Box>
-                            {attachment.description && (
-                              <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mb: 1 }}>
-                                {attachment.description}
-                              </Typography>
-                            )}
-                            <Box sx={{ display: 'flex', gap: 2, ml: 4 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                Size: {(attachment.file_size / 1024).toFixed(2)} KB
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                Type: {attachment.mime_type}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                Uploaded: {new Date(attachment.uploaded_at).toLocaleString()}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        )}
-                      </Paper>
-                    ))}
-                  </List>
-                ) : (
-                  <Alert severity="info" icon={<AttachFileIcon />}>
-                    No attachments yet. Upload supporting documents, images, or other files related to this meeting.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card elevation={3}>
-              <CardContent>
-                <Accordion>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <TranscribeIcon sx={{ mr: 1, color: 'primary.main' }} />
-                      <Typography variant="h5">Full Transcript</Typography>
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Paper elevation={1} sx={{ p: 3, bgcolor: 'grey.50', maxHeight: 400, overflow: 'auto' }}>
-                      <Typography variant="body1" sx={{ lineHeight: 1.7, fontFamily: 'monospace' }}>
-                        {meeting.transcription.full_text.split('\n').map((line, index) => (
-                          <React.Fragment key={index}>
-                            {line}
-                            {index < meeting.transcription.full_text.split('\n').length - 1 && <br />}
-                          </React.Fragment>
-                        ))}
-                      </Typography>
-                    </Paper>
-                  </AccordionDetails>
-                </Accordion>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      ) : meeting.status === 'processing' ? (
-        <ProcessingCard elevation={3}>
-          <CardContent>
-            <Typography variant="h5" gutterBottom sx={{ color: 'white' }}>
-              Processing Meeting...
-            </Typography>
-            
-            <Typography variant="h6" sx={{ mb: 3, color: 'rgba(255,255,255,0.9)' }}>
-              Current Stage: {meeting.current_stage ? stageDisplayNames[meeting.current_stage] || meeting.current_stage : 'Initializing...'}
-            </Typography>
-
-            <Box sx={{ mb: 4 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body1" sx={{ color: 'white' }}>Current Stage Progress</Typography>
-                <Typography variant="body1" sx={{ color: 'white' }}>
-                  {Math.round(meeting.stage_progress || 0)}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={meeting.stage_progress || 0}
-                sx={{ height: 8, borderRadius: 4, mb: 2 }}
-              />
-              
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body1" sx={{ color: 'white' }}>Overall Progress</Typography>
-                <Typography variant="body1" sx={{ color: 'white' }}>
-                  {Math.round(meeting.overall_progress || 0)}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={meeting.overall_progress || 0}
-                sx={{ height: 8, borderRadius: 4 }}
-              />
-            </Box>
-
-            <Stepper activeStep={stageOrder.indexOf(meeting.current_stage)} alternativeLabel>
-              {stageOrder.map((stage, index) => {
-                const status = getStageStatus(stage, meeting.current_stage, meeting.overall_progress);
-                return (
-                  <Step key={stage} completed={status === 'completed'}>
-                    <StepLabel
-                      StepIconComponent={({ active, completed }) => (
-                        <Box
-                          sx={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: completed ? 'white' : active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
-                            color: completed || active ? 'primary.main' : 'white',
-                            fontWeight: 'bold',
-                            fontSize: '0.875rem'
-                          }}
-                        >
-                          {completed ? <CheckCircleIcon /> : index + 1}
-                        </Box>
-                      )}
-                    >
-                      <Typography variant="body2" sx={{ color: 'white' }}>
-                        {stageDisplayNames[stage]}
-                      </Typography>
-                    </StepLabel>
-                  </Step>
-                );
-              })}
-            </Stepper>
-          </CardContent>
-        </ProcessingCard>
-      ) : meeting.status === 'failed' ? (
-        <Card elevation={3} sx={{ mb: 2 }}>
-          <CardContent>
-            <Alert severity="error" sx={{ mb: 2 }}>
-              <Typography variant="h6" gutterBottom>Processing Failed</Typography>
-              <Typography>
-                There was an error processing this meeting. You can try restarting the processing or upload the file again.
-              </Typography>
-              {meeting.error_message && (
-                <Typography variant="body2" sx={{ mt: 1, fontFamily: 'monospace', bgcolor: 'grey.100', p: 1, borderRadius: 1 }}>
-                  Error: {meeting.error_message}
-                </Typography>
-              )}
-            </Alert>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Button
-                startIcon={<RestartAltIcon />}
-                onClick={handleRestartProcessing}
-                disabled={isUpdating}
-                variant="contained"
-                color="warning"
-              >
-                Restart Processing
-              </Button>
-              <Button
-                startIcon={<RefreshIcon />}
-                onClick={handleManualRefresh}
-                disabled={isUpdating}
-                variant="outlined"
-              >
-                Refresh Status
-              </Button>
-            </Box>
-          </CardContent>
-        </Card>
-      ) : (
-        <Alert severity="info">
-          <Typography variant="h6" gutterBottom>Meeting Queued</Typography>
-          <Typography>
-            This meeting is queued for processing. The results will appear here once processing begins.
-          </Typography>
+      {/* Failed Status Card */}
+      {meeting.status === 'failed' && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              startIcon={<RestartAltIcon />}
+              onClick={handleRestartProcessing}
+              disabled={isUpdating}
+            >
+              Restart Processing
+            </Button>
+          }
+        >
+          Processing failed. {meeting.error_message || 'An error occurred during processing.'}
         </Alert>
       )}
 
-      {/* Rename Meeting Dialog */}
-      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} maxWidth="sm" fullWidth>
+      {/* Processing Status Card */}
+      {(meeting.status === 'processing' || meeting.status === 'pending') && (
+        <ProcessingCard elevation={3} sx={{ mb: 4 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <CircularProgress size={24} sx={{ color: 'white', mr: 2 }} />
+              <Typography variant="h6">Processing in Progress...</Typography>
+              <Box sx={{ flexGrow: 1 }} />
+              <Button 
+                startIcon={<RefreshIcon />} 
+                onClick={handleManualRefresh} 
+                sx={{ color: 'white', borderColor: 'white' }} 
+                variant="outlined" 
+                size="small"
+              >
+                Refresh
+              </Button>
+            </Box>
+            <LinearProgress variant="determinate" value={meeting.overall_progress || 0} sx={{ height: 10, borderRadius: 5, mb: 1 }} />
+            <Typography variant="body2" align="right">{Math.round(meeting.overall_progress || 0)}% Complete</Typography>
+            
+            <Stepper activeStep={['conversion', 'diarization', 'transcription', 'analysis'].indexOf(meeting.current_stage)} alternativeLabel sx={{ mt: 2 }}>
+              {['File Conversion', 'Speaker ID', 'Transcription', 'AI Analysis'].map((label) => (
+                <Step key={label}>
+                  <StepLabel sx={{ '& .MuiStepLabel-label': { color: 'white !important' }, '& .MuiStepIcon-root': { color: 'rgba(255,255,255,0.5)' }, '& .MuiStepIcon-root.Mui-active': { color: 'white' }, '& .MuiStepIcon-root.Mui-completed': { color: 'white' } }}>
+                    {label}
+                  </StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </CardContent>
+        </ProcessingCard>
+      )}
+
+      {/* Main Content Tabs */}
+      <Paper elevation={2} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange} 
+          variant="scrollable" 
+          scrollButtons="auto"
+          sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}
+        >
+          <Tab icon={<SummarizeIcon />} label="Overview" iconPosition="start" />
+          <Tab icon={<DescriptionIcon />} label="Transcript" iconPosition="start" disabled={!meeting.transcription} />
+          <Tab icon={<AssignmentIcon />} label="Action Items" iconPosition="start" disabled={!meeting.transcription} />
+          <Tab icon={<ChatIcon />} label="AI Chat" iconPosition="start" disabled={!meeting.transcription} />
+          <Tab icon={<NoteIcon />} label="Notes" iconPosition="start" />
+          <Tab icon={<AttachFileIcon />} label={`Attachments (${attachments.length})`} iconPosition="start" />
+        </Tabs>
+
+        {/* Overview Tab */}
+        <TabPanel value={activeTab} index={0}>
+          <Grid container spacing={3} sx={{ px: 3 }}>
+            <Grid item xs={12} md={8}>
+              {/* Audio Player */}
+              {meeting.audio_filepath && (
+                <Card variant="outlined" sx={{ mb: 3, bgcolor: 'grey.50' }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" gutterBottom fontWeight="bold">Audio Recording</Typography>
+                    <audio controls style={{ width: '100%' }} src={`/api/v1/meetings/${meeting.id}/audio`}>
+                      Your browser does not support the audio element.
+                    </audio>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Summary */}
+              {meeting.transcription?.summary ? (
+                <Box>
+                  <Typography variant="h6" gutterBottom fontWeight="bold">Executive Summary</Typography>
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'primary.lighter', borderRadius: 2, border: '1px solid', borderColor: 'primary.light' }}>
+                    <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>
+                      {meeting.transcription.summary}
+                    </Typography>
+                  </Paper>
+                </Box>
+              ) : (
+                <Alert severity="info">Summary will be available once processing is complete.</Alert>
+              )}
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              {/* Metadata Card */}
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>Meeting Details</Typography>
+                  <List dense>
+                    <ListItem>
+                      <ListItemIcon><AccessTimeIcon /></ListItemIcon>
+                      <ListItemText primary="Duration" secondary={meeting.estimated_duration ? `~${meeting.estimated_duration} minutes` : 'Unknown'} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemIcon><InfoIcon /></ListItemIcon>
+                      <ListItemText primary="File Size" secondary={meeting.file_size ? `${(meeting.file_size / (1024 * 1024)).toFixed(2)} MB` : 'Unknown'} />
+                    </ListItem>
+                  </List>
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Typography variant="subtitle2" gutterBottom>Organization</Typography>
+                  <Stack spacing={2}>
+                    <Autocomplete
+                      freeSolo
+                      options={availableFolders}
+                      value={folder}
+                      onChange={(e, v) => setFolder(v || '')}
+                      onInputChange={(e, v) => setFolder(v)}
+                      renderInput={(params) => <TextField {...params} label="Folder" size="small" />}
+                    />
+                    <Autocomplete
+                      multiple
+                      freeSolo
+                      options={availableTags}
+                      value={tags}
+                      onChange={(event, newValue) => {
+                        setTags(newValue);
+                      }}
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => (
+                          <Chip variant="outlined" label={option} {...getTagProps({ index })} size="small" />
+                        ))
+                      }
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          variant="outlined"
+                          label="Tags"
+                          placeholder="Add tags"
+                          size="small"
+                        />
+                      )}
+                    />
+                    <Button variant="contained" onClick={handleUpdateTagsFolder} size="small">Save Changes</Button>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </TabPanel>
+
+        {/* Transcript Tab */}
+        <TabPanel value={activeTab} index={1}>
+          <Box sx={{ px: 3 }}>
+            {/* Speakers Management */}
+            <Accordion sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }} elevation={0}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle1" fontWeight="bold">Manage Speakers ({speakers.length})</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Grid container spacing={2}>
+                  {speakers.map(speaker => (
+                    <Grid item xs={12} sm={6} md={4} key={speaker.id}>
+                      <Paper variant="outlined" sx={{ p: 2 }}>
+                        {editingSpeaker?.id === speaker.id ? (
+                          <Stack spacing={1}>
+                            <Autocomplete
+                              freeSolo
+                              options={allSpeakers}
+                              value={editingSpeaker.name}
+                              onChange={(event, newValue) => {
+                                setEditingSpeaker({ ...editingSpeaker, name: newValue || '' });
+                              }}
+                              onInputChange={(event, newInputValue) => {
+                                setEditingSpeaker({ ...editingSpeaker, name: newInputValue });
+                              }}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  label="Name"
+                                  size="small"
+                                  autoFocus
+                                />
+                              )}
+                            />
+                            <Stack direction="row" spacing={1}>
+                              <Button size="small" variant="contained" onClick={handleUpdateSpeaker}>Save</Button>
+                              <Button size="small" onClick={() => setEditingSpeaker(null)}>Cancel</Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box>
+                              <Typography variant="subtitle2">{speaker.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">Label: {speaker.label}</Typography>
+                            </Box>
+                            <IconButton size="small" onClick={() => setEditingSpeaker(speaker)}><EditIcon fontSize="small" /></IconButton>
+                          </Box>
+                        )}
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Full Text */}
+            <Paper variant="outlined" sx={{ p: 4, bgcolor: 'grey.50', maxHeight: '70vh', overflow: 'auto' }}>
+              <Typography variant="body1" sx={{ fontFamily: 'Georgia, serif', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                {meeting.transcription?.full_text}
+              </Typography>
+            </Paper>
+          </Box>
+        </TabPanel>
+
+        {/* Action Items Tab */}
+        <TabPanel value={activeTab} index={2}>
+          <Box sx={{ px: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+              <Button 
+                variant="contained" 
+                startIcon={<AssignmentIcon />}
+                onClick={() => setNewActionItem({ ...newActionItem, isAdding: true })}
+              >
+                Add Action Item
+              </Button>
+            </Box>
+
+            {newActionItem.isAdding && (
+              <Paper variant="outlined" sx={{ p: 3, mb: 3, borderColor: 'primary.main', bgcolor: 'primary.lighter' }}>
+                <Typography variant="subtitle1" gutterBottom fontWeight="bold">New Action Item</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField 
+                      fullWidth label="Task" 
+                      value={newActionItem.task} 
+                      onChange={e => setNewActionItem({...newActionItem, task: e.target.value})} 
+                      autoFocus
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField 
+                      fullWidth label="Owner" 
+                      value={newActionItem.owner} 
+                      onChange={e => setNewActionItem({...newActionItem, owner: e.target.value})} 
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField 
+                      fullWidth type="date" label="Due Date" 
+                      InputLabelProps={{ shrink: true }}
+                      value={newActionItem.due_date} 
+                      onChange={e => setNewActionItem({...newActionItem, due_date: e.target.value})} 
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                      <Button onClick={() => setNewActionItem({...newActionItem, isAdding: false})}>Cancel</Button>
+                      <Button variant="contained" onClick={handleAddActionItem}>Add Item</Button>
+                    </Stack>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+
+            <Stack spacing={2}>
+              {meeting.transcription?.action_items.map(item => (
+                <Paper key={item.id} elevation={1} sx={{ p: 2, borderLeft: 6, borderColor: 'primary.main' }}>
+                  {editingActionItem?.id === item.id ? (
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <TextField 
+                          fullWidth label="Task" 
+                          value={editingActionItem.task} 
+                          onChange={e => setEditingActionItem({...editingActionItem, task: e.target.value})} 
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField 
+                          fullWidth label="Owner" 
+                          value={editingActionItem.owner} 
+                          onChange={e => setEditingActionItem({...editingActionItem, owner: e.target.value})} 
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField 
+                          fullWidth type="date" label="Due Date" 
+                          InputLabelProps={{ shrink: true }}
+                          value={editingActionItem.due_date} 
+                          onChange={e => setEditingActionItem({...editingActionItem, due_date: e.target.value})} 
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button onClick={() => setEditingActionItem(null)}>Cancel</Button>
+                          <Button variant="contained" onClick={handleUpdateActionItem}>Save</Button>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+                  ) : (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box>
+                        <Typography variant="h6" gutterBottom>{item.task}</Typography>
+                        <Stack direction="row" spacing={1}>
+                          <Chip icon={<PersonIcon />} label={item.owner || 'Unassigned'} size="small" variant="outlined" />
+                          <Chip icon={<CalendarIcon />} label={item.due_date || 'No Date'} size="small" variant="outlined" />
+                        </Stack>
+                      </Box>
+                      <Box>
+                        <IconButton size="small" onClick={() => setEditingActionItem(item)}><EditIcon /></IconButton>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteActionItem(item.id)}><DeleteIcon /></IconButton>
+                      </Box>
+                    </Box>
+                  )}
+                </Paper>
+              ))}
+              {meeting.transcription?.action_items.length === 0 && (
+                <Alert severity="info">No action items found.</Alert>
+              )}
+            </Stack>
+          </Box>
+        </TabPanel>
+
+        {/* Chat Tab */}
+        <TabPanel value={activeTab} index={3}>
+          <Box sx={{ height: '70vh', px: 3 }}>
+            <Chat meetingId={meetingId} />
+          </Box>
+        </TabPanel>
+
+        {/* Notes Tab */}
+        <TabPanel value={activeTab} index={4}>
+          <Box sx={{ px: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6">Personal Notes</Typography>
+              {!isEditingNotes ? (
+                <Button startIcon={<EditIcon />} onClick={() => setIsEditingNotes(true)}>Edit Notes</Button>
+              ) : (
+                <Stack direction="row" spacing={1}>
+                  <Button onClick={() => setIsEditingNotes(false)}>Cancel</Button>
+                  <Button variant="contained" onClick={handleUpdateNotes}>Save Notes</Button>
+                </Stack>
+              )}
+            </Box>
+            
+            {isEditingNotes ? (
+              <Box>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={10}
+                  value={notes}
+                  onChange={handleNotesChange}
+                  inputRef={notesRef}
+                  placeholder="Type # to reference other meetings..."
+                />
+                <Popper open={showMeetingSuggestions} anchorEl={notesRef.current}>
+                  <Paper elevation={3} sx={{ width: 300, maxHeight: 200, overflow: 'auto' }}>
+                    <List dense>
+                      {meetingSuggestions.map(m => (
+                        <ListItem button key={m.id} onClick={() => insertMeetingReference(m)}>
+                          <ListItemText primary={m.filename} secondary={`#${m.id}`} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
+                </Popper>
+              </Box>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 3, minHeight: 200, bgcolor: 'grey.50' }}>
+                <Typography sx={{ whiteSpace: 'pre-wrap' }}>{notes || 'No notes yet.'}</Typography>
+              </Paper>
+            )}
+          </Box>
+        </TabPanel>
+
+        {/* Attachments Tab */}
+        <TabPanel value={activeTab} index={5}>
+          <Box sx={{ px: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+              <Button 
+                variant="contained" 
+                startIcon={<CloudUploadIcon />}
+                onClick={() => setAttachmentDialogOpen(true)}
+              >
+                Upload File
+              </Button>
+            </Box>
+            
+            <Grid container spacing={2}>
+              {attachments.map(att => (
+                <Grid item xs={12} sm={6} md={4} key={att.id}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <DescriptionIcon color="primary" sx={{ mr: 1 }} />
+                        <Typography variant="subtitle1" noWrap>{att.filename}</Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        {(att.file_size / 1024).toFixed(1)} KB • {new Date(att.uploaded_at).toLocaleDateString()}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2, minHeight: 40 }}>
+                        {att.description || 'No description'}
+                      </Typography>
+                      <Stack direction="row" spacing={1}>
+                        <Button size="small" variant="outlined" onClick={() => window.open(api.previewAttachment(att.id), '_blank')}>View</Button>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteAttachment(att.id)}><DeleteIcon /></IconButton>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+              {attachments.length === 0 && (
+                <Grid item xs={12}>
+                  <Alert severity="info">No attachments uploaded.</Alert>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
+        </TabPanel>
+      </Paper>
+
+      {/* Dialogs */}
+      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)}>
         <DialogTitle>Rename Meeting</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Meeting Name"
-            fullWidth
-            variant="outlined"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            error={newName !== null && newName.trim().length === 0}
-            helperText={newName !== null && newName.trim().length === 0 ? "Meeting name cannot be empty" : ""}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && newName && newName.trim()) {
-                handleRenameMeetingConfirm();
-              }
-            }}
-            disabled={isUpdating}
+          <TextField 
+            autoFocus margin="dense" label="Name" fullWidth 
+            value={newName} onChange={e => setNewName(e.target.value)} 
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenameDialogOpen(false)} disabled={isUpdating}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleRenameMeetingConfirm} 
-            variant="contained"
-            disabled={isUpdating || !newName || !newName.trim() || newName.trim() === meeting?.filename}
-          >
-            {isUpdating ? 'Renaming...' : 'Rename'}
-          </Button>
+          <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleRenameMeeting} variant="contained">Rename</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Delete Meeting Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Meeting</DialogTitle>
+        <DialogTitle>Delete Meeting?</DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to delete "{meeting?.filename}"? 
-            This action cannot be undone and will permanently remove the meeting, 
-            its transcription, analysis, and all associated data.
-          </Typography>
+          <Typography>This action cannot be undone.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDeleteMeetingConfirm} color="error" variant="contained">
-            Delete
-          </Button>
+          <Button onClick={handleDeleteMeeting} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Upload Attachment Dialog */}
-      <Dialog open={attachmentDialogOpen} onClose={handleAttachmentDialogClose} maxWidth="sm" fullWidth>
+      <Dialog open={attachmentDialogOpen} onClose={() => setAttachmentDialogOpen(false)}>
         <DialogTitle>Upload Attachment</DialogTitle>
         <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            <input
-              accept="*/*"
-              style={{ display: 'none' }}
-              id="attachment-file-input"
-              type="file"
-              onChange={handleFileSelect}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Button variant="outlined" component="label">
+              Select File
+              <input type="file" hidden onChange={e => setSelectedFile(e.target.files[0])} />
+            </Button>
+            {selectedFile && <Typography variant="body2">{selectedFile.name}</Typography>}
+            <TextField 
+              label="Description" multiline rows={2} fullWidth 
+              value={attachmentDescription} onChange={e => setAttachmentDescription(e.target.value)} 
             />
-            <label htmlFor="attachment-file-input">
-              <Button
-                variant="outlined"
-                component="span"
-                fullWidth
-                startIcon={<CloudUploadIcon />}
-                sx={{ mb: 2 }}
-              >
-                {selectedFile ? selectedFile.name : 'Choose File'}
-              </Button>
-            </label>
-            
-            {selectedFile && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
-              </Alert>
-            )}
-            
-            <TextField
-              fullWidth
-              label="Description (optional)"
-              value={attachmentDescription}
-              onChange={(e) => setAttachmentDescription(e.target.value)}
-              multiline
-              rows={3}
-              placeholder="Add a description for this attachment..."
-            />
-          </Box>
+          </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleAttachmentDialogClose} disabled={uploadingAttachment}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleUploadAttachment}
-            variant="contained"
-            disabled={!selectedFile || uploadingAttachment}
-            startIcon={uploadingAttachment ? <CircularProgress size={20} /> : <CloudUploadIcon />}
-          >
+          <Button onClick={() => setAttachmentDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleUploadAttachment} variant="contained" disabled={!selectedFile || uploadingAttachment}>
             {uploadingAttachment ? 'Uploading...' : 'Upload'}
           </Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   );
 };

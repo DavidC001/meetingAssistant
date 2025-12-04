@@ -11,7 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from .database import engine, Base
-from .routers import meetings, settings, admin, ollama, calendar, global_chat, scheduled_meetings, graph, user_mappings
+from .modules.meetings import router as meetings_router
+from .modules.settings import router as settings_router
+from .modules.admin import router as admin_router
+from .modules.ollama import router as ollama_router
+from .modules.calendar import router as calendar_router
+from .modules.chat import router as chat_router
+from .modules.graph import router as graph_router
+from .modules.users import router as users_router
 from .startup import startup_recovery
 from .core.config import config
 
@@ -53,15 +60,14 @@ app.add_middleware(
 app.max_request_size = config.upload.max_file_size_bytes
 
 # Register routers
-app.include_router(meetings.router, prefix="/api/v1")
-app.include_router(settings.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
-app.include_router(ollama.router, prefix="/api/v1")
-app.include_router(calendar.router, prefix="/api/v1")
-app.include_router(global_chat.router, prefix="/api/v1")
-app.include_router(scheduled_meetings.router, prefix="/api/v1")
-app.include_router(graph.router, prefix="/api/v1")
-app.include_router(user_mappings.router, prefix="/api/v1")
+app.include_router(meetings_router.router, prefix="/api/v1")
+app.include_router(settings_router.router, prefix="/api/v1")
+app.include_router(admin_router.router, prefix="/api/v1")
+app.include_router(ollama_router.router, prefix="/api/v1")
+app.include_router(calendar_router.router, prefix="/api/v1")
+app.include_router(chat_router.router, prefix="/api/v1")
+app.include_router(graph_router.router, prefix="/api/v1")
+app.include_router(users_router.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

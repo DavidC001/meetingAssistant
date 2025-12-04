@@ -14,13 +14,13 @@ sys.path.insert(0, str(project_root))
 
 try:
     # Try Docker/production import path first
-    from app.core.transcript_formatter import (
+    from app.core.processing.transcript_formatter import (
         format_transcript_grouped,
         convert_old_transcript_format
     )
 except ImportError:
     # Fallback to development import path
-    from backend.app.core.transcript_formatter import (
+    from backend.app.core.processing.transcript_formatter import (
         format_transcript_grouped,
         convert_old_transcript_format
     )
