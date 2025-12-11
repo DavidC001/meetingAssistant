@@ -1,32 +1,32 @@
 .settings-container {
-  background-color: #ffffff;
+  background-color: var(--bg-secondary);
   padding: 2rem;
   border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px var(--shadow-color);
   max-width: 800px;
   margin: 0 auto;
 }
 
 .settings-container h2 {
   margin-top: 0;
-  border-bottom: 2px solid #eee;
+  border-bottom: 2px solid var(--border-light);
   padding-bottom: 1rem;
   margin-bottom: 2rem;
-  color: #1a237e;
+  color: var(--text-heading);
 }
 
 .current-status {
   margin-bottom: 2rem;
   padding: 1.5rem;
-  background-color: #f9f9f9;
+  background-color: var(--bg-tertiary);
   border-radius: 8px;
-  border: 1px solid #eee;
+  border: 1px solid var(--border-light);
 }
 
 .current-status h3 {
   margin-top: 0;
   margin-bottom: 1rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .status-grid {
@@ -39,14 +39,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem;
-  background-color: white;
+  background-color: var(--bg-secondary);
   border-radius: 4px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-light);
 }
 
 .status-label {
   font-weight: 500;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .status-indicator {
@@ -72,7 +72,7 @@
 
 .settings-form h3 {
   margin-bottom: 1.5rem;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .form-group {
@@ -83,12 +83,12 @@
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .help-text {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: normal;
   margin-left: 0.5rem;
 }
@@ -102,46 +102,49 @@
 .input-with-toggle input {
   flex: 1;
   padding: 0.75rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 1rem;
   transition: border-color 0.3s;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .input-with-toggle input:focus {
   outline: none;
-  border-color: #1a237e;
+  border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.1);
 }
 
 .input-with-toggle input:disabled {
-  background-color: #f5f5f5;
+  background-color: var(--bg-hover);
   cursor: not-allowed;
 }
 
 .toggle-visibility {
   padding: 0.75rem;
   background: none;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   cursor: pointer;
   font-size: 1rem;
   transition: background-color 0.3s;
+  color: var(--text-primary);
 }
 
 .toggle-visibility:hover {
-  background-color: #f0f0f0;
+  background-color: var(--bg-hover);
 }
 
 .form-help {
   display: block;
   margin-top: 0.25rem;
-  color: #666;
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 
 .form-help a {
-  color: #1a237e;
+  color: var(--accent-primary);
   text-decoration: none;
 }
 
@@ -184,7 +187,7 @@
 }
 
 .save-button:disabled, .clear-button:disabled {
-  background-color: #ccc;
+  background-color: var(--border-color);
   cursor: not-allowed;
 }
 

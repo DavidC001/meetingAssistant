@@ -3,9 +3,9 @@
 }
 
 .App-header {
-  background-color: #282c34;
+  background-color: var(--bg-tertiary);
   padding: 20px;
-  color: white;
+  color: var(--text-primary);
   margin-bottom: 2rem;
 }
 
@@ -20,7 +20,7 @@
 .App-header h1 {
   margin: 0;
   font-size: 2rem;
-  color: white;
+  color: var(--text-heading);
 }
 
 .header-nav {
@@ -29,7 +29,7 @@
 }
 
 .nav-link {
-  color: white;
+  color: var(--text-primary);
   text-decoration: none;
   padding: 0.5rem 1rem;
   border-radius: 4px;
@@ -38,8 +38,8 @@
 }
 
 .nav-link:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .container {

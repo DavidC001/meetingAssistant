@@ -322,9 +322,9 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
               mb: 3,
               '& .MuiOutlinedInput-root': {
                 borderRadius: 3,
-                backgroundColor: '#f8f9fa',
+                backgroundColor: 'action.hover',
                 '&:hover': {
-                  backgroundColor: '#e9ecef'
+                  backgroundColor: 'action.selected'
                 }
               }
             }}
@@ -400,14 +400,14 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
                         size="medium" 
                         sx={{ 
                           ml: 'auto',
-                          bgcolor: 'white',
+                          bgcolor: 'background.paper',
                           color: 'primary.main',
                           fontWeight: 600
                         }}
                       />
                     </Box>
                   </AccordionSummary>
-                  <AccordionDetails sx={{ p: 2, bgcolor: '#f8f9fa' }}>
+                  <AccordionDetails sx={{ p: 2, bgcolor: 'action.hover' }}>
                     <List disablePadding>
                       {groupedMeetings[folder].map((meeting, index) => (
                         <React.Fragment key={meeting.id}>
@@ -430,7 +430,7 @@ const MeetingsListImproved = ({ refreshKey, onMeetingUpdate }) => {
                                 py: 3,
                                 px: 3,
                                 position: 'relative',
-                                bgcolor: 'white'
+                                bgcolor: 'background.paper'
                               }}
                               secondaryAction={
                                 <Tooltip title="More options">

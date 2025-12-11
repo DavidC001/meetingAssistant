@@ -1,3 +1,45 @@
+/* CSS Variables for theme support */
+:root {
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f8f9fa;
+  --bg-hover: #f5f5f5;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-heading: #1a237e;
+  --border-color: #e0e0e0;
+  --border-light: #ddd;
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-medium: rgba(0, 0, 0, 0.15);
+  --accent-primary: #1976d2;
+  --accent-secondary: #1565c0;
+  --calendar-today: #e3f2fd;
+  --calendar-off-range: #fafafa;
+  --table-header: #e0e0e0;
+  --time-indicator: #d32f2f;
+}
+
+/* Dark mode CSS variables */
+[data-theme='dark'] {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-tertiary: #2d2d2d;
+  --bg-hover: #3d3d3d;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-heading: #90caf9;
+  --border-color: #424242;
+  --border-light: #555555;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-medium: rgba(0, 0, 0, 0.4);
+  --accent-primary: #90caf9;
+  --accent-secondary: #64b5f6;
+  --calendar-today: #1e3a5f;
+  --calendar-off-range: #2d2d2d;
+  --table-header: #424242;
+  --time-indicator: #ef5350;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,8 +47,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f0f2f5;
-  color: #333;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s, color 0.3s;
 }
 
 code {
@@ -21,5 +64,5 @@ code {
 }
 
 h1, h2, h3 {
-  color: #1a237e;
+  color: var(--text-heading);
 }

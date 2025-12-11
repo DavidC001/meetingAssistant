@@ -74,6 +74,7 @@ import {
 import { styled } from '@mui/material/styles';
 import api from '../api';
 import Chat from './Chat';
+import AudioPlayer from './AudioPlayer';
 
 // Styled components
 const ProcessingCard = styled(Card)(({ theme }) => ({
@@ -629,7 +630,7 @@ const MeetingDetails = () => {
           onChange={handleTabChange} 
           variant="scrollable" 
           scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'grey.50' }}
+          sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
         >
           <Tab icon={<SummarizeIcon />} label="Overview" iconPosition="start" />
           <Tab icon={<DescriptionIcon />} label="Transcript" iconPosition="start" disabled={!meeting.transcription} />
@@ -645,12 +646,13 @@ const MeetingDetails = () => {
             <Grid item xs={12} md={8}>
               {/* Audio Player */}
               {meeting.audio_filepath && (
-                <Card variant="outlined" sx={{ mb: 3, bgcolor: 'grey.50' }}>
+                <Card variant="outlined" sx={{ mb: 3 }}>
                   <CardContent>
                     <Typography variant="subtitle2" gutterBottom fontWeight="bold">Audio Recording</Typography>
-                    <audio controls style={{ width: '100%' }} src={`/api/v1/meetings/${meeting.id}/audio`}>
-                      Your browser does not support the audio element.
-                    </audio>
+                    <AudioPlayer 
+                      src={`/api/v1/meetings/${meeting.id}/audio`}
+                      title={meeting.filename}
+                    />
                   </CardContent>
                 </Card>
               )}
@@ -659,7 +661,7 @@ const MeetingDetails = () => {
               {meeting.transcription?.summary ? (
                 <Box>
                   <Typography variant="h6" gutterBottom fontWeight="bold">Executive Summary</Typography>
-                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'primary.lighter', borderRadius: 2, border: '1px solid', borderColor: 'primary.light' }}>
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>
                       {meeting.transcription.summary}
                     </Typography>
@@ -784,11 +786,62 @@ const MeetingDetails = () => {
               </AccordionDetails>
             </Accordion>
 
-            {/* Full Text */}
-            <Paper variant="outlined" sx={{ p: 4, bgcolor: 'grey.50', maxHeight: '70vh', overflow: 'auto' }}>
-              <Typography variant="body1" sx={{ fontFamily: 'Georgia, serif', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                {meeting.transcription?.full_text}
-              </Typography>
+            {/* Full Text with Speaker Highlighting */}
+            <Paper variant="outlined" sx={{ p: 4, bgcolor: 'background.default', maxHeight: '70vh', overflow: 'auto' }}>
+              {meeting.transcription?.full_text ? (
+                <Box>
+                  {meeting.transcription.full_text.split('\n').map((line, idx) => {
+                    // Check if line starts with a speaker label (format: "Speaker Name:")
+                    const speakerMatch = line.match(/^([^:]+):\s*(.*)/);
+                    if (speakerMatch && speakerMatch[1].length < 50) {
+                      const speakerName = speakerMatch[1].trim();
+                      const speechText = speakerMatch[2];
+                      // Find speaker info to get consistent colors
+                      const speakerInfo = speakers.find(s => s.name === speakerName || s.label === speakerName);
+                      const colorIndex = speakerInfo ? speakers.indexOf(speakerInfo) : speakerName.length;
+                      const colors = ['primary', 'secondary', 'success', 'warning', 'info', 'error'];
+                      const color = colors[colorIndex % colors.length];
+                      
+                      return (
+                        <Box key={idx} sx={{ mb: 2 }}>
+                          <Chip 
+                            label={speakerName}
+                            size="small"
+                            color={color}
+                            sx={{ mb: 0.5, fontWeight: 'bold' }}
+                          />
+                          <Typography 
+                            variant="body1" 
+                            sx={{ 
+                              fontFamily: 'Georgia, serif', 
+                              lineHeight: 1.8,
+                              pl: 1,
+                              borderLeft: 3,
+                              borderColor: `${color}.main`
+                            }}
+                          >
+                            {speechText}
+                          </Typography>
+                        </Box>
+                      );
+                    } else if (line.trim()) {
+                      // Regular line without speaker
+                      return (
+                        <Typography 
+                          key={idx}
+                          variant="body1" 
+                          sx={{ fontFamily: 'Georgia, serif', lineHeight: 1.8, mb: 1 }}
+                        >
+                          {line}
+                        </Typography>
+                      );
+                    }
+                    return null;
+                  })}
+                </Box>
+              ) : (
+                <Typography color="text.secondary">No transcript available.</Typography>
+              )}
             </Paper>
           </Box>
         </TabPanel>
@@ -947,7 +1000,7 @@ const MeetingDetails = () => {
                 </Popper>
               </Box>
             ) : (
-              <Paper variant="outlined" sx={{ p: 3, minHeight: 200, bgcolor: 'grey.50' }}>
+              <Paper variant="outlined" sx={{ p: 3, minHeight: 200, bgcolor: 'background.default' }}>
                 <Typography sx={{ whiteSpace: 'pre-wrap' }}>{notes || 'No notes yet.'}</Typography>
               </Paper>
             )}

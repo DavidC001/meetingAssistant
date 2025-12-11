@@ -571,7 +571,7 @@ const Settings = () => {
                     </Box>
                   </Box>
                   
-                  <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2, p: 2 }}>
+                  <List sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2 }}>
                     <ListItem>
                       <ListItemIcon>
                         <LanguageIcon />
@@ -652,7 +652,7 @@ const Settings = () => {
                     </Box>
                   </Box>
                   
-                  <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2, p: 2 }}>
+                  <List sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 2 }}>
                     <ListItem>
                       <ListItemIcon>
                         <NotificationsIcon />
@@ -784,7 +784,7 @@ const Settings = () => {
                         <Typography variant="h6" gutterBottom fontWeight="600">
                           Active Configurations
                         </Typography>
-                        <List sx={{ bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                        <List sx={{ bgcolor: 'action.hover', borderRadius: 2 }}>
                           {embeddingConfigs.length === 0 && (
                             <ListItem>
                               <ListItemText 
@@ -844,7 +844,7 @@ const Settings = () => {
                         <Typography variant="h6" gutterBottom fontWeight="600">
                           Add New Configuration
                         </Typography>
-                        <Paper sx={{ p: 3, bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                        <Paper sx={{ p: 3, bgcolor: 'action.hover', borderRadius: 2 }}>
                           <Grid container spacing={2}>
                             <Grid item xs={12} sm={6}>
                               <FormControl fullWidth size="small">
@@ -998,7 +998,7 @@ const Settings = () => {
                       </Typography>
                     </Box>
                   </Box>
-                  <Paper sx={{ p: 3, bgcolor: '#f8f9fa', borderRadius: 2 }}>
+                  <Paper sx={{ p: 3, bgcolor: 'action.hover', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       Current workers: {workerConfig.max_workers}
                     </Typography>

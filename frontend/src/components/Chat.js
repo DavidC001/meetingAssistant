@@ -34,6 +34,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import api from '../api';
+import QuickActions from './QuickActions';
 import './Chat.css';
 
 const Chat = ({ meetingId }) => {
@@ -251,14 +252,14 @@ const Chat = ({ meetingId }) => {
                                                     code: ({ inline, children, ...props }) => (
                                                         inline ? (
                                                             <code style={{
-                                                                backgroundColor: '#f5f5f5',
+                                                                backgroundColor: 'action.hover',
                                                                 padding: '2px 4px',
                                                                 borderRadius: '3px',
                                                                 fontSize: '0.9em'
                                                             }}>{children}</code>
                                                         ) : (
                                                             <pre style={{
-                                                                backgroundColor: '#f5f5f5',
+                                                                backgroundColor: 'action.hover',
                                                                 padding: '12px',
                                                                 borderRadius: '5px',
                                                                 overflow: 'auto',
@@ -296,6 +297,10 @@ const Chat = ({ meetingId }) => {
                 </List>
             </Box>
             <Box className="chat-input-container">
+                {/* Quick Actions - show only when no messages and not loading */}
+                {messages.length === 0 && !isLoading && (
+                    <QuickActions onSelectPrompt={(prompt) => setInput(prompt)} />
+                )}
                 <TextField
                     fullWidth
                     variant="outlined"
@@ -309,7 +314,7 @@ const Chat = ({ meetingId }) => {
                     sx={{
                         '& .MuiOutlinedInput-root': {
                             borderRadius: '12px',
-                            backgroundColor: '#f8f9fa'
+                            backgroundColor: 'action.hover'
                         }
                     }}
                 />

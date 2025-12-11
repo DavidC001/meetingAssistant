@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import {
   AppBar,
@@ -8,9 +7,11 @@ import {
   Typography,
   Container,
   Box,
-  Button,
   Tabs,
-  Tab
+  Tab,
+  IconButton,
+  Tooltip,
+  useMediaQuery
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -19,8 +20,13 @@ import {
   ChatBubbleOutline as ChatIcon,
   Event as EventIcon,
   AccountTree as GraphIcon,
-  FolderOpen as FolderOpenIcon
+  FolderOpen as FolderOpenIcon,
+  Search as SearchIcon,
+  DarkMode as DarkModeIcon,
+  LightMode as LightModeIcon,
+  Article as TemplatesIcon
 } from '@mui/icons-material';
+import { ThemeProvider, useThemeMode } from './contexts/ThemeContext';
 import MeetingsDashboard from './components/MeetingsDashboard';
 import MeetingsBrowser from './components/MeetingsBrowser';
 import MeetingDetails from './components/MeetingDetails';
@@ -29,59 +35,13 @@ import Calendar from './components/Calendar';
 import GlobalChat from './components/GlobalChat';
 import ScheduledMeetings from './components/ScheduledMeetings';
 import MeetingsGraph from './components/MeetingsGraph';
-
-// Create a modern theme
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
-    },
-    secondary: {
-      main: '#f50057',
-      light: '#ff5983',
-      dark: '#c51162',
-    },
-    background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 500,
-    },
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          fontWeight: 500,
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        },
-      },
-    },
-  },
-});
+import GlobalSearch from './components/GlobalSearch';
+import MeetingTemplates from './components/MeetingTemplates';
 
 function NavigationTabs() {
   const location = useLocation();
   const [value, setValue] = React.useState(0);
+  const isMobile = useMediaQuery('(max-width:900px)');
 
   React.useEffect(() => {
     if (location.pathname === '/') setValue(0);
@@ -91,50 +51,69 @@ function NavigationTabs() {
     else if (location.pathname.startsWith('/scheduled-meetings')) setValue(3);
     else if (location.pathname.startsWith('/graph')) setValue(4);
     else if (location.pathname.startsWith('/calendar')) setValue(5);
-    else if (location.pathname.startsWith('/settings')) setValue(6);
+    else if (location.pathname.startsWith('/templates')) setValue(6);
+    else if (location.pathname.startsWith('/settings')) setValue(7);
   }, [location.pathname]);
 
   return (
-    <Tabs value={value} textColor="inherit" indicatorColor="secondary" variant="scrollable" scrollButtons="auto">
+    <Tabs 
+      value={value} 
+      textColor="inherit" 
+      indicatorColor="secondary" 
+      variant="scrollable" 
+      scrollButtons="auto"
+      sx={{
+        '& .MuiTab-root': {
+          minWidth: isMobile ? 'auto' : 100,
+          px: isMobile ? 1 : 2
+        }
+      }}
+    >
       <Tab
         icon={<DashboardIcon />}
-        label="Dashboard"
+        label={isMobile ? undefined : "Dashboard"}
         component={Link}
         to="/"
       />
       <Tab
         icon={<FolderOpenIcon />}
-        label="Meetings"
+        label={isMobile ? undefined : "Meetings"}
         component={Link}
         to="/meetings/browse"
       />
       <Tab
         icon={<ChatIcon />}
-        label="Global Chat"
+        label={isMobile ? undefined : "Global Chat"}
         component={Link}
         to="/global-chat"
       />
       <Tab
         icon={<EventIcon />}
-        label="Scheduled"
+        label={isMobile ? undefined : "Scheduled"}
         component={Link}
         to="/scheduled-meetings"
       />
       <Tab
         icon={<GraphIcon />}
-        label="Graph"
+        label={isMobile ? undefined : "Graph"}
         component={Link}
         to="/graph"
       />
       <Tab
         icon={<CalendarIcon />}
-        label="Calendar"
+        label={isMobile ? undefined : "Calendar"}
         component={Link}
         to="/calendar"
       />
       <Tab
+        icon={<TemplatesIcon />}
+        label={isMobile ? undefined : "Templates"}
+        component={Link}
+        to="/templates"
+      />
+      <Tab
         icon={<SettingsIcon />}
-        label="Settings"
+        label={isMobile ? undefined : "Settings"}
         component={Link}
         to="/settings"
       />
@@ -142,36 +121,101 @@ function NavigationTabs() {
   );
 }
 
+function AppContent() {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { mode, toggleTheme } = useThemeMode();
+  const isMobile = useMediaQuery('(max-width:600px)');
+
+  // Global keyboard shortcuts
+  const handleKeyDown = useCallback((e) => {
+    // Ctrl/Cmd + K for search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      setSearchOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  return (
+    <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: 'background.default' }}>
+      <AppBar position="sticky" elevation={2}>
+        <Toolbar sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Typography 
+            variant={isMobile ? "h6" : "h5"} 
+            component="div" 
+            sx={{ 
+              flexGrow: isMobile ? 0 : 1,
+              mr: isMobile ? 'auto' : 0
+            }}
+          >
+            <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+              {isMobile ? '📋 MA' : 'Meeting Assistant'}
+            </Link>
+          </Typography>
+          
+          {/* Search button */}
+          <Tooltip title="Search (Ctrl+K)">
+            <IconButton 
+              color="inherit" 
+              onClick={() => setSearchOpen(true)}
+              sx={{ 
+                bgcolor: 'rgba(255,255,255,0.1)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
+              }}
+            >
+              <SearchIcon />
+            </IconButton>
+          </Tooltip>
+
+          {/* Theme toggle */}
+          <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
+            <IconButton color="inherit" onClick={toggleTheme}>
+              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
+
+          <NavigationTabs />
+        </Toolbar>
+      </AppBar>
+      
+      <Container 
+        maxWidth="xl" 
+        sx={{ 
+          mt: { xs: 2, md: 4 }, 
+          mb: 4, 
+          px: { xs: 1, sm: 2, md: 3 },
+          minHeight: 'calc(100vh - 120px)' 
+        }}
+      >
+        <Routes>
+          <Route path="/" element={<MeetingsDashboard />} />
+          <Route path="/meetings/browse" element={<MeetingsBrowser />} />
+          <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
+          <Route path="/global-chat" element={<GlobalChat />} />
+          <Route path="/scheduled-meetings" element={<ScheduledMeetings />} />
+          <Route path="/graph" element={<MeetingsGraph />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/templates" element={<MeetingTemplates />} />
+        </Routes>
+      </Container>
+
+      {/* Global Search Dialog */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </Box>
+  );
+}
+
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider>
       <CssBaseline />
       <Router>
-        <Box sx={{ flexGrow: 1 }}>
-          <AppBar position="sticky" elevation={2}>
-            <Toolbar>
-              <Typography variant="h5" component="div" sx={{ flexGrow: 1 }}>
-                <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-                  Meeting Assistant
-                </Link>
-              </Typography>
-              <NavigationTabs />
-            </Toolbar>
-          </AppBar>
-          
-          <Container maxWidth="xl" sx={{ mt: 4, mb: 4, height: 'calc(100vh - 120px)' }}>
-            <Routes>
-              <Route path="/" element={<MeetingsDashboard />} />
-              <Route path="/meetings/browse" element={<MeetingsBrowser />} />
-              <Route path="/meetings/:meetingId" element={<MeetingDetails />} />
-              <Route path="/global-chat" element={<GlobalChat />} />
-              <Route path="/scheduled-meetings" element={<ScheduledMeetings />} />
-              <Route path="/graph" element={<MeetingsGraph />} />
-              <Route path="/calendar" element={<Calendar />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Container>
-        </Box>
+        <AppContent />
       </Router>
     </ThemeProvider>
   );

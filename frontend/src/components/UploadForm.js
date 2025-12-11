@@ -357,10 +357,10 @@ const UploadForm = ({ onUploadSuccess }) => {
                   sx={{ 
                     mb: 2, 
                     p: 2, 
-                    bgcolor: 'grey.50', 
+                    bgcolor: 'action.hover', 
                     borderRadius: 1,
                     border: '1px solid',
-                    borderColor: 'grey.300'
+                    borderColor: 'divider'
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>

@@ -19,6 +19,8 @@ from .modules.calendar import router as calendar_router
 from .modules.chat import router as chat_router
 from .modules.graph import router as graph_router
 from .modules.users import router as users_router
+from .modules.templates import router as templates_router
+from .modules.search import router as search_router
 from .startup import startup_recovery
 from .core.config import config
 
@@ -68,6 +70,8 @@ app.include_router(calendar_router.router, prefix="/api/v1")
 app.include_router(chat_router.router, prefix="/api/v1")
 app.include_router(graph_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
+app.include_router(templates_router.router, prefix="/api/v1")
+app.include_router(search_router.router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

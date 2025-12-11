@@ -476,7 +476,7 @@ const Calendar = () => {
         </Box>
 
         {/* User Filter Controls */}
-        <Card sx={{ mb: 2, bgcolor: '#f5f5f5' }}>
+        <Card sx={{ mb: 2, bgcolor: 'action.hover' }}>
           <CardContent>
             <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
               User Filter & Sync Settings
@@ -528,17 +528,17 @@ const Calendar = () => {
 
         {/* Legend */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Chip label="High Priority" size="small" sx={{ bgcolor: '#d32f2f', color: 'white' }} />
-          <Chip label="Medium Priority" size="small" sx={{ bgcolor: '#f57c00', color: 'white' }} />
-          <Chip label="Low Priority" size="small" sx={{ bgcolor: '#388e3c', color: 'white' }} />
-          <Chip label="Completed" size="small" sx={{ bgcolor: '#757575', color: 'white' }} />
-          <Chip label="Synced to Google" size="small" sx={{ border: '2px solid #4caf50' }} variant="outlined" />
+          <Chip label="High Priority" size="small" sx={{ bgcolor: 'error.main', color: 'white' }} />
+          <Chip label="Medium Priority" size="small" sx={{ bgcolor: 'warning.main', color: 'white' }} />
+          <Chip label="Low Priority" size="small" sx={{ bgcolor: 'success.main', color: 'white' }} />
+          <Chip label="Completed" size="small" sx={{ bgcolor: 'grey.600', color: 'white' }} />
+          <Chip label="Synced to Google" size="small" sx={{ border: '2px solid', borderColor: 'success.main' }} variant="outlined" />
           {filterUserName && (
             <Chip 
               label="My Task (highlighted)" 
               size="small" 
               sx={{ 
-                bgcolor: '#1976d2', 
+                bgcolor: 'primary.main', 
                 color: 'white',
                 fontWeight: 600,
                 boxShadow: '0 0 8px rgba(33, 150, 243, 0.5)'

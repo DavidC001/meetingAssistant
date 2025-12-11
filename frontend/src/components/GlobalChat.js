@@ -541,14 +541,14 @@ const GlobalChat = () => {
                           code: ({ inline, children, ...props }) => (
                             inline ? (
                               <code style={{
-                                backgroundColor: '#f5f5f5',
+                                backgroundColor: 'action.hover',
                                 padding: '2px 4px',
                                 borderRadius: '3px',
                                 fontSize: '0.9em'
                               }}>{children}</code>
                             ) : (
                               <pre style={{
-                                backgroundColor: '#f5f5f5',
+                                backgroundColor: 'action.hover',
                                 padding: '12px',
                                 borderRadius: '5px',
                                 overflow: 'auto',

@@ -15,7 +15,7 @@
   width: 280px;
   display: flex;
   flex-direction: column;
-  background: #f8f9fb;
+  background: var(--bg-tertiary);
 }
 
 .global-chat-sidebar-header {
@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .global-chat-session-list {
@@ -32,7 +32,7 @@
 }
 
 .global-chat-session-item {
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .global-chat-loading {
@@ -46,7 +46,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: var(--bg-secondary);
 }
 
 .global-chat-header {
@@ -54,14 +54,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .global-chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
-  background: #f5f7fa;
+  background: var(--bg-tertiary);
 }
 
 .global-chat-message {
@@ -93,15 +93,15 @@
   flex: 1;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid #e0e0e0;
-  background: #ffffff;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .global-chat-input {
   display: flex;
   gap: 12px;
   padding: 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border-color);
 }
 
 .global-source-container {
@@ -111,12 +111,12 @@
 .global-source-card {
   padding: 12px;
   border-radius: 10px;
-  background: #fafafa;
+  background: var(--bg-tertiary);
   cursor: pointer;
 }
 
 .global-source-card:hover {
-  background: #f0f2f5;
+  background: var(--bg-hover);
 }
 
 .global-source-stack {

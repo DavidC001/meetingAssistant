@@ -32,7 +32,9 @@ import {
   DialogActions,
   Autocomplete,
   Divider,
-  Badge
+  Badge,
+  Checkbox,
+  Collapse
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -56,7 +58,10 @@ import {
   CreateNewFolder as CreateNewFolderIcon,
   CalendarToday as CalendarIcon,
   Assessment as AssessmentIcon,
-  TrendingUp as TrendingUpIcon
+  TrendingUp as TrendingUpIcon,
+  SelectAll as SelectAllIcon,
+  ClearAll as ClearAllIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -71,6 +76,16 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
   const [filterFolder, setFilterFolder] = useState('all');
   const [expandedFolders, setExpandedFolders] = useState({});
   
+  // Bulk selection states
+  const [selectedMeetings, setSelectedMeetings] = useState([]);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkMoveFolderDialogOpen, setBulkMoveFolderDialogOpen] = useState(false);
+  const [bulkAddTagsDialogOpen, setBulkAddTagsDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkFolderName, setBulkFolderName] = useState('');
+  const [bulkTags, setBulkTags] = useState([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  
   // Dialog states
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
@@ -79,6 +94,128 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
   const [moveFolderDialogOpen, setMoveFolderDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Toggle meeting selection
+  const toggleMeetingSelection = (meetingId, event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setSelectedMeetings(prev => {
+      if (prev.includes(meetingId)) {
+        return prev.filter(id => id !== meetingId);
+      } else {
+        return [...prev, meetingId];
+      }
+    });
+  };
+
+  // Extract all unique tags from meetings
+  const allTags = useMemo(() => {
+    const tags = new Set();
+    meetings.forEach(meeting => {
+      if (meeting.tags && Array.isArray(meeting.tags)) {
+        meeting.tags.forEach(tag => tags.add(tag));
+      }
+    });
+    return Array.from(tags);
+  }, [meetings]);
+
+  // Select all visible meetings
+  const selectAllMeetings = () => {
+    const allIds = filteredAndSortedMeetings.map(m => m.id);
+    setSelectedMeetings(allIds);
+  };
+
+  // Clear all selections
+  const clearSelection = () => {
+    setSelectedMeetings([]);
+    setBulkMode(false);
+  };
+
+  // Bulk operations
+  const handleBulkMoveFolder = async () => {
+    if (!bulkFolderName.trim()) return;
+    setBulkProcessing(true);
+    try {
+      for (const meetingId of selectedMeetings) {
+        const meeting = meetings.find(m => m.id === meetingId);
+        if (meeting) {
+          await api.updateMeetingTagsFolder(meetingId, meeting.tags || '', bulkFolderName.trim());
+        }
+      }
+      setBulkMoveFolderDialogOpen(false);
+      setBulkFolderName('');
+      clearSelection();
+      await fetchMeetings();
+    } catch (err) {
+      setError('Failed to move some meetings');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleBulkAddTags = async () => {
+    if (bulkTags.length === 0) return;
+    setBulkProcessing(true);
+    try {
+      for (const meetingId of selectedMeetings) {
+        const meeting = meetings.find(m => m.id === meetingId);
+        if (meeting) {
+          const existingTags = meeting.tags ? meeting.tags.split(',').map(t => t.trim()) : [];
+          const newTags = [...new Set([...existingTags, ...bulkTags])].join(', ');
+          await api.updateMeetingTagsFolder(meetingId, newTags, meeting.folder || '');
+        }
+      }
+      setBulkAddTagsDialogOpen(false);
+      setBulkTags([]);
+      clearSelection();
+      await fetchMeetings();
+    } catch (err) {
+      setError('Failed to add tags to some meetings');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkProcessing(true);
+    try {
+      for (const meetingId of selectedMeetings) {
+        await api.deleteMeeting(meetingId);
+      }
+      setBulkDeleteDialogOpen(false);
+      clearSelection();
+      await fetchMeetings();
+    } catch (err) {
+      setError('Failed to delete some meetings');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleBulkExport = async (format) => {
+    setBulkProcessing(true);
+    try {
+      for (const meetingId of selectedMeetings) {
+        const response = await api.downloadMeeting(meetingId, format);
+        const meeting = meetings.find(m => m.id === meetingId);
+        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${meeting?.filename?.replace(/\.[^/.]+$/, "") || meetingId}.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      setError('Failed to export some meetings');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
 
   const fetchMeetings = async () => {
     try {
@@ -332,6 +469,9 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
         display: 'flex',
         flexDirection: 'column',
         transition: 'all 0.3s',
+        position: 'relative',
+        border: selectedMeetings.includes(meeting.id) ? '2px solid' : 'none',
+        borderColor: 'primary.main',
         '&:hover': {
           elevation: 6,
           transform: 'translateY(-4px)',
@@ -339,16 +479,36 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
         }
       }}
     >
+      {/* Bulk Selection Checkbox */}
+      {bulkMode && (
+        <Checkbox
+          checked={selectedMeetings.includes(meeting.id)}
+          onChange={() => toggleMeetingSelection(meeting.id)}
+          sx={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            zIndex: 10,
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            '&:hover': { bgcolor: 'action.hover' }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <Box
         component={Link}
-        to={`/meetings/${meeting.id}`}
+        to={bulkMode ? undefined : `/meetings/${meeting.id}`}
+        onClick={bulkMode ? (e) => { e.preventDefault(); toggleMeetingSelection(meeting.id); } : undefined}
         sx={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           p: 2.5,
+          pl: bulkMode ? 6 : 2.5,
           textDecoration: 'none',
-          color: 'inherit'
+          color: 'inherit',
+          cursor: bulkMode ? 'pointer' : 'inherit'
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -477,14 +637,14 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
                 label={`${groupedMeetings[folder].length} meeting${groupedMeetings[folder].length !== 1 ? 's' : ''}`}
                 sx={{
                   ml: 'auto',
-                  bgcolor: 'white',
+                  bgcolor: 'background.paper',
                   color: 'primary.main',
                   fontWeight: 600
                 }}
               />
             </Box>
           </AccordionSummary>
-          <AccordionDetails sx={{ p: 2, bgcolor: '#f8f9fa' }}>
+          <AccordionDetails sx={{ p: 2, bgcolor: 'action.hover' }}>
             <Grid container spacing={2}>
               {groupedMeetings[folder].map((meeting) => (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={meeting.id}>
@@ -514,6 +674,22 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
           <Box component="thead" sx={{ bgcolor: 'primary.light' }}>
             <Box component="tr">
+              {bulkMode && (
+                <Box component="th" sx={{ p: 2, textAlign: 'center', color: 'white', fontWeight: 600, width: 60 }}>
+                  <Checkbox
+                    checked={selectedMeetings.length === filteredAndSortedMeetings.length && filteredAndSortedMeetings.length > 0}
+                    indeterminate={selectedMeetings.length > 0 && selectedMeetings.length < filteredAndSortedMeetings.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedMeetings(filteredAndSortedMeetings.map(m => m.id));
+                      } else {
+                        setSelectedMeetings([]);
+                      }
+                    }}
+                    sx={{ color: 'white', '&.Mui-checked': { color: 'white' }, '&.MuiCheckbox-indeterminate': { color: 'white' } }}
+                  />
+                </Box>
+              )}
               <Box component="th" sx={{ p: 2, textAlign: 'left', color: 'white', fontWeight: 600 }}>
                 Status
               </Box>
@@ -540,11 +716,23 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
                 component="tr"
                 key={meeting.id}
                 sx={{
-                  bgcolor: index % 2 === 0 ? 'background.paper' : 'action.hover',
-                  '&:hover': { bgcolor: 'action.selected' },
-                  cursor: 'pointer'
+                  bgcolor: selectedMeetings.includes(meeting.id) 
+                    ? 'primary.light' 
+                    : index % 2 === 0 ? 'background.paper' : 'action.hover',
+                  '&:hover': { bgcolor: selectedMeetings.includes(meeting.id) ? 'primary.light' : 'action.selected' },
+                  cursor: bulkMode ? 'pointer' : 'default'
                 }}
+                onClick={bulkMode ? () => toggleMeetingSelection(meeting.id) : undefined}
               >
+                {bulkMode && (
+                  <Box component="td" sx={{ p: 2, textAlign: 'center' }}>
+                    <Checkbox
+                      checked={selectedMeetings.includes(meeting.id)}
+                      onChange={() => toggleMeetingSelection(meeting.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </Box>
+                )}
                 <Box component="td" sx={{ p: 2 }}>
                   <Chip
                     icon={getStatusIcon(meeting.status)}
@@ -788,8 +976,85 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
                 )}
               </Box>
             )}
+
+            {/* Bulk Operations Toggle */}
+            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Button
+                variant={bulkMode ? "contained" : "outlined"}
+                size="small"
+                startIcon={bulkMode ? <ClearAllIcon /> : <SelectAllIcon />}
+                onClick={() => {
+                  setBulkMode(!bulkMode);
+                  if (bulkMode) clearSelection();
+                }}
+              >
+                {bulkMode ? 'Exit Selection' : 'Bulk Select'}
+              </Button>
+              
+              {bulkMode && (
+                <>
+                  <Button size="small" onClick={selectAllMeetings}>
+                    Select All ({filteredAndSortedMeetings.length})
+                  </Button>
+                  <Button size="small" onClick={clearSelection}>
+                    Clear ({selectedMeetings.size})
+                  </Button>
+                </>
+              )}
+            </Box>
           </CardContent>
         </Card>
+
+        {/* Bulk Actions Toolbar */}
+        <Collapse in={bulkMode && selectedMeetings.size > 0}>
+          <Paper 
+            elevation={3} 
+            sx={{ 
+              mt: 2, 
+              p: 2, 
+              bgcolor: 'primary.main', 
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              flexWrap: 'wrap'
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight="bold">
+              {selectedMeetings.length} meeting{selectedMeetings.length !== 1 ? 's' : ''} selected
+            </Typography>
+            <Divider orientation="vertical" flexItem sx={{ bgcolor: 'rgba(255,255,255,0.3)' }} />
+            <Button 
+              variant="outlined" 
+              size="small" 
+              startIcon={<FolderIcon />}
+              onClick={() => setBulkMoveFolderDialogOpen(true)}
+              sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.5)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+            >
+              Move to Folder
+            </Button>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              startIcon={<LabelIcon />}
+              onClick={() => setBulkAddTagsDialogOpen(true)}
+              sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.5)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+            >
+              Add Tags
+            </Button>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              startIcon={<DeleteIcon />}
+              onClick={() => setBulkDeleteDialogOpen(true)}
+              disabled={bulkProcessing}
+              sx={{ color: '#ff8a80', borderColor: 'rgba(255,138,128,0.5)', '&:hover': { borderColor: '#ff8a80', bgcolor: 'rgba(255,138,128,0.1)' } }}
+            >
+              Delete Selected
+            </Button>
+            {bulkProcessing && <Typography variant="caption">Processing...</Typography>}
+          </Paper>
+        </Collapse>
       </Box>
 
       {error && (
@@ -940,6 +1205,99 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
           </Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Move to Folder Dialog */}
+      <Dialog open={bulkMoveFolderDialogOpen} onClose={() => setBulkMoveFolderDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Move {selectedMeetings.length} Meetings to Folder</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            freeSolo
+            options={folders.filter(f => f !== 'Uncategorized')}
+            value={bulkFolderName}
+            onChange={(event, newValue) => setBulkFolderName(newValue || '')}
+            onInputChange={(event, newInputValue) => setBulkFolderName(newInputValue)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                autoFocus
+                margin="dense"
+                label="Folder Name"
+                fullWidth
+                variant="outlined"
+                helperText="Select existing folder or type new name"
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: (
+                    <>
+                      <InputAdornment position="start">
+                        <CreateNewFolderIcon />
+                      </InputAdornment>
+                      {params.InputProps.startAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkMoveFolderDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleBulkMoveFolder} variant="contained">Move All</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Add Tags Dialog */}
+      <Dialog open={bulkAddTagsDialogOpen} onClose={() => setBulkAddTagsDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Tags to {selectedMeetings.length} Meetings</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            multiple
+            freeSolo
+            options={allTags}
+            value={bulkTags}
+            onChange={(event, newValue) => setBulkTags(newValue)}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Chip variant="outlined" label={option} size="small" {...getTagProps({ index })} key={option} />
+              ))
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                autoFocus
+                margin="dense"
+                label="Tags"
+                fullWidth
+                variant="outlined"
+                helperText="Select existing tags or type new ones"
+              />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkAddTagsDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleBulkAddTags} variant="contained" disabled={bulkTags.length === 0}>
+            Add Tags
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onClose={() => setBulkDeleteDialogOpen(false)}>
+        <DialogTitle>Delete {selectedMeetings.length} Meetings</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete {selectedMeetings.length} meetings?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleBulkDelete} color="error" variant="contained">
+            Delete All
           </Button>
         </DialogActions>
       </Dialog>

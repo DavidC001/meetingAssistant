@@ -1,15 +1,15 @@
 .meeting-details-container {
-    background-color: #ffffff;
+    background-color: var(--bg-secondary);
     padding: 2rem;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px var(--shadow-color);
 }
 
 .details-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid #eee;
+    border-bottom: 2px solid var(--border-light);
     padding-bottom: 1rem;
     margin-bottom: 1rem;
 }
@@ -32,8 +32,8 @@
 }
 
 .summary-box, .transcript-box {
-    background-color: #f9f9f9;
-    border: 1px solid #eee;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
     padding: 1.5rem;
     border-radius: 8px;
     white-space: pre-wrap; /* Preserves line breaks in transcript */
@@ -60,28 +60,28 @@
 .processing-notice {
     text-align: center;
     padding: 3rem;
-    background-color: #e3f2fd;
+    background-color: var(--calendar-today);
     border-radius: 8px;
     margin-top: 2rem;
 }
 
 .processing-notice.error {
-    background-color: #ffebee;
-    color: #c62828;
+    background-color: var(--time-indicator);
+    color: #ffffff;
 }
 
 /* Processing Progress Styles */
 .processing-container {
     margin-top: 2rem;
     padding: 2rem;
-    background-color: #f8f9fa;
+    background-color: var(--bg-tertiary);
     border-radius: 8px;
-    border: 1px solid #e9ecef;
+    border: 1px solid var(--border-light);
 }
 
 .processing-container h3 {
     text-align: center;
-    color: #1a237e;
+    color: var(--text-heading);
     margin-bottom: 2rem;
 }
 
@@ -94,7 +94,7 @@
     text-align: center;
     font-size: 1.2rem;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
     margin-bottom: 2rem;
 }
 
@@ -115,21 +115,21 @@
 
 .progress-label {
     font-weight: 500;
-    color: #555;
+    color: var(--text-secondary);
 }
 
 .progress-percentage {
     font-weight: 600;
-    color: #1a237e;
+    color: var(--text-heading);
 }
 
 .progress-bar {
     width: 100%;
     height: 12px;
-    background-color: #e9ecef;
+    background-color: var(--border-light);
     border-radius: 6px;
     overflow: hidden;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: inset 0 1px 3px var(--shadow-color);
 }
 
 .progress-fill {
@@ -162,7 +162,7 @@
     left: 10%;
     right: 10%;
     height: 2px;
-    background-color: #e9ecef;
+    background-color: var(--border-light);
     z-index: 1;
 }
 
@@ -192,14 +192,14 @@
 .stage-name {
     font-size: 0.85rem;
     text-align: center;
-    color: #666;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
 /* Stage indicator states */
 .stage-indicator.pending .stage-number {
-    background-color: #e9ecef;
-    color: #6c757d;
+    background-color: var(--border-light);
+    color: var(--text-secondary);
 }
 
 .stage-indicator.active .stage-number {
@@ -215,7 +215,7 @@
 
 .stage-indicator.active .stage-name,
 .stage-indicator.completed .stage-name {
-    color: #333;
+    color: var(--text-primary);
     font-weight: 600;
 }
 
