@@ -996,7 +996,7 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
                     Select All ({filteredAndSortedMeetings.length})
                   </Button>
                   <Button size="small" onClick={clearSelection}>
-                    Clear ({selectedMeetings.size})
+                    Clear ({selectedMeetings.length})
                   </Button>
                 </>
               )}
@@ -1005,7 +1005,7 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
         </Card>
 
         {/* Bulk Actions Toolbar */}
-        <Collapse in={bulkMode && selectedMeetings.size > 0}>
+        <Collapse in={bulkMode && selectedMeetings.length > 0}>
           <Paper 
             elevation={3} 
             sx={{ 

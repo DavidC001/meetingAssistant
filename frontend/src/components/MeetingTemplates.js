@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -42,6 +43,7 @@ const TEMPLATE_TYPES = [
 ];
 
 const MeetingTemplates = ({ onSelectTemplate }) => {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -151,6 +153,13 @@ const MeetingTemplates = ({ onSelectTemplate }) => {
   const handleUseTemplate = async (template) => {
     try {
       await api.post(`/api/v1/templates/${template.id}/use`);
+      
+      // Store template in sessionStorage to be picked up by UploadForm
+      sessionStorage.setItem('selectedTemplate', JSON.stringify(template));
+      
+      // Navigate to dashboard (which includes upload form)
+      navigate('/');
+      
       if (onSelectTemplate) {
         onSelectTemplate(template);
       }
