@@ -617,18 +617,17 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
           <AccordionSummary
             expandIcon={<ExpandMoreIcon />}
             sx={{
-              backgroundColor: 'primary.light',
-              color: 'primary.contrastText',
+              bgcolor: 'background.paper',
               minHeight: 64,
               '&:hover': {
-                backgroundColor: 'primary.main',
+                bgcolor: 'action.hover',
               }
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
               {expandedFolders[folder] !== false ?
-                <FolderOpenIcon sx={{ fontSize: 28 }} /> :
-                <FolderIcon sx={{ fontSize: 28 }} />
+                <FolderOpenIcon sx={{ fontSize: 28, color: 'warning.main' }} /> :
+                <FolderIcon sx={{ fontSize: 28, color: 'warning.main' }} />
               }
               <Typography variant="h6" fontWeight="600">
                 {folder}
@@ -637,14 +636,14 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
                 label={`${groupedMeetings[folder].length} meeting${groupedMeetings[folder].length !== 1 ? 's' : ''}`}
                 sx={{
                   ml: 'auto',
-                  bgcolor: 'background.paper',
+                  bgcolor: 'action.selected',
                   color: 'primary.main',
                   fontWeight: 600
                 }}
               />
             </Box>
           </AccordionSummary>
-          <AccordionDetails sx={{ p: 2, bgcolor: 'action.hover' }}>
+          <AccordionDetails sx={{ p: 2, bgcolor: 'background.default' }}>
             <Grid container spacing={2}>
               {groupedMeetings[folder].map((meeting) => (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={meeting.id}>
@@ -810,36 +809,36 @@ const MeetingsBrowser = ({ onMeetingUpdate }) => {
         {/* Stats Cards */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
           <Grid item xs={12} sm={6} md={2.4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.light', color: 'white' }}>
-              <AssessmentIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <AssessmentIcon sx={{ fontSize: 40, mb: 1, color: 'primary.main' }} />
               <Typography variant="h4" fontWeight="600">{stats.total}</Typography>
               <Typography variant="body2">Total Meetings</Typography>
             </Paper>
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
-              <CheckCircleIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <CheckCircleIcon sx={{ fontSize: 40, mb: 1, color: 'success.main' }} />
               <Typography variant="h4" fontWeight="600">{stats.completed}</Typography>
               <Typography variant="body2">Completed</Typography>
             </Paper>
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'white' }}>
-              <ScheduleIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <ScheduleIcon sx={{ fontSize: 40, mb: 1, color: 'info.main' }} />
               <Typography variant="h4" fontWeight="600">{stats.processing}</Typography>
               <Typography variant="body2">Processing</Typography>
             </Paper>
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'error.light', color: 'white' }}>
-              <ErrorIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <ErrorIcon sx={{ fontSize: 40, mb: 1, color: 'error.main' }} />
               <Typography variant="h4" fontWeight="600">{stats.failed}</Typography>
               <Typography variant="body2">Failed</Typography>
             </Paper>
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light', color: 'white' }}>
-              <FolderIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <FolderIcon sx={{ fontSize: 40, mb: 1, color: 'warning.main' }} />
               <Typography variant="h4" fontWeight="600">{stats.folders}</Typography>
               <Typography variant="body2">Folders</Typography>
             </Paper>
