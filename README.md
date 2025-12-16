@@ -34,6 +34,7 @@
 ### 📊 Export & Integration
 - **Multiple Formats**: JSON, TXT, DOCX, PDF exports with full formatting
 - **Google Calendar**: OAuth integration for syncing action items
+- **Google Drive Sync**: Automatic file synchronization from Drive folders
 - **ICS Generation**: Downloadable calendar files for action items
 - **Meeting Graph**: Visual exploration of meeting relationships
 
@@ -78,7 +79,7 @@
 backend/app/
 ├── core/                    # Core business logic
 │   ├── base/               # Utilities, caching, retry logic
-│   ├── integrations/       # Calendar, export, Google Calendar
+│   ├── integrations/       # Calendar, export, Google Calendar, Google Drive
 │   ├── llm/                # LLM providers, chat, tools, analysis
 │   ├── processing/         # Transcription, diarization, pipeline
 │   └── storage/            # Embeddings, vector store, RAG
@@ -97,6 +98,7 @@ frontend/src/
 │   ├── GlobalChat.js           # Cross-meeting chat
 │   ├── MeetingsGraph.js        # Relationship visualization
 │   ├── Calendar.js             # Action items calendar
+│   ├── GoogleDriveSync.js      # Drive folder sync
 │   └── Settings.js             # Configuration
 ├── services/               # API client services
 ├── hooks/                  # Custom React hooks
@@ -146,6 +148,13 @@ docker-compose -f docker-compose.cpu.yml up -d
 3. **Ollama** (Optional - for local LLM)
    - Can be managed directly from the Settings page
 
+4. **Google OAuth** (Optional - for Calendar and Drive sync)
+   - Create project at [Google Cloud Console](https://console.cloud.google.com)
+   - Enable Google Calendar API and Google Drive API
+   - Create OAuth 2.0 credentials (Web application)
+   - Add `http://localhost:3000/oauth-callback.html` to authorized redirect URIs
+   - Copy Client ID and Client Secret to `.env`
+
 ### Manual Installation
 
 #### Backend Setup
@@ -171,6 +180,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Start the Celery worker (in another terminal)
 celery -A app.worker.celery_app worker --loglevel=info --pool=solo
+
+# Start the Celery beat scheduler (for Google Drive sync)
+celery -A app.worker.celery_app beat --loglevel=info
 ```
 
 #### Frontend Setup
@@ -218,6 +230,7 @@ PREFERRED_PROVIDER=openai  # or "ollama"
 # Google Calendar (optional)
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/oauth-callback.html
 ```
 
 ## 📖 API Documentation
@@ -237,6 +250,9 @@ Interactive API documentation is available at `http://localhost:8000/docs` (Swag
 | | `POST /api/v1/global-chat/chat` | Send message |
 | **Calendar** | `GET /api/v1/calendar/action-items` | List action items |
 | | `POST /api/v1/calendar/google/sync-all` | Sync to Google Calendar |
+| **Google Drive** | `GET /api/v1/settings/google-drive/auth` | Get OAuth URL |
+| | `GET /api/v1/settings/google-drive/callback` | OAuth callback |
+| | `POST /api/v1/settings/google-drive/sync` | Trigger manual sync |
 | **Settings** | `GET /api/v1/settings/model-configurations` | Get model configs |
 
 ## 📚 Documentation
@@ -272,6 +288,7 @@ For comprehensive documentation, see:
 - [ ] Enterprise authentication (SSO)
 - [ ] Custom AI model fine-tuning
 - [ ] Analytics dashboard
+- [x] Google Drive folder synchronization
 
 ## 🐛 Troubleshooting
 
@@ -284,6 +301,8 @@ For comprehensive documentation, see:
 | **Processing stuck** | Check Celery worker logs; processing can resume from checkpoints |
 | **API connection failed** | Verify backend is running and CORS settings |
 | **Large file upload fails** | Increase `MAX_FILE_SIZE_MB` in .env |
+| **Google OAuth fails** | Revoke access at myaccount.google.com/permissions and reconnect |
+| **Drive sync not working** | Check folder ID, OAuth permissions, and beat scheduler is running |
 
 ### Logs Location
 - Backend: Docker logs or stdout
