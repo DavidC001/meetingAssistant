@@ -356,17 +356,18 @@ async def import_data(
                 
                 # Check if already exists
                 existing_pf = db.query(GoogleDriveProcessedFile).filter(
-                    GoogleDriveProcessedFile.file_id == pf_data["file_id"]
+                    GoogleDriveProcessedFile.drive_file_id == pf_data.get("drive_file_id")
                 ).first()
                 
                 if not existing_pf:
+                    # Align field names with model: drive_file_id, drive_file_name
                     pf_dict = {k: v for k, v in pf_data.items() if k != 'id'}
                     processed_file = GoogleDriveProcessedFile(**pf_dict)
                     db.add(processed_file)
                     stats["processed_files_imported"] += 1
                     
             except Exception as e:
-                stats["errors"].append(f"Processed file '{pf_data.get('file_name')}': {str(e)}")
+                stats["errors"].append(f"Processed file '{pf_data.get('drive_file_name')}': {str(e)}")
         
         db.commit()
         
