@@ -3,6 +3,7 @@ import api from '../api';
 import ModelConfigurations from './ModelConfigurations';
 import APIKeyManagement from './APIKeyManagement';
 import OllamaManager from './OllamaManager';
+import GoogleDriveSync from './GoogleDriveSync';
 import {
   Card,
   CardContent,
@@ -414,6 +415,7 @@ const Settings = () => {
             <Tab label="AI Models" icon={<TuneIcon />} iconPosition="start" />
             <Tab label="API Keys" icon={<KeyIcon />} iconPosition="start" />
             <Tab label="Ollama" icon={<StorageIcon />} iconPosition="start" />
+            <Tab label="Google Drive" icon={<CloudQueueIcon />} iconPosition="start" />
           </Tabs>
         </Box>
 
@@ -1041,6 +1043,11 @@ const Settings = () => {
       {/* Ollama Tab */}
       <TabPanel value={currentTab} index={4}>
         <OllamaManager />
+      </TabPanel>
+
+      {/* Google Drive Tab */}
+      <TabPanel value={currentTab} index={5}>
+        <GoogleDriveSync />
       </TabPanel>
 
       </Paper>

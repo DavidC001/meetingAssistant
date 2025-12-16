@@ -96,6 +96,22 @@ class CeleryConfig:
 
 
 @dataclass
+class GoogleDriveConfig:
+    """Google Drive synchronization settings."""
+
+    enabled: bool
+    sync_folder_id: Optional[str]
+    processed_folder_id: Optional[str]
+    sync_mode: str
+    sync_time: str
+    auto_process: bool
+
+    def is_configured(self) -> bool:
+        """Check if Google Drive sync is properly configured."""
+        return self.enabled and bool(self.sync_folder_id)
+
+
+@dataclass
 class AppConfig:
     """Main application configuration object."""
 
@@ -108,6 +124,7 @@ class AppConfig:
     database: DatabaseConfig
     celery: CeleryConfig
     api: APIConfig
+    google_drive: GoogleDriveConfig
 
     def get_api_key(self, name: Optional[str]) -> Optional[str]:
         """Proxy helper for fetching an API key from :class:`APIConfig`."""
@@ -166,6 +183,18 @@ def get_celery_config() -> CeleryConfig:
     )
 
 
+def get_google_drive_config() -> GoogleDriveConfig:
+    """Build the :class:`GoogleDriveConfig` from environment variables."""
+    return GoogleDriveConfig(
+        enabled=os.getenv("GOOGLE_DRIVE_SYNC_ENABLED", "false").lower() == "true",
+        sync_folder_id=os.getenv("GOOGLE_DRIVE_SYNC_FOLDER_ID"),
+        processed_folder_id=os.getenv("GOOGLE_DRIVE_PROCESSED_FOLDER_ID"),
+        sync_mode=os.getenv("GOOGLE_DRIVE_SYNC_MODE", "manual"),
+        sync_time=os.getenv("GOOGLE_DRIVE_SYNC_TIME", "04:00"),
+        auto_process=os.getenv("GOOGLE_DRIVE_AUTO_PROCESS", "true").lower() == "true",
+    )
+
+
 def get_app_config() -> AppConfig:
     """Construct the aggregate :class:`AppConfig`."""
     return AppConfig(
@@ -178,6 +207,7 @@ def get_app_config() -> AppConfig:
         database=get_database_config(),
         celery=get_celery_config(),
         api=get_api_config(),
+        google_drive=get_google_drive_config(),
     )
 
 

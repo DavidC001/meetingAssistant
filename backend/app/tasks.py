@@ -237,3 +237,202 @@ def recompute_all_embeddings() -> Dict[str, Any]:
         compute_embeddings_for_meeting.delay(meeting_id)
 
     return {"status": "queued", "meetings": len(meeting_ids)}
+
+
+@celery_app.task(bind=True)
+def sync_google_drive_folder(self, force: bool = False):
+    """
+    Celery task to synchronize files from a Google Drive folder.
+    Downloads new files, processes them, and moves them to a processed folder.
+    
+    Args:
+        force: If True, run sync regardless of schedule (for manual triggers)
+    """
+    from pathlib import Path
+    from datetime import datetime, time as dt_time
+    from .core.integrations.google_drive import GoogleDriveService
+    from .core.config import config
+    
+    logger.info("Starting Google Drive folder synchronization (force=%s)", force)
+    db = SessionLocal()
+    
+    try:
+        # Get Google Drive service
+        drive_service = GoogleDriveService(db)
+        
+        # Check if authenticated
+        if not drive_service.is_authenticated():
+            logger.warning("Google Drive not authenticated, skipping sync")
+            return {"status": "not_authenticated"}
+        
+        # Get sync configuration
+        sync_config = crud.get_google_drive_sync_config(db)
+        
+        if not sync_config or not sync_config.enabled:
+            logger.info("Google Drive sync is disabled")
+            return {"status": "disabled"}
+        
+        if not sync_config.sync_folder_id:
+            logger.warning("Sync folder ID not configured")
+            return {"status": "not_configured"}
+        
+        # Check if we should run based on schedule (unless forced)
+        if not force and sync_config.sync_mode == "scheduled":
+            # Parse configured sync time
+            try:
+                hour, minute = map(int, sync_config.sync_time.split(':'))
+                scheduled_time = dt_time(hour, minute)
+            except (ValueError, AttributeError):
+                logger.error("Invalid sync_time format: %s", sync_config.sync_time)
+                scheduled_time = dt_time(4, 0)  # Default to 4 AM
+            
+            now = datetime.now()
+            current_time = now.time()
+            
+            # Check if we're within 30 minutes of the scheduled time
+            # (since beat runs every 30 minutes)
+            from datetime import timedelta
+            scheduled_datetime = datetime.combine(now.date(), scheduled_time)
+            time_diff = abs((now - scheduled_datetime).total_seconds() / 60)
+            
+            # Also check if we already ran today
+            if sync_config.last_sync_at:
+                last_sync_date = sync_config.last_sync_at.date()
+                if last_sync_date == now.date() and time_diff > 30:
+                    logger.info("Already synced today, skipping")
+                    return {"status": "already_synced_today"}
+            
+            if time_diff > 30:
+                logger.info("Not time to sync yet (scheduled: %s, current: %s)", scheduled_time, current_time)
+                return {"status": "not_scheduled_time"}
+            
+            logger.info("Within scheduled sync window, proceeding")
+        elif not force and sync_config.sync_mode == "manual":
+            logger.info("Sync mode is manual, skipping automatic sync")
+            return {"status": "manual_mode"}
+        
+        logger.info(f"Syncing from folder: {sync_config.sync_folder_id}")
+        
+        # Ensure processed folder exists
+        if not sync_config.processed_folder_id:
+            logger.info("Creating processed folder")
+            processed_folder_id = drive_service.ensure_processed_folder(sync_config.sync_folder_id)
+            crud.save_google_drive_sync_config(
+                db,
+                processed_folder_id=processed_folder_id,
+                user_id="default"
+            )
+            # Refresh config
+            sync_config = crud.get_google_drive_sync_config(db)
+        
+        # List files in the sync folder
+        files = drive_service.list_files_in_folder(sync_config.sync_folder_id)
+        logger.info(f"Found {len(files)} files in sync folder")
+        
+        processed_count = 0
+        error_count = 0
+        
+        for file_info in files:
+            file_id = file_info['id']
+            file_name = file_info['name']
+            
+            # Skip if already processed
+            if crud.is_file_processed(db, file_id):
+                logger.debug(f"File {file_name} already processed, skipping")
+                continue
+            
+            # Check if file extension is allowed
+            file_ext = Path(file_name).suffix.lower()
+            if file_ext not in config.upload.allowed_extensions:
+                logger.info(f"Skipping {file_name}: extension {file_ext} not allowed")
+                crud.mark_file_as_processed(db, file_id, file_name)
+                continue
+            
+            try:
+                logger.info(f"Processing file: {file_name}")
+                
+                # Download file
+                upload_dir = Path(config.upload.upload_dir)
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                destination_path = upload_dir / file_name
+                
+                # Ensure unique filename
+                counter = 1
+                original_path = destination_path
+                while destination_path.exists():
+                    stem = original_path.stem
+                    suffix = original_path.suffix
+                    destination_path = original_path.parent / f"{stem}_{counter}{suffix}"
+                    counter += 1
+                
+                file_path, upload_date = drive_service.download_file(file_id, str(destination_path))
+                logger.info(f"Downloaded to: {file_path}, upload date: {upload_date}")
+                
+                # Mark as processed (before creating meeting to avoid duplicates)
+                crud.mark_file_as_processed(db, file_id, file_name)
+                
+                # Create meeting record if auto_process is enabled
+                if sync_config.auto_process:
+                    file_size = destination_path.stat().st_size
+                    
+                    meeting_create = schemas.MeetingCreate(
+                        filename=file_name,
+                        transcription_language="en-US",
+                        number_of_speakers="auto",
+                        meeting_date=upload_date  # Use file upload date as meeting date
+                    )
+                    
+                    db_meeting = crud.create_meeting(
+                        db=db, 
+                        meeting=meeting_create, 
+                        file_path=file_path, 
+                        file_size=file_size
+                    )
+                    
+                    # Update processed file with meeting ID
+                    crud.update_processed_file_meeting(db, file_id, db_meeting.id)
+                    
+                    # Trigger processing task
+                    process_meeting_task.delay(db_meeting.id)
+                    logger.info(f"Created meeting {db_meeting.id} and triggered processing")
+                
+                # Move file to processed folder in Google Drive
+                try:
+                    drive_service.move_file(
+                        file_id,
+                        sync_config.sync_folder_id,
+                        sync_config.processed_folder_id
+                    )
+                    crud.mark_file_moved_to_processed(db, file_id)
+                    logger.info(f"Moved {file_name} to processed folder")
+                except Exception as move_error:
+                    logger.error(f"Failed to move file {file_name}: {move_error}")
+                    # Continue anyway - file is downloaded and processed
+                
+                processed_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing file {file_name}: {e}", exc_info=True)
+                error_count += 1
+                # Don't mark as processed so we can retry later
+                continue
+        
+        # Update last sync time
+        crud.update_sync_last_run(db)
+        
+        logger.info(f"Google Drive sync completed: {processed_count} processed, {error_count} errors")
+        
+        return {
+            "status": "completed",
+            "processed": processed_count,
+            "errors": error_count,
+            "total_files": len(files)
+        }
+        
+    except Exception as e:
+        error_message = f"Error during Google Drive sync: {str(e)}"
+        logger.error(error_message, exc_info=True)
+        return {"status": "error", "error": error_message}
+    finally:
+        db.close()
+

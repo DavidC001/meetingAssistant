@@ -18,6 +18,12 @@ from .modules.settings.crud import (
     create_embedding_configuration, update_embedding_configuration, delete_embedding_configuration,
     get_worker_configuration, set_worker_configuration
 )
+from .modules.settings.crud_drive import (
+    get_google_drive_credentials, save_google_drive_credentials, delete_google_drive_credentials,
+    get_google_drive_sync_config, save_google_drive_sync_config, update_sync_last_run,
+    is_file_processed, mark_file_as_processed, update_processed_file_meeting,
+    mark_file_moved_to_processed, get_processed_files
+)
 from .modules.chat.crud import (
     create_chat_message, get_chat_history, clear_chat_history,
     list_global_chat_sessions, create_global_chat_session, get_global_chat_session,

@@ -21,6 +21,11 @@ from .modules.settings.models import (
     EmbeddingConfiguration,
     WorkerConfiguration
 )
+from .modules.settings.models_drive import (
+    GoogleDriveCredentials,
+    GoogleDriveSyncConfig,
+    GoogleDriveProcessedFile
+)
 from .modules.calendar.models import (
     GoogleCalendarCredentials,
     ScheduledMeeting

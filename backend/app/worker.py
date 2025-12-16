@@ -64,6 +64,17 @@ celery_app.conf.update(
     worker_pool='solo',  # Use solo pool which avoids multiprocessing issues with CUDA
 )
 
+# Configure Celery Beat for periodic tasks
+from celery.schedules import crontab
+
+celery_app.conf.beat_schedule = {
+    'sync-google-drive-daily': {
+        'task': 'app.tasks.sync_google_drive_folder',
+        'schedule': crontab(minute='*/30'),  # Check every 30 minutes, task will decide if it should run
+        'options': {'expires': 1500}  # Task expires after 25 minutes if not executed
+    },
+}
+
 # Worker shutdown signal handler to properly cleanup GPU resources
 @celery_app.task(bind=True)
 def cleanup_gpu_resources(self):

@@ -59,6 +59,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
         const error = urlParams.get('error');
+        const state = urlParams.get('state');
 
         const messageEl = document.getElementById('message');
 
@@ -70,7 +71,8 @@
             if (window.opener) {
                 window.opener.postMessage({
                     type: 'google-oauth-success',
-                    code: code
+                    code: code,
+                    state: state || null
                 }, '*');
                 messageEl.innerHTML = '<div class="success">✓</div>Authorization successful! This window will close automatically.';
                 document.querySelector('.spinner').style.display = 'none';

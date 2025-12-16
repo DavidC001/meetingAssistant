@@ -23,8 +23,13 @@ from ... import crud
 class GoogleCalendarService:
     """Service for managing Google Calendar integration."""
     
-    # OAuth 2.0 scopes for Google Calendar
-    SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+    # OAuth 2.0 scopes for Google Calendar (includes Drive for unified auth)
+    SCOPES = [
+        'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.metadata.readonly'
+    ]
     
     # OAuth2 configuration (these should be set via environment variables)
     CLIENT_CONFIG = {
