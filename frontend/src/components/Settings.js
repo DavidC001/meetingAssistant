@@ -4,6 +4,7 @@ import ModelConfigurations from './ModelConfigurations';
 import APIKeyManagement from './APIKeyManagement';
 import OllamaManager from './OllamaManager';
 import GoogleDriveSync from './GoogleDriveSync';
+import DataBackup from './DataBackup';
 import {
   Card,
   CardContent,
@@ -52,7 +53,8 @@ import {
   Key as KeyIcon,
   ExpandMore as ExpandMoreIcon,
   Memory as MemoryIcon,
-  CloudQueue as CloudQueueIcon
+  CloudQueue as CloudQueueIcon,
+  Backup as BackupIcon
 } from '@mui/icons-material';
 
 const Settings = () => {
@@ -416,6 +418,7 @@ const Settings = () => {
             <Tab label="API Keys" icon={<KeyIcon />} iconPosition="start" />
             <Tab label="Ollama" icon={<StorageIcon />} iconPosition="start" />
             <Tab label="Google Drive" icon={<CloudQueueIcon />} iconPosition="start" />
+            <Tab label="Backup" icon={<BackupIcon />} iconPosition="start" />
           </Tabs>
         </Box>
 
@@ -1048,6 +1051,11 @@ const Settings = () => {
       {/* Google Drive Tab */}
       <TabPanel value={currentTab} index={5}>
         <GoogleDriveSync />
+      </TabPanel>
+
+      {/* Backup Tab */}
+      <TabPanel value={currentTab} index={6}>
+        <DataBackup />
       </TabPanel>
 
       </Paper>

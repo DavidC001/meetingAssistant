@@ -35,6 +35,7 @@
 - **Multiple Formats**: JSON, TXT, DOCX, PDF exports with full formatting
 - **Google Calendar**: OAuth integration for syncing action items
 - **Google Drive Sync**: Automatic file synchronization from Drive folders
+- **Data Backup/Restore**: Complete data export and import for migrations
 - **ICS Generation**: Downloadable calendar files for action items
 - **Meeting Graph**: Visual exploration of meeting relationships
 
@@ -253,6 +254,8 @@ Interactive API documentation is available at `http://localhost:8000/docs` (Swag
 | **Google Drive** | `GET /api/v1/settings/google-drive/auth` | Get OAuth URL |
 | | `GET /api/v1/settings/google-drive/callback` | OAuth callback |
 | | `POST /api/v1/settings/google-drive/sync` | Trigger manual sync |
+| **Backup** | `GET /api/v1/backup/export` | Export all data |
+| | `POST /api/v1/backup/import` | Import backup data |
 | **Settings** | `GET /api/v1/settings/model-configurations` | Get model configs |
 
 ## 📚 Documentation

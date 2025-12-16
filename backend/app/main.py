@@ -14,6 +14,7 @@ from .database import engine, Base
 from .modules.meetings import router as meetings_router
 from .modules.settings import router as settings_router
 from .modules.settings import router_drive as google_drive_router
+from .modules.settings import router_backup as backup_router
 from .modules.admin import router as admin_router
 from .modules.ollama import router as ollama_router
 from .modules.calendar import router as calendar_router
@@ -66,6 +67,7 @@ app.max_request_size = config.upload.max_file_size_bytes
 app.include_router(meetings_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(google_drive_router.router, prefix="/api/v1")
+app.include_router(backup_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
 app.include_router(ollama_router.router, prefix="/api/v1")
 app.include_router(calendar_router.router, prefix="/api/v1")
