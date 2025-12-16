@@ -113,6 +113,23 @@ async def export_data(db: Session = Depends(get_db)):
         chat_sessions = db.query(GlobalChatSession).all()
         chat_sessions_data = [serialize_model(cs) for cs in chat_sessions]
         
+        # Export settings - API Keys (without sensitive data)
+        from ...models import APIKey, ModelConfiguration, EmbeddingConfiguration, WorkerConfiguration
+        api_keys = db.query(APIKey).all()
+        api_keys_data = [serialize_model(ak) for ak in api_keys]
+        
+        # Export model configurations
+        model_configs = db.query(ModelConfiguration).all()
+        model_configs_data = [serialize_model(mc) for mc in model_configs]
+        
+        # Export embedding configurations
+        embedding_configs = db.query(EmbeddingConfiguration).all()
+        embedding_configs_data = [serialize_model(ec) for ec in embedding_configs]
+        
+        # Export worker configuration
+        worker_config = db.query(WorkerConfiguration).first()
+        worker_config_data = serialize_model(worker_config) if worker_config else None
+        
         # Compile export data
         export_data = {
             "export_metadata": {
@@ -123,7 +140,10 @@ async def export_data(db: Session = Depends(get_db)):
                     "user_mappings": len(user_mappings_data),
                     "links": len(links_data),
                     "processed_files": len(processed_files_data),
-                    "chat_sessions": len(chat_sessions_data)
+                    "chat_sessions": len(chat_sessions_data),
+                    "api_keys": len(api_keys_data),
+                    "model_configs": len(model_configs_data),
+                    "embedding_configs": len(embedding_configs_data)
                 }
             },
             "meetings": meetings_data,
@@ -131,7 +151,11 @@ async def export_data(db: Session = Depends(get_db)):
             "meeting_links": links_data,
             "drive_sync_config": drive_config_data,
             "drive_processed_files": processed_files_data,
-            "global_chat_sessions": chat_sessions_data
+            "global_chat_sessions": chat_sessions_data,
+            "api_keys": api_keys_data,
+            "model_configurations": model_configs_data,
+            "embedding_configurations": embedding_configs_data,
+            "worker_configuration": worker_config_data
         }
         
         # Create JSON file
@@ -183,6 +207,10 @@ async def import_data(
             "links_imported": 0,
             "processed_files_imported": 0,
             "chat_sessions_imported": 0,
+            "api_keys_imported": 0,
+            "model_configs_imported": 0,
+            "embedding_configs_imported": 0,
+            "worker_config_imported": 0,
             "errors": []
         }
         
@@ -190,9 +218,163 @@ async def import_data(
         if data.get("export_metadata", {}).get("version") != "1.0":
             raise HTTPException(status_code=400, detail="Unsupported backup version")
         
-        # Import user mappings first (they may be referenced by other data)
+        # Import API keys first (they may be referenced by model/embedding configs)
+        from ...models import APIKey, ModelConfiguration, EmbeddingConfiguration, WorkerConfiguration
+        api_key_id_map = {}  # old_id -> new_id
+        
+        for ak_data in data.get("api_keys", []):
+            try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at']:
+                    if field in ak_data and ak_data[field]:
+                        try:
+                            ak_data[field] = datetime.fromisoformat(ak_data[field])
+                        except:
+                            ak_data[field] = None
+                
+                old_id = ak_data.get('id')
+                
+                # Check if already exists by name
+                existing = db.query(APIKey).filter(
+                    APIKey.name == ak_data.get("name")
+                ).first()
+                
+                if existing:
+                    api_key_id_map[old_id] = existing.id
+                else:
+                    ak_dict = {k: v for k, v in ak_data.items() if k != 'id'}
+                    api_key = APIKey(**ak_dict)
+                    db.add(api_key)
+                    db.flush()
+                    api_key_id_map[old_id] = api_key.id
+                    stats["api_keys_imported"] += 1
+            except Exception as e:
+                stats["errors"].append(f"API Key '{ak_data.get('name')}': {str(e)}")
+        
+        db.commit()
+        
+        # Import model configurations
+        model_config_id_map = {}  # old_id -> new_id
+        
+        for mc_data in data.get("model_configurations", []):
+            try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at']:
+                    if field in mc_data and mc_data[field]:
+                        try:
+                            mc_data[field] = datetime.fromisoformat(mc_data[field])
+                        except:
+                            mc_data[field] = None
+                
+                old_id = mc_data.get('id')
+                
+                # Map foreign keys
+                if 'chat_api_key_id' in mc_data and mc_data['chat_api_key_id']:
+                    mc_data['chat_api_key_id'] = api_key_id_map.get(mc_data['chat_api_key_id'])
+                if 'analysis_api_key_id' in mc_data and mc_data['analysis_api_key_id']:
+                    mc_data['analysis_api_key_id'] = api_key_id_map.get(mc_data['analysis_api_key_id'])
+                
+                # Check if already exists by name
+                existing = db.query(ModelConfiguration).filter(
+                    ModelConfiguration.name == mc_data.get("name")
+                ).first()
+                
+                if existing and not merge_mode:
+                    model_config_id_map[old_id] = existing.id
+                else:
+                    mc_dict = {k: v for k, v in mc_data.items() if k != 'id'}
+                    model_config = ModelConfiguration(**mc_dict)
+                    db.add(model_config)
+                    db.flush()
+                    model_config_id_map[old_id] = model_config.id
+                    stats["model_configs_imported"] += 1
+            except Exception as e:
+                stats["errors"].append(f"Model Config '{mc_data.get('name')}': {str(e)}")
+        
+        db.commit()
+        
+        # Import embedding configurations
+        embedding_config_id_map = {}  # old_id -> new_id
+        
+        for ec_data in data.get("embedding_configurations", []):
+            try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at']:
+                    if field in ec_data and ec_data[field]:
+                        try:
+                            ec_data[field] = datetime.fromisoformat(ec_data[field])
+                        except:
+                            ec_data[field] = None
+                
+                old_id = ec_data.get('id')
+                
+                # Map foreign key
+                if 'api_key_id' in ec_data and ec_data['api_key_id']:
+                    ec_data['api_key_id'] = api_key_id_map.get(ec_data['api_key_id'])
+                
+                # Check if already exists by provider+model_name
+                existing = db.query(EmbeddingConfiguration).filter(
+                    EmbeddingConfiguration.provider == ec_data.get("provider"),
+                    EmbeddingConfiguration.model_name == ec_data.get("model_name")
+                ).first()
+                
+                if existing and not merge_mode:
+                    embedding_config_id_map[old_id] = existing.id
+                else:
+                    ec_dict = {k: v for k, v in ec_data.items() if k != 'id'}
+                    embedding_config = EmbeddingConfiguration(**ec_dict)
+                    db.add(embedding_config)
+                    db.flush()
+                    embedding_config_id_map[old_id] = embedding_config.id
+                    stats["embedding_configs_imported"] += 1
+            except Exception as e:
+                stats["errors"].append(f"Embedding Config '{ec_data.get('provider')}/{ec_data.get('model_name')}': {str(e)}")
+        
+        db.commit()
+        
+        # Import worker configuration
+        worker_data = data.get("worker_configuration")
+        if worker_data:
+            try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at']:
+                    if field in worker_data and worker_data[field]:
+                        try:
+                            worker_data[field] = datetime.fromisoformat(worker_data[field])
+                        except:
+                            worker_data[field] = None
+                
+                # Check if worker config exists
+                existing = db.query(WorkerConfiguration).first()
+                
+                if existing:
+                    # Update existing
+                    for key, value in worker_data.items():
+                        if key != 'id' and hasattr(existing, key):
+                            setattr(existing, key, value)
+                    stats["worker_config_imported"] += 1
+                else:
+                    # Create new
+                    wc_dict = {k: v for k, v in worker_data.items() if k != 'id'}
+                    worker_config = WorkerConfiguration(**wc_dict)
+                    db.add(worker_config)
+                    stats["worker_config_imported"] += 1
+            except Exception as e:
+                stats["errors"].append(f"Worker Config: {str(e)}")
+        
+        db.commit()
+        
+        # Import user mappings (they may be referenced by other data)
         for um_data in data.get("user_mappings", []):
             try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at']:
+                    if field in um_data and um_data[field]:
+                        try:
+                            um_data[field] = datetime.fromisoformat(um_data[field])
+                        except:
+                            um_data[field] = None
+                
                 # Check if already exists by name
                 existing = db.query(UserMapping).filter(
                     UserMapping.name == um_data.get("name")
@@ -239,21 +421,34 @@ async def import_data(
                         except:
                             meeting_data[field] = None
                 
-                # Handle foreign key references - set to NULL if referenced records don't exist
-                from ...models import ModelConfiguration, EmbeddingConfiguration
+                # Handle foreign key references - map to new IDs or set to NULL
                 if 'model_configuration_id' in meeting_data and meeting_data['model_configuration_id']:
-                    model_exists = db.query(ModelConfiguration).filter(
-                        ModelConfiguration.id == meeting_data['model_configuration_id']
-                    ).first()
-                    if not model_exists:
-                        meeting_data['model_configuration_id'] = None
+                    # Try to map to imported config first
+                    old_config_id = meeting_data['model_configuration_id']
+                    new_config_id = model_config_id_map.get(old_config_id)
+                    if new_config_id:
+                        meeting_data['model_configuration_id'] = new_config_id
+                    else:
+                        # Check if it exists in database
+                        model_exists = db.query(ModelConfiguration).filter(
+                            ModelConfiguration.id == meeting_data['model_configuration_id']
+                        ).first()
+                        if not model_exists:
+                            meeting_data['model_configuration_id'] = None
                 
                 if 'embedding_config_id' in meeting_data and meeting_data['embedding_config_id']:
-                    embed_exists = db.query(EmbeddingConfiguration).filter(
-                        EmbeddingConfiguration.id == meeting_data['embedding_config_id']
-                    ).first()
-                    if not embed_exists:
-                        meeting_data['embedding_config_id'] = None
+                    # Try to map to imported config first
+                    old_embed_id = meeting_data['embedding_config_id']
+                    new_embed_id = embedding_config_id_map.get(old_embed_id)
+                    if new_embed_id:
+                        meeting_data['embedding_config_id'] = new_embed_id
+                    else:
+                        # Check if it exists in database
+                        embed_exists = db.query(EmbeddingConfiguration).filter(
+                            EmbeddingConfiguration.id == meeting_data['embedding_config_id']
+                        ).first()
+                        if not embed_exists:
+                            meeting_data['embedding_config_id'] = None
                 
                 # Create meeting (without old ID)
                 meeting_dict = {k: v for k, v in meeting_data.items() if k not in ['id', 'transcription']}
@@ -314,6 +509,13 @@ async def import_data(
         # Import meeting links (after all meetings are imported)
         for link_data in data.get("meeting_links", []):
             try:
+                # Convert datetime if present
+                if 'created_at' in link_data and link_data['created_at']:
+                    try:
+                        link_data['created_at'] = datetime.fromisoformat(link_data['created_at'])
+                    except:
+                        link_data['created_at'] = None
+                
                 old_source_id = link_data.get("source_meeting_id")
                 old_target_id = link_data.get("target_meeting_id")
                 
@@ -347,7 +549,10 @@ async def import_data(
             try:
                 # Convert datetime
                 if "processed_at" in pf_data and pf_data["processed_at"]:
-                    pf_data["processed_at"] = datetime.fromisoformat(pf_data["processed_at"])
+                    try:
+                        pf_data["processed_at"] = datetime.fromisoformat(pf_data["processed_at"])
+                    except:
+                        pf_data["processed_at"] = None
                 
                 # Map old meeting_id to new one
                 if "meeting_id" in pf_data and pf_data["meeting_id"]:
@@ -380,18 +585,22 @@ async def import_data(
                         cs_data[field] = datetime.fromisoformat(cs_data[field])
                 
                 # Check if already exists
-                existing_cs = db.query(GlobalChatSession).filter(
-                    GlobalChatSession.session_id == cs_data["session_id"]
-                ).first()
+                # Use title + created_at as a simple uniqueness heuristic
+                existing_cs = None
+                if cs_data.get("title"):
+                    existing_cs = db.query(GlobalChatSession).filter(
+                        GlobalChatSession.title == cs_data.get("title")
+                    ).first()
                 
                 if not existing_cs:
-                    cs_dict = {k: v for k, v in cs_data.items() if k != 'id'}
+                    # Align to model fields: title, tags, filter_folder, filter_tags, created_at, updated_at
+                    cs_dict = {k: v for k, v in cs_data.items() if k in ['title','tags','filter_folder','filter_tags','created_at','updated_at']}
                     chat_session = GlobalChatSession(**cs_dict)
                     db.add(chat_session)
                     stats["chat_sessions_imported"] += 1
                     
             except Exception as e:
-                stats["errors"].append(f"Chat session '{cs_data.get('session_id')}': {str(e)}")
+                stats["errors"].append(f"Chat session '{cs_data.get('title')}': {str(e)}")
         
         db.commit()
         

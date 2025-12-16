@@ -304,6 +304,27 @@ const DataBackup = () => {
                     primary={`Links: ${result.statistics.links_imported} imported`}
                   />
                 </ListItem>
+                {result.statistics.api_keys_imported > 0 && (
+                  <ListItem disableGutters>
+                    <ListItemText 
+                      primary={`API Keys: ${result.statistics.api_keys_imported} imported`}
+                    />
+                  </ListItem>
+                )}
+                {result.statistics.model_configs_imported > 0 && (
+                  <ListItem disableGutters>
+                    <ListItemText 
+                      primary={`Model Configs: ${result.statistics.model_configs_imported} imported`}
+                    />
+                  </ListItem>
+                )}
+                {result.statistics.embedding_configs_imported > 0 && (
+                  <ListItem disableGutters>
+                    <ListItemText 
+                      primary={`Embedding Configs: ${result.statistics.embedding_configs_imported} imported`}
+                    />
+                  </ListItem>
+                )}
                 {result.statistics.errors && result.statistics.errors.length > 0 && (
                   <ListItem disableGutters>
                     <ListItemIcon sx={{ minWidth: 30 }}>
