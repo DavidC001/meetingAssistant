@@ -239,6 +239,22 @@ async def import_data(
                         except:
                             meeting_data[field] = None
                 
+                # Handle foreign key references - set to NULL if referenced records don't exist
+                from ...models import ModelConfiguration, EmbeddingConfiguration
+                if 'model_configuration_id' in meeting_data and meeting_data['model_configuration_id']:
+                    model_exists = db.query(ModelConfiguration).filter(
+                        ModelConfiguration.id == meeting_data['model_configuration_id']
+                    ).first()
+                    if not model_exists:
+                        meeting_data['model_configuration_id'] = None
+                
+                if 'embedding_config_id' in meeting_data and meeting_data['embedding_config_id']:
+                    embed_exists = db.query(EmbeddingConfiguration).filter(
+                        EmbeddingConfiguration.id == meeting_data['embedding_config_id']
+                    ).first()
+                    if not embed_exists:
+                        meeting_data['embedding_config_id'] = None
+                
                 # Create meeting (without old ID)
                 meeting_dict = {k: v for k, v in meeting_data.items() if k not in ['id', 'transcription']}
                 meeting = Meeting(**meeting_dict)
