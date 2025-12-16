@@ -193,9 +193,9 @@ async def import_data(
         # Import user mappings first (they may be referenced by other data)
         for um_data in data.get("user_mappings", []):
             try:
-                # Check if already exists
+                # Check if already exists by name
                 existing = db.query(UserMapping).filter(
-                    UserMapping.speaker_name == um_data["speaker_name"]
+                    UserMapping.name == um_data.get("name")
                 ).first()
                 
                 if not existing:
@@ -203,7 +203,7 @@ async def import_data(
                     db.add(user_mapping)
                     stats["user_mappings_imported"] += 1
             except Exception as e:
-                stats["errors"].append(f"User mapping '{um_data.get('speaker_name')}': {str(e)}")
+                stats["errors"].append(f"User mapping '{um_data.get('name')}': {str(e)}")
         
         db.commit()
         
@@ -329,11 +329,10 @@ async def import_data(
                     ).first()
                     
                     if not existing_link:
+                        # MeetingLink only has source and target IDs, no other fields
                         link = MeetingLink(
                             source_meeting_id=new_source_id,
-                            target_meeting_id=new_target_id,
-                            relation_type=link_data.get("relation_type"),
-                            confidence=link_data.get("confidence")
+                            target_meeting_id=new_target_id
                         )
                         db.add(link)
                         stats["links_imported"] += 1
