@@ -44,6 +44,9 @@ def serialize_model(obj: Any) -> Dict[str, Any]:
         elif isinstance(value, bytes):
             # Skip binary data
             result[column.key] = None
+        elif isinstance(value, (dict, list)):
+            # Preserve dict and list types (JSON columns)
+            result[column.key] = value
         else:
             # Try to convert to string for other types
             try:
@@ -305,6 +308,13 @@ async def import_data(
                             ec_data[field] = datetime.fromisoformat(ec_data[field])
                         except:
                             ec_data[field] = None
+                
+                # Parse JSON string fields back to dict if needed
+                if 'settings' in ec_data and isinstance(ec_data['settings'], str):
+                    try:
+                        ec_data['settings'] = json.loads(ec_data['settings'])
+                    except:
+                        ec_data['settings'] = None
                 
                 old_id = ec_data.get('id')
                 
