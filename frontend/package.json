@@ -28,7 +28,9 @@
     "react-big-calendar": "^1.8.5",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "react-force-graph-2d": "^1.25.4"
+    "react-force-graph-2d": "^1.25.4",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-swipeable": "^7.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",

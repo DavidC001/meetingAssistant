@@ -75,6 +75,7 @@ import { styled } from '@mui/material/styles';
 import api from '../api';
 import Chat from './Chat';
 import AudioPlayer from './AudioPlayer';
+import FloatingChat from './meeting/FloatingChat';
 
 // Styled components
 const ProcessingCard = styled(Card)(({ theme }) => ({
@@ -504,11 +505,11 @@ const MeetingDetails = () => {
         </Button>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
-          <Box>
-            <Typography variant="h4" fontWeight="700" gutterBottom>
+          <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 'auto' } }}>
+            <Typography variant="h4" fontWeight="700" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
               {meeting.filename}
             </Typography>
-            <Stack direction="row" spacing={2} alignItems="center">
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 2 }} alignItems={{ xs: 'flex-start', sm: 'center' }}>
               <Chip 
                 label={meeting.status.toUpperCase()} 
                 color={getStatusColor(meeting.status)} 
@@ -525,7 +526,7 @@ const MeetingDetails = () => {
             </Stack>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {meeting.status === 'completed' && (
               <>
                 <Button 
@@ -635,7 +636,6 @@ const MeetingDetails = () => {
           <Tab icon={<SummarizeIcon />} label="Overview" iconPosition="start" />
           <Tab icon={<DescriptionIcon />} label="Transcript" iconPosition="start" disabled={!meeting.transcription} />
           <Tab icon={<AssignmentIcon />} label="Action Items" iconPosition="start" disabled={!meeting.transcription} />
-          <Tab icon={<ChatIcon />} label="AI Chat" iconPosition="start" disabled={!meeting.transcription} />
           <Tab icon={<NoteIcon />} label="Notes" iconPosition="start" />
           <Tab icon={<AttachFileIcon />} label={`Attachments (${attachments.length})`} iconPosition="start" />
         </Tabs>
@@ -954,15 +954,8 @@ const MeetingDetails = () => {
           </Box>
         </TabPanel>
 
-        {/* Chat Tab */}
-        <TabPanel value={activeTab} index={3}>
-          <Box sx={{ height: '70vh', px: 3 }}>
-            <Chat meetingId={meetingId} />
-          </Box>
-        </TabPanel>
-
         {/* Notes Tab */}
-        <TabPanel value={activeTab} index={4}>
+        <TabPanel value={activeTab} index={3}>
           <Box sx={{ px: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6">Personal Notes</Typography>
@@ -1008,7 +1001,7 @@ const MeetingDetails = () => {
         </TabPanel>
 
         {/* Attachments Tab */}
-        <TabPanel value={activeTab} index={5}>
+        <TabPanel value={activeTab} index={4}>
           <Box sx={{ px: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
               <Button 
@@ -1101,6 +1094,14 @@ const MeetingDetails = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Floating Chat */}
+      {meeting && meeting.transcription && (
+        <FloatingChat 
+          meetingId={meetingId} 
+          meetingTitle={meeting.filename || meeting.title || 'Meeting'}
+        />
+      )}
 
     </Box>
   );

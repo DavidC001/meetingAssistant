@@ -12,7 +12,9 @@ import {
   Chip,
   LinearProgress,
   Stack,
-  Divider
+  Divider,
+  IconButton,
+  useTheme
 } from '@mui/material';
 import {
   Upload as UploadIcon,
@@ -22,14 +24,21 @@ import {
   Error as ErrorIcon,
   TrendingUp as TrendingUpIcon,
   CalendarToday as CalendarIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  Sync as ProcessingIcon
 } from '@mui/icons-material';
-import UploadForm from './UploadForm';
+import MeetingCard from './common/MeetingCard';
+import LoadingSkeleton from './common/LoadingSkeleton';
+import EmptyState from './common/EmptyState';
+import UploadFAB from './upload/UploadFAB';
 import api from '../api';
 
 const MeetingsDashboard = () => {
+  const theme = useTheme();
   const [refreshKey, setRefreshKey] = useState(0);
   const [recentMeetings, setRecentMeetings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
@@ -39,7 +48,16 @@ const MeetingsDashboard = () => {
     thisWeek: 0
   });
 
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const fetchDashboardData = async () => {
+    setLoading(true);
     try {
       const response = await api.get('/api/v1/meetings/');
       const meetings = response.data;
@@ -54,8 +72,10 @@ const MeetingsDashboard = () => {
 
       // Calculate stats
       const now = new Date();
-      const todayStart = new Date(now.setHours(0, 0, 0, 0));
-      const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      weekStart.setHours(0, 0, 0, 0);
 
       const todayCount = meetings.filter(m => 
         new Date(m.meeting_date || m.created_at) >= todayStart
@@ -75,6 +95,8 @@ const MeetingsDashboard = () => {
       });
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,111 +108,118 @@ const MeetingsDashboard = () => {
     setRefreshKey(prevKey => prevKey + 1);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'No date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+  const formatCurrentTime = () => {
+    return currentTime.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
+
+  // Stat card configuration
+  const statCards = [
+    {
+      label: 'Total Meetings',
+      value: stats.total,
+      icon: AssessmentIcon,
+      color: '#1976d2',
+    },
+    {
+      label: 'Completed',
+      value: stats.completed,
+      icon: CheckCircleIcon,
+      color: '#4caf50',
+    },
+    {
+      label: 'Processing',
+      value: stats.processing,
+      icon: ProcessingIcon,
+      color: '#2196f3',
+    },
+    {
+      label: 'This Week',
+      value: stats.thisWeek,
+      icon: TrendingUpIcon,
+      color: '#ff9800',
+    },
+  ];
 
   return (
     <Fade in timeout={500}>
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Box>
-            <Typography variant="h3" component="h1" fontWeight="700" gutterBottom>
-              Welcome Back! 👋
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Upload new meetings or browse your collection
-            </Typography>
-          </Box>
+        {/* Professional Header */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" fontWeight="700" gutterBottom>
+            Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {formatCurrentTime()}
+          </Typography>
         </Box>
 
-        {/* Quick Stats */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={3} sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="h3" fontWeight="700">{stats.total}</Typography>
-                    <Typography variant="body2">Total Meetings</Typography>
-                  </Box>
-                  <AssessmentIcon sx={{ fontSize: 48, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
+        {/* Statistics Cards with Consistent Design */}
+        {loading ? (
+          <LoadingSkeleton variant="compact" count={4} />
+        ) : (
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {statCards.map((stat, index) => {
+              const Icon = stat.icon;
+              return (
+                <Grid item xs={12} sm={6} md={3} key={index}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      borderLeft: `4px solid ${stat.color}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                      },
+                    }}
+                  >
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box
+                          sx={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: '50%',
+                            backgroundColor: `${stat.color}15`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Icon sx={{ fontSize: 24, color: stat.color }} />
+                        </Box>
+                        <Box>
+                          <Typography variant="h4" fontWeight="700">
+                            {stat.value}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {stat.label}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={3} sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="h3" fontWeight="700">{stats.completed}</Typography>
-                    <Typography variant="body2">Completed</Typography>
-                  </Box>
-                  <CheckCircleIcon sx={{ fontSize: 48, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={3} sx={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="h3" fontWeight="700">{stats.processing}</Typography>
-                    <Typography variant="body2">Processing</Typography>
-                  </Box>
-                  <ScheduleIcon sx={{ fontSize: 48, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Card elevation={3} sx={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', color: 'white' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="h3" fontWeight="700">{stats.thisWeek}</Typography>
-                    <Typography variant="body2">This Week</Typography>
-                  </Box>
-                  <TrendingUpIcon sx={{ fontSize: 48, opacity: 0.8 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-
-        {/* Upload Section */}
-        <Card elevation={3} sx={{ mb: 4, borderRadius: 3 }}>
-          <CardContent sx={{ p: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <UploadIcon sx={{ fontSize: 32, mr: 2, color: 'primary.main' }} />
-              <Typography variant="h5" fontWeight="600">
-                Upload New Meeting
-              </Typography>
-            </Box>
-            <UploadForm onUploadSuccess={handleMeetingsUpdate} />
-          </CardContent>
-        </Card>
+        )}
 
         {/* Quick Actions & Recent Meetings */}
         <Grid container spacing={3}>
           {/* Quick Actions */}
           <Grid item xs={12} md={4}>
-            <Card elevation={3} sx={{ height: '100%', borderRadius: 3 }}>
+            <Card sx={{ height: '100%' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" fontWeight="600" gutterBottom sx={{ mb: 3 }}>
-                  🚀 Quick Actions
+                  Quick Actions
                 </Typography>
                 <Stack spacing={2}>
                   <Button
@@ -200,11 +229,7 @@ const MeetingsDashboard = () => {
                     size="large"
                     fullWidth
                     startIcon={<FolderOpenIcon />}
-                    sx={{ 
-                      py: 1.5,
-                      background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                      boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-                    }}
+                    sx={{ py: 1.5 }}
                   >
                     Browse All Meetings
                   </Button>
@@ -237,11 +262,11 @@ const MeetingsDashboard = () => {
 
           {/* Recent Meetings */}
           <Grid item xs={12} md={8}>
-            <Card elevation={3} sx={{ height: '100%', borderRadius: 3 }}>
+            <Card sx={{ height: '100%' }}>
               <CardContent sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                   <Typography variant="h6" fontWeight="600">
-                    📋 Recent Meetings
+                    Recent Meetings
                   </Typography>
                   <Button 
                     component={Link}
@@ -252,68 +277,22 @@ const MeetingsDashboard = () => {
                   </Button>
                 </Box>
                 
-                {recentMeetings.length === 0 ? (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No meetings yet. Upload your first meeting to get started!
-                    </Typography>
-                  </Box>
+                {loading ? (
+                  <LoadingSkeleton variant="compact" count={5} />
+                ) : recentMeetings.length === 0 ? (
+                  <EmptyState
+                    title="No meetings yet"
+                    description="Upload your first meeting to get started!"
+                    size="small"
+                  />
                 ) : (
-                  <Stack spacing={2}>
+                  <Stack spacing={1}>
                     {recentMeetings.map((meeting) => (
-                      <Paper
+                      <MeetingCard
                         key={meeting.id}
-                        elevation={1}
-                        sx={{
-                          p: 2,
-                          transition: 'all 0.3s',
-                          '&:hover': {
-                            elevation: 3,
-                            transform: 'translateX(4px)',
-                            bgcolor: 'action.hover'
-                          }
-                        }}
-                      >
-                        <Box
-                          component={Link}
-                          to={`/meetings/${meeting.id}`}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            textDecoration: 'none',
-                            color: 'inherit'
-                          }}
-                        >
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="subtitle1" fontWeight="600" gutterBottom>
-                              {meeting.filename}
-                            </Typography>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <CalendarIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                              <Typography variant="caption" color="text.secondary">
-                                {formatDate(meeting.meeting_date || meeting.created_at)}
-                              </Typography>
-                              {meeting.folder && (
-                                <>
-                                  <Divider orientation="vertical" flexItem />
-                                  <Chip 
-                                    label={meeting.folder} 
-                                    size="small" 
-                                    variant="outlined"
-                                  />
-                                </>
-                              )}
-                            </Stack>
-                          </Box>
-                          <Chip
-                            icon={<CheckCircleIcon />}
-                            label="Completed"
-                            color="success"
-                            size="small"
-                          />
-                        </Box>
-                      </Paper>
+                        meeting={meeting}
+                        variant="compact"
+                      />
                     ))}
                   </Stack>
                 )}
@@ -321,6 +300,12 @@ const MeetingsDashboard = () => {
             </Card>
           </Grid>
         </Grid>
+
+        {/* Upload FAB */}
+        <UploadFAB 
+          processingCount={stats.processing} 
+          onUploadComplete={handleMeetingsUpdate} 
+        />
       </Box>
     </Fade>
   );

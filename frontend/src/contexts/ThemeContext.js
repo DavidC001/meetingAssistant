@@ -31,6 +31,27 @@ const getDesignTokens = (mode) => ({
             default: '#f5f5f5',
             paper: '#ffffff',
           },
+          // Status colors (consistent across all components)
+          success: {
+            main: '#4caf50',
+            light: '#81c784',
+            dark: '#388e3c',
+          },
+          info: {
+            main: '#2196f3',
+            light: '#64b5f6',
+            dark: '#1976d2',
+          },
+          warning: {
+            main: '#ff9800',
+            light: '#ffb74d',
+            dark: '#f57c00',
+          },
+          error: {
+            main: '#f44336',
+            light: '#e57373',
+            dark: '#d32f2f',
+          },
         }
       : {
           // Dark mode
@@ -48,15 +69,61 @@ const getDesignTokens = (mode) => ({
             default: '#121212',
             paper: '#1e1e1e',
           },
+          // Status colors (consistent across all components)
+          success: {
+            main: '#4caf50',
+            light: '#81c784',
+            dark: '#388e3c',
+          },
+          info: {
+            main: '#2196f3',
+            light: '#64b5f6',
+            dark: '#1976d2',
+          },
+          warning: {
+            main: '#ff9800',
+            light: '#ffb74d',
+            dark: '#f57c00',
+          },
+          error: {
+            main: '#f44336',
+            light: '#e57373',
+            dark: '#d32f2f',
+          },
         }),
   },
+  spacing: 8, // Base spacing unit (4, 8, 12, 16, 24, 32, 48, 64px)
   typography: {
     fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
     h4: {
-      fontWeight: 600,
+      fontSize: '24px',
+      fontWeight: 700,
+      lineHeight: 1.4,
     },
     h5: {
-      fontWeight: 500,
+      fontSize: '20px',
+      fontWeight: 600,
+      lineHeight: 1.4,
+    },
+    h6: {
+      fontSize: '18px',
+      fontWeight: 600,
+      lineHeight: 1.4,
+    },
+    body1: {
+      fontSize: '16px',
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    body2: {
+      fontSize: '14px',
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    caption: {
+      fontSize: '14px',
+      fontWeight: 400,
+      lineHeight: 1.5,
     },
   },
   shape: {
@@ -68,6 +135,10 @@ const getDesignTokens = (mode) => ({
         root: {
           textTransform: 'none',
           fontWeight: 500,
+          boxShadow: 'none',
+          '&:hover': {
+            boxShadow: 'none',
+          },
         },
       },
     },
@@ -77,6 +148,13 @@ const getDesignTokens = (mode) => ({
           boxShadow: mode === 'light' 
             ? '0 2px 8px rgba(0,0,0,0.1)' 
             : '0 2px 8px rgba(0,0,0,0.4)',
+          transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: mode === 'light'
+              ? '0 4px 16px rgba(0,0,0,0.15)'
+              : '0 4px 16px rgba(0,0,0,0.6)',
+          },
         },
       },
     },
@@ -84,6 +162,22 @@ const getDesignTokens = (mode) => ({
       styleOverrides: {
         root: {
           backgroundColor: mode === 'light' ? '#1976d2' : '#1e1e1e',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: mode === 'light' ? '#ffffff' : '#1e1e1e',
+          borderRight: `1px solid ${mode === 'light' ? '#e0e0e0' : '#2c2c2c'}`,
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          fontWeight: 500,
         },
       },
     },
