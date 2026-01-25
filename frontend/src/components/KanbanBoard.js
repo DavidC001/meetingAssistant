@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
 import {
   Box,
   Paper,
@@ -15,18 +14,6 @@ import {
   ListItemIcon,
   ListItemText,
   Button,
-  TextField,
-  Switch,
-  FormControlLabel,
-  Alert,
-  Grid,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Select,
-  InputLabel,
-  FormControl,
 } from '@mui/material';
 import {
   MoreVert as MoreVertIcon,
@@ -39,30 +26,6 @@ import {
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import axios from 'axios';
 
-// Portal component for react-beautiful-dnd to fix drag offset issues
-const PortalAwareItem = ({ provided, snapshot, children }) => {
-  const usePortal = snapshot.isDragging;
-  
-  const child = (
-    <div
-      ref={provided.innerRef}
-      {...provided.draggableProps}
-      {...provided.dragHandleProps}
-      style={provided.draggableProps.style}
-    >
-      {children}
-    </div>
-  );
-  
-  if (!usePortal) {
-    return child;
-  }
-  
-  // Render to portal when dragging
-  return ReactDOM.createPortal(child, document.body);
-};
-
-
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const priorityColors = {
@@ -73,107 +36,60 @@ const priorityColors = {
 
 const statusLabels = {
   'pending': 'Pending',
-  'in_progress': 'In Progress',
+  'in-progress': 'In Progress',
   'completed': 'Completed',
 };
 
 const KanbanBoard = () => {
   const [columns, setColumns] = useState({
     'pending': [],
-    'in_progress': [],
+    'in-progress': [],
     'completed': [],
   });
   const [loading, setLoading] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    task: '',
-    owner: '',
-    due_date: '',
-    status: '',
-    priority: '',
-    notes: ''
-  });
-  
-  // User filter state
-  const [filterUserName, setFilterUserName] = useState(() => {
-    return localStorage.getItem('kanbanUserName') || '';
-  });
-  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
-    return localStorage.getItem('kanbanShowOnlyMyTasks') === 'true';
-  });
-  const [allActionItems, setAllActionItems] = useState([]);
 
   useEffect(() => {
     fetchActionItems();
   }, []);
-  
-  // Apply filter when toggle or name changes
-  useEffect(() => {
-    applyFilter();
-  }, [showOnlyMyTasks, filterUserName, allActionItems]);
-  
-  // Save user preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem('kanbanUserName', filterUserName);
-  }, [filterUserName]);
-  
-  useEffect(() => {
-    localStorage.setItem('kanbanShowOnlyMyTasks', showOnlyMyTasks.toString());
-  }, [showOnlyMyTasks]);
 
   const fetchActionItems = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/calendar/action-items`);
-      const items = response.data;
+      const response = await axios.get(`${API_BASE_URL}/action-items/`);
       
       // Filter action items for next 3 months
       const now = new Date();
       const threeMonthsFromNow = new Date();
       threeMonthsFromNow.setMonth(now.getMonth() + 3);
       
-      const filteredItems = items.filter(item => {
+      const filteredItems = response.data.filter(item => {
         if (!item.due_date) return true; // Include items without due date
         const dueDate = new Date(item.due_date);
         return dueDate >= now && dueDate <= threeMonthsFromNow;
       });
       
-      setAllActionItems(filteredItems);
-      setLoading(false);
+      // Group action items by status
+      const grouped = {
+        'pending': [],
+        'in-progress': [],
+        'completed': [],
+      };
+
+      filteredItems.forEach(item => {
+        const status = item.status || 'pending';
+        if (grouped[status]) {
+          grouped[status].push(item);
+        }
+      });
+
+      setColumns(grouped);
     } catch (error) {
       console.error('Error fetching action items:', error);
+    } finally {
       setLoading(false);
     }
-  };
-  
-  const applyFilter = () => {
-    let items = [...allActionItems];
-    
-    // Apply user filter if enabled
-    if (showOnlyMyTasks && filterUserName) {
-      items = items.filter(item => {
-        if (!item.owner) return false;
-        return item.owner.toLowerCase().trim() === filterUserName.toLowerCase().trim();
-      });
-    }
-    
-    // Group action items by status
-    const grouped = {
-      'pending': [],
-      'in_progress': [],
-      'completed': [],
-    };
-
-    items.forEach(item => {
-      const status = item.status || 'pending';
-      if (grouped[status]) {
-        grouped[status].push(item);
-      }
-    });
-
-    setColumns(grouped);
   };
 
   const handleDragEnd = async (result) => {
@@ -221,7 +137,7 @@ const KanbanBoard = () => {
     // Update on server
     try {
       await axios.put(
-        `${API_BASE_URL}/calendar/action-items/${movedTask.id}`,
+        `${API_BASE_URL}/action-items/${movedTask.id}`,
         { status: destination.droppableId }
       );
     } catch (error) {
@@ -239,48 +155,19 @@ const KanbanBoard = () => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    // Don't clear selectedTask here - it's needed for edit dialog
-  };
-  
-  const handleEdit = () => {
-    if (!selectedTask) return;
-    
-    setEditFormData({
-      task: selectedTask.task || '',
-      owner: selectedTask.owner || '',
-      due_date: selectedTask.due_date || '',
-      status: selectedTask.status || 'pending',
-      priority: selectedTask.priority || 'medium',
-      notes: selectedTask.notes || ''
-    });
-    setEditDialogOpen(true);
-    setAnchorEl(null); // Close menu but keep selectedTask
-  };
-  
-  const handleSaveEdit = async () => {
-    if (!selectedTask) return;
-    
-    try {
-      await axios.put(`${API_BASE_URL}/calendar/action-items/${selectedTask.id}`, editFormData);
-      setEditDialogOpen(false);
-      setSelectedTask(null); // Clear after save
-      fetchActionItems();
-    } catch (error) {
-      console.error('Error updating action item:', error);
-    }
+    setSelectedTask(null);
   };
 
   const handleDelete = async () => {
     if (!selectedTask) return;
     
     try {
-      await axios.delete(`${API_BASE_URL}/meetings/action-items/${selectedTask.id}`);
+      await axios.delete(`${API_BASE_URL}/action-items/${selectedTask.id}`);
       fetchActionItems();
     } catch (error) {
       console.error('Error deleting action item:', error);
     } finally {
-      setAnchorEl(null);
-      setSelectedTask(null);
+      handleMenuClose();
     }
   };
 
@@ -315,46 +202,9 @@ const KanbanBoard = () => {
           </Typography>
         </Box>
       </Box>
-      
-      {/* User Filter */}
-      <Paper sx={{ mb: 3, p: 2 }}>
-        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-          User Filter
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={8}>
-            <TextField
-              fullWidth
-              size="small"
-              label="My Name"
-              placeholder="Enter your full name as it appears in meetings"
-              value={filterUserName}
-              onChange={(e) => setFilterUserName(e.target.value)}
-              helperText="Only show tasks assigned to this name"
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showOnlyMyTasks}
-                  onChange={(e) => setShowOnlyMyTasks(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Show only my tasks"
-            />
-          </Grid>
-        </Grid>
-        {showOnlyMyTasks && !filterUserName && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            Enter your name above to filter tasks
-          </Alert>
-        )}
-      </Paper>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 2, position: 'relative' }}>
+        <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 2 }}>
           {Object.entries(columns).map(([columnId, tasks]) => (
             <Paper
               key={columnId}
@@ -401,21 +251,26 @@ const KanbanBoard = () => {
                         index={index}
                       >
                         {(provided, snapshot) => (
-                          <PortalAwareItem provided={provided} snapshot={snapshot}>
-                            <Card
-                              sx={{
-                                mb: 2,
-                                cursor: snapshot.isDragging ? 'grabbing' : 'grab',
-                                opacity: snapshot.isDragging ? 0.8 : 1,
-                                boxShadow: snapshot.isDragging ? 6 : 1,
-                                transition: 'box-shadow 0.2s ease-in-out',
-                                '&:hover': {
-                                  boxShadow: 3,
-                                },
-                              }}
-                            >
-                              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                                {/* Task Header */}
+                          <Card
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            sx={{
+                              mb: 2,
+                              cursor: 'grab',
+                              opacity: snapshot.isDragging ? 0.8 : 1,
+                              transform: snapshot.isDragging ? 'rotate(2deg)' : 'none',
+                              transition: 'all 0.2s ease-in-out',
+                              '&:hover': {
+                                boxShadow: 3,
+                              },
+                              '&:active': {
+                                cursor: 'grabbing',
+                              },
+                            }}
+                          >
+                            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                              {/* Task Header */}
                               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                 {task.priority && (
                                   <Chip
@@ -449,15 +304,15 @@ const KanbanBoard = () => {
                                   overflow: 'hidden',
                                 }}
                               >
-                                {task.task}
+                                {task.description}
                               </Typography>
 
                               {/* Task Meta */}
                               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                                {task.owner && (
+                                {task.assigned_to && (
                                   <Chip
-                                    avatar={<Avatar sx={{ width: 24, height: 24 }}>{task.owner[0]}</Avatar>}
-                                    label={task.owner}
+                                    avatar={<Avatar sx={{ width: 24, height: 24 }}>{task.assigned_to[0]}</Avatar>}
+                                    label={task.assigned_to}
                                     size="small"
                                     variant="outlined"
                                   />
@@ -477,7 +332,6 @@ const KanbanBoard = () => {
                               </Box>
                             </CardContent>
                           </Card>
-                        </PortalAwareItem>
                         )}
                       </Draggable>
                     ))}
@@ -496,7 +350,7 @@ const KanbanBoard = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={handleEdit}>
+        <MenuItem onClick={() => {/* Edit handler */}}>
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Edit</ListItemText>
         </MenuItem>
@@ -505,78 +359,6 @@ const KanbanBoard = () => {
           <ListItemText>Delete</ListItemText>
         </MenuItem>
       </Menu>
-
-      {/* Edit Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => { setEditDialogOpen(false); setSelectedTask(null); }} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Action Item</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Task"
-            fullWidth
-            value={editFormData.task}
-            onChange={(e) => setEditFormData({ ...editFormData, task: e.target.value })}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Owner"
-            fullWidth
-            value={editFormData.owner}
-            onChange={(e) => setEditFormData({ ...editFormData, owner: e.target.value })}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Due Date"
-            type="date"
-            fullWidth
-            value={editFormData.due_date}
-            onChange={(e) => setEditFormData({ ...editFormData, due_date: e.target.value })}
-            InputLabelProps={{ shrink: true }}
-            sx={{ mb: 2 }}
-          />
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={editFormData.status}
-              onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-              label="Status"
-            >
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="in_progress">In Progress</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-              <MenuItem value="cancelled">Cancelled</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>Priority</InputLabel>
-            <Select
-              value={editFormData.priority}
-              onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
-              label="Priority"
-            >
-              <MenuItem value="low">Low</MenuItem>
-              <MenuItem value="medium">Medium</MenuItem>
-              <MenuItem value="high">High</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            margin="dense"
-            label="Notes"
-            fullWidth
-            multiline
-            rows={3}
-            value={editFormData.notes}
-            onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setEditDialogOpen(false); setSelectedTask(null); }}>Cancel</Button>
-          <Button onClick={handleSaveEdit} variant="contained">Save</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
