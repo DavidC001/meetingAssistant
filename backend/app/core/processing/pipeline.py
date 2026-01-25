@@ -140,7 +140,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             
             # Also create MP3 for playback (storage-efficient, streamable format)
             try:
-                from .config import config
+                from ..config import config
                 audio_dir = Path(config.upload.upload_dir) / "audio"
                 audio_dir.mkdir(parents=True, exist_ok=True)
                 mp3_filename = f"{input_file_path.stem}_audio.mp3"

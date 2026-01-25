@@ -88,10 +88,16 @@ def diarize_audio(audio_path: str, num_speakers: Optional[int] = None, progress_
     try:
         if progress_callback:
             progress_callback(10, "Loading diarization model...")
-            
+        
+        # Use persistent cache directory for model downloads
+        from pathlib import Path
+        cache_dir = Path("/app/cache/models/pyannote")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
         pipeline = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
             use_auth_token=auth_token,
+            cache_dir=str(cache_dir)
         )
         pipeline.to(DEVICE)
         logger.info(f"Diarization pipeline loaded on {DEVICE}")

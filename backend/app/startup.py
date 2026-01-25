@@ -92,6 +92,63 @@ def cleanup_stale_tasks():
     except Exception as e:
         logger.warning(f"Could not inspect Celery tasks: {e}")
 
+def queue_missing_audio_generation():
+    """
+    Queue audio generation for meetings that are missing audio files.
+    This is useful for backfilling audio for meetings processed before the audio_filepath feature.
+    """
+    logger.info("Checking for meetings missing audio files...")
+    
+    db = SessionLocal()
+    try:
+        from pathlib import Path
+        from .tasks import generate_audio_for_existing_meeting
+        
+        # Find completed meetings without audio_filepath
+        meetings_without_audio = db.query(models.Meeting).filter(
+            models.Meeting.status == models.MeetingStatus.COMPLETED.value,
+            models.Meeting.audio_filepath.is_(None)
+        ).all()
+        
+        # Also check for meetings with audio_filepath but missing file
+        all_completed = db.query(models.Meeting).filter(
+            models.Meeting.status == models.MeetingStatus.COMPLETED.value,
+            models.Meeting.audio_filepath.isnot(None)
+        ).all()
+        
+        meetings_with_missing_files = [
+            m for m in all_completed 
+            if not Path(m.audio_filepath).exists()
+        ]
+        
+        meetings_needing_audio = meetings_without_audio + meetings_with_missing_files
+        
+        if not meetings_needing_audio:
+            logger.info("All meetings have audio files.")
+            return
+        
+        logger.info(f"Found {len(meetings_needing_audio)} meeting(s) missing audio files")
+        
+        queued_count = 0
+        for meeting in meetings_needing_audio:
+            # Verify source file exists before queuing
+            if meeting.filepath and Path(meeting.filepath).exists():
+                try:
+                    task_result = generate_audio_for_existing_meeting.delay(meeting.id)
+                    logger.info(f"Queued audio generation task {task_result.id} for meeting {meeting.id}")
+                    queued_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to queue audio generation for meeting {meeting.id}: {e}")
+            else:
+                logger.warning(f"Skipping meeting {meeting.id}: source file not found at {meeting.filepath}")
+        
+        logger.info(f"Queued audio generation for {queued_count} meeting(s)")
+        
+    except Exception as e:
+        logger.error(f"Error queuing missing audio generation: {e}", exc_info=True)
+    finally:
+        db.close()
+
 def startup_recovery():
     """
     Main startup recovery function to be called when the application starts.
@@ -103,5 +160,8 @@ def startup_recovery():
     
     # Resume interrupted processing
     resume_interrupted_processing()
+    
+    # Queue audio generation for meetings missing audio files
+    queue_missing_audio_generation()
     
     logger.info("Application recovery procedures completed.")

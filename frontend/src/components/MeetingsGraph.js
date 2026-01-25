@@ -22,7 +22,6 @@ import {
   Folder as FolderIcon,
   LocalOffer as TagIcon,
   Event as MeetingIcon,
-  Link as LinkIcon,
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
   CenterFocusStrong as CenterIcon,
@@ -30,7 +29,8 @@ import {
   VisibilityOff as HideIcon,
   Visibility as ShowIcon,
   OpenInNew as OpenIcon,
-  PauseCircle as PauseCircleIcon,
+  Lock as LockIcon,
+  LockOpen as LockOpenIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import ForceGraph2D from 'react-force-graph-2d';
@@ -49,9 +49,13 @@ const MeetingsGraph = () => {
   const [visibleTypes, setVisibleTypes] = useState(['meeting', 'person', 'folder', 'tag']);
   const [showLabels, setShowLabels] = useState(true);
   const [hiddenNodes, setHiddenNodes] = useState(new Set());
+  const [isSimulationRunning, setIsSimulationRunning] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
   
   const graphRef = useRef();
   const containerRef = useRef();
+  const clickTimeRef = useRef(0);
+  const clickNodeRef = useRef(null);
 
   // Removed custom wheel handler to fix scrolling issues
   // useEffect(() => {
@@ -100,13 +104,38 @@ const MeetingsGraph = () => {
     fetchGraphData();
   }, [fetchGraphData]);
 
-  const handleStopSimulation = () => {
+  const handleStopSimulation = useCallback(() => {
     if (graphRef.current) {
-      graphRef.current.d3Force('charge').strength(0);
-      graphRef.current.d3Force('link').strength(0);
-      graphRef.current.d3Force('center', null);
+      // Pause the simulation completely
+      graphRef.current.pauseAnimation();
+      setIsSimulationRunning(false);
     }
-  };
+  }, []);
+
+  const handleResumeSimulation = useCallback(() => {
+    if (graphRef.current) {
+      graphRef.current.resumeAnimation();
+      // Reheat the simulation briefly to allow repositioning
+      graphRef.current.d3ReheatSimulation();
+      setIsSimulationRunning(true);
+      // Auto-stop after settling
+      setTimeout(() => {
+        if (graphRef.current) {
+          graphRef.current.pauseAnimation();
+          setIsSimulationRunning(false);
+        }
+      }, 3000);
+    }
+  }, []);
+
+  // Stop simulation after initial layout is complete
+  const handleEngineStop = useCallback(() => {
+    // Simulation has settled, pause to prevent unwanted movement
+    if (graphRef.current && isSimulationRunning) {
+      graphRef.current.pauseAnimation();
+      setIsSimulationRunning(false);
+    }
+  }, [isSimulationRunning]);
 
   const getNodeColor = (node) => {
     switch (node.type) {
@@ -138,7 +167,30 @@ const MeetingsGraph = () => {
     }
   };
 
-  const handleNodeClick = useCallback((node) => {
+  const handleNodeClick = useCallback((node, event) => {
+    // Ignore if this was a drag operation
+    if (isDragging) {
+      setIsDragging(false);
+      return;
+    }
+
+    const now = Date.now();
+    const isDoubleClick = clickNodeRef.current === node.id && (now - clickTimeRef.current) < 300;
+    
+    if (isDoubleClick) {
+      // Double-click: navigate to meeting
+      if (node.type === 'meeting' && node.data && node.data.id) {
+        window.location.href = `/meetings/${node.data.id}`;
+      }
+      clickTimeRef.current = 0;
+      clickNodeRef.current = null;
+      return;
+    }
+    
+    // Single click: select node and highlight connections
+    clickTimeRef.current = now;
+    clickNodeRef.current = node.id;
+    
     setSelectedNode(node);
     
     // Highlight connected nodes and links
@@ -160,13 +212,20 @@ const MeetingsGraph = () => {
     
     setHighlightNodes(connectedNodes);
     setHighlightLinks(connectedLinks);
-  }, [graphData.links]);
+  }, [graphData.links, isDragging]);
 
-  const handleNodeDoubleClick = useCallback((node) => {
-    // Navigate to meeting on double-click
-    if (node.type === 'meeting' && node.data && node.data.id) {
-      window.location.href = `/meetings/${node.data.id}`;
+  const handleNodeDrag = useCallback((node) => {
+    setIsDragging(true);
+  }, []);
+
+  const handleNodeDragEnd = useCallback((node) => {
+    // Fix node position after dragging to prevent it from floating away
+    if (node) {
+      node.fx = node.x;
+      node.fy = node.y;
     }
+    // Reset dragging state after a short delay to allow click to be ignored
+    setTimeout(() => setIsDragging(false), 100);
   }, []);
 
   const handleOpenMeeting = useCallback(() => {
@@ -296,8 +355,21 @@ const MeetingsGraph = () => {
 
   useEffect(() => {
     if (graphRef.current && filteredData.nodes.length > 0) {
-      // Zoom to fit only when data changes significantly or initially
-      graphRef.current.zoomToFit(1000, 50);
+      // Reset simulation state when data changes
+      setIsSimulationRunning(true);
+      
+      // Clear fixed positions for new/filtered nodes to allow initial layout
+      filteredData.nodes.forEach(node => {
+        node.fx = undefined;
+        node.fy = undefined;
+      });
+      
+      // Zoom to fit after a brief delay to allow layout
+      setTimeout(() => {
+        if (graphRef.current) {
+          graphRef.current.zoomToFit(400, 60);
+        }
+      }, 500);
     }
   }, [filteredData.nodes.length]); // Only re-zoom if node count changes
 
@@ -326,7 +398,7 @@ const MeetingsGraph = () => {
         Visualize relationships between meetings, people, folders, and tags
       </Typography>
       <Alert severity="info" sx={{ mb: 2 }}>
-        💡 <strong>Tip:</strong> Hold <kbd>Ctrl</kbd> (or <kbd>Cmd</kbd> on Mac) + scroll to zoom. Use mouse drag to pan. Click nodes to see details. <strong>Double-click meetings</strong> to open them.
+        💡 <strong>Tips:</strong> Scroll to zoom. Drag background to pan. Click nodes to see details. <strong>Double-click meetings</strong> to open them. Drag nodes to reposition (they stay fixed). Use the freeze button to stop all movement.
       </Alert>
 
       {stats && (
@@ -446,9 +518,13 @@ const MeetingsGraph = () => {
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Stop Movement">
-              <IconButton onClick={handleStopSimulation} size="small" color="error">
-                <PauseCircleIcon />
+            <Tooltip title={isSimulationRunning ? "Freeze Graph" : "Unfreeze Graph"}>
+              <IconButton 
+                onClick={isSimulationRunning ? handleStopSimulation : handleResumeSimulation} 
+                size="small" 
+                color={isSimulationRunning ? "warning" : "success"}
+              >
+                {isSimulationRunning ? <LockOpenIcon /> : <LockIcon />}
               </IconButton>
             </Tooltip>
           </Box>
@@ -489,17 +565,21 @@ const MeetingsGraph = () => {
                 linkCanvasObject={paintLink}
                 onNodeClick={handleNodeClick}
                 onNodeHover={handleNodeHover}
+                onNodeDrag={handleNodeDrag}
+                onNodeDragEnd={handleNodeDragEnd}
                 onBackgroundClick={handleBackgroundClick}
-                onNodeRightClick={handleNodeDoubleClick}
-                cooldownTicks={100}
-                warmupTicks={100}
+                onEngineStop={handleEngineStop}
+                cooldownTicks={50}
+                warmupTicks={50}
+                cooldownTime={2000}
                 enableNodeDrag={true}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
                 minZoom={0.5}
                 maxZoom={8}
-                d3AlphaDecay={0.05}
-                d3VelocityDecay={0.4}
+                d3AlphaDecay={0.1}
+                d3VelocityDecay={0.6}
+                d3AlphaMin={0.001}
                 width={containerRef.current?.offsetWidth}
                 height={containerRef.current?.offsetHeight}
               />

@@ -32,6 +32,7 @@ import {
   CalendarMonth as CalendarIcon,
   Article as TemplatesIcon,
   Settings as SettingsIcon,
+  ViewKanban as KanbanIcon,
 } from '@mui/icons-material';
 
 const DRAWER_WIDTH = 280;
@@ -57,6 +58,7 @@ const navigationGroups = [
     items: [
       { path: '/calendar', label: 'Calendar', icon: CalendarIcon },
       { path: '/scheduled-meetings', label: 'Scheduled', icon: EventIcon },
+      { path: '/kanban', label: 'Action Items', icon: KanbanIcon },
       { path: '/templates', label: 'Templates', icon: TemplatesIcon },
     ],
   },

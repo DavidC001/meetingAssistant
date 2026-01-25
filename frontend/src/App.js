@@ -17,6 +17,7 @@ import GlobalChat from './components/GlobalChat';
 import ScheduledMeetings from './components/ScheduledMeetings';
 import MeetingsGraph from './components/MeetingsGraph';
 import MeetingTemplates from './components/MeetingTemplates';
+import KanbanBoard from './components/KanbanBoard';
 import Sidebar from './components/layout/Sidebar';
 import AppHeader from './components/layout/AppHeader';
 import PageTransition from './components/common/PageTransition';
@@ -85,6 +86,7 @@ function AppContent() {
             <Route path="/scheduled-meetings" element={<PageTransition><ScheduledMeetings /></PageTransition>} />
             <Route path="/graph" element={<PageTransition><MeetingsGraph /></PageTransition>} />
             <Route path="/calendar" element={<PageTransition><Calendar /></PageTransition>} />
+            <Route path="/kanban" element={<PageTransition><KanbanBoard /></PageTransition>} />
             <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
             <Route path="/templates" element={<PageTransition><MeetingTemplates /></PageTransition>} />
           </Routes>

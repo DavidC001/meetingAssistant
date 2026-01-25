@@ -6,6 +6,7 @@ from .core.storage.embeddings import batched_embeddings, get_embedding_provider
 from .core.processing.document_processor import extract_text
 from .core.storage.vector_store import DEFAULT_VECTOR_STORE
 from typing import Any, Dict, List
+from pathlib import Path
 import time
 import logging
 
@@ -100,11 +101,24 @@ def _build_chunk_payloads(meeting: models.Meeting) -> List[Dict[str, Any]]:
     return payloads
 
 
-@celery_app.task(bind=True)
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=600,  # Max 10 minutes
+    retry_jitter=True,
+    max_retries=3
+)
 def process_meeting_task(self, meeting_id: int):
     """
     Celery task to process a meeting file.
     It will perform transcription, analysis, and save the results.
+    
+    Auto-retries on:
+    - ConnectionError: Network/database connection issues
+    - TimeoutError: External service timeouts
+    
+    Max 3 retries with exponential backoff up to 10 minutes.
     """
     logger.info(f"Starting processing for meeting_id: {meeting_id}")
     db = SessionLocal()
@@ -160,9 +174,24 @@ def process_meeting_task(self, meeting_id: int):
     return {"status": "Completed", "meeting_id": meeting_id}
 
 
-@celery_app.task
-def compute_embeddings_for_meeting(meeting_id: int) -> Dict[str, Any]:
-    """Compute embeddings for a meeting's transcript, notes, action items, and attachments."""
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,  # Max 5 minutes
+    retry_jitter=True,
+    max_retries=3
+)
+def compute_embeddings_for_meeting(self, meeting_id: int) -> Dict[str, Any]:
+    """
+    Compute embeddings for a meeting's transcript, notes, action items, and attachments.
+    
+    Auto-retries on:
+    - ConnectionError: Database/vector store connection issues
+    - TimeoutError: Embedding API timeouts
+    
+    Max 3 retries with exponential backoff up to 5 minutes.
+    """
 
     db = SessionLocal()
     try:
@@ -435,4 +464,292 @@ def sync_google_drive_folder(self, force: bool = False):
         return {"status": "error", "error": error_message}
     finally:
         db.close()
+
+
+@celery_app.task(bind=True)
+def generate_audio_for_existing_meeting(self, meeting_id: int):
+    """
+    Generate MP3 audio file for an existing meeting that's missing audio.
+    This task is used to backfill audio for meetings processed before the audio_filepath feature was added.
+    
+    Args:
+        meeting_id: ID of the meeting to generate audio for
+        
+    Returns:
+        dict: Status information about the operation
+    """
+    db = SessionLocal()
+    try:
+        meeting = crud.get_meeting(db, meeting_id)
+        if not meeting:
+            logger.warning(f"Meeting {meeting_id} not found")
+            return {"status": "error", "reason": "meeting_not_found", "meeting_id": meeting_id}
+        
+        if meeting.audio_filepath:
+            logger.info(f"Meeting {meeting_id} already has audio at {meeting.audio_filepath}")
+            return {"status": "skipped", "reason": "already_has_audio", "meeting_id": meeting_id}
+        
+        if not meeting.filepath or not Path(meeting.filepath).exists():
+            logger.warning(f"Source file for meeting {meeting_id} not found at {meeting.filepath}")
+            return {"status": "error", "reason": "source_file_not_found", "meeting_id": meeting_id}
+        
+        logger.info(f"Generating MP3 audio for meeting {meeting_id} from {meeting.filepath}")
+        
+        # Generate MP3
+        from .core.base.utils import convert_to_mp3
+        from .core.config import config
+        
+        audio_dir = Path(config.upload.upload_dir) / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        mp3_filename = f"{Path(meeting.filepath).stem}_audio.mp3"
+        mp3_path = audio_dir / mp3_filename
+        
+        # Ensure unique filename
+        counter = 1
+        original_mp3_path = mp3_path
+        while mp3_path.exists():
+            mp3_filename = f"{Path(meeting.filepath).stem}_audio_{counter}.mp3"
+            mp3_path = audio_dir / mp3_filename
+            counter += 1
+        
+        convert_to_mp3(meeting.filepath, mp3_path)
+        
+        # Update meeting with audio filepath
+        meeting.audio_filepath = str(mp3_path)
+        db.commit()
+        
+        logger.info(f"Successfully generated audio for meeting {meeting_id} at {mp3_path}")
+        return {
+            "status": "completed", 
+            "meeting_id": meeting_id, 
+            "audio_filepath": str(mp3_path)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating audio for meeting {meeting_id}: {e}", exc_info=True)
+        db.rollback()
+        return {
+            "status": "error", 
+            "reason": "generation_failed", 
+            "meeting_id": meeting_id,
+            "error": str(e)
+        }
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3
+)
+def update_notes_embeddings(self, meeting_id: int, notes: str):
+    """
+    Update embeddings for meeting notes only, without recomputing everything.
+    This is much more efficient than recomputing all embeddings.
+    
+    Args:
+        meeting_id: ID of the meeting
+        notes: The updated notes content
+    
+    Auto-retries on ConnectionError/TimeoutError with exponential backoff.
+    """
+    db = SessionLocal()
+    try:
+        logger.info(f"Updating notes embeddings for meeting {meeting_id}")
+        
+        # Get meeting
+        meeting = crud.get_meeting(db, meeting_id)
+        if not meeting:
+            logger.warning(f"Meeting {meeting_id} not found")
+            return {"status": "error", "reason": "meeting_not_found"}
+        
+        # Get embedding provider
+        config = get_embedding_provider(db, meeting_id)
+        
+        # Remove old notes embeddings
+        DEFAULT_VECTOR_STORE.delete_chunks_by_metadata(
+            db,
+            meeting_id=meeting_id,
+            metadata_filter={"section": "notes"}
+        )
+        
+        # Create new chunks for notes
+        notes_chunks = chunking.chunk_notes(notes, metadata={"section": "notes"})
+        
+        if not notes_chunks:
+            logger.info(f"No chunks generated from notes for meeting {meeting_id}")
+            return {"status": "completed", "chunks": 0}
+        
+        # Build payloads
+        payloads = []
+        for i, chunk in enumerate(notes_chunks):
+            metadata = dict(chunk.metadata or {})
+            metadata.setdefault("meeting_id", meeting.id)
+            metadata.setdefault("meeting_name", meeting.filename)
+            payloads.append({
+                "content": chunk.content,
+                "content_type": chunk.content_type,
+                "chunk_index": i,
+                "metadata": metadata,
+            })
+        
+        # Compute embeddings
+        embeddings = batched_embeddings([p["content"] for p in payloads], config)
+        
+        # Store in vector store
+        DEFAULT_VECTOR_STORE.add_documents(
+            db,
+            meeting_id=meeting_id,
+            chunks=payloads,
+            embeddings=embeddings,
+            embedding_config_id=config.id,
+        )
+        
+        logger.info(f"Updated {len(payloads)} note chunks for meeting {meeting_id}")
+        return {"status": "completed", "chunks": len(payloads), "meeting_id": meeting_id}
+        
+    except Exception as e:
+        logger.error(f"Error updating notes embeddings for meeting {meeting_id}: {e}", exc_info=True)
+        return {"status": "error", "meeting_id": meeting_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3
+)
+def index_attachment(self, attachment_id: int):
+    """
+    Index a single attachment without recomputing all meeting embeddings.
+    
+    Args:
+        attachment_id: ID of the attachment to index
+    
+    Auto-retries on ConnectionError/TimeoutError with exponential backoff.
+    """
+    db = SessionLocal()
+    try:
+        logger.info(f"Indexing attachment {attachment_id}")
+        
+        # Get attachment
+        from .modules.meetings import crud as meetings_crud
+        attachment = db.query(models.Attachment).filter(models.Attachment.id == attachment_id).first()
+        
+        if not attachment:
+            logger.warning(f"Attachment {attachment_id} not found")
+            return {"status": "error", "reason": "attachment_not_found"}
+        
+        meeting_id = attachment.meeting_id
+        
+        # Get embedding provider
+        config = get_embedding_provider(db, meeting_id)
+        
+        # Extract text from attachment
+        try:
+            text = extract_text(attachment.filepath)
+            if not text or not text.strip():
+                logger.info(f"No text extracted from attachment {attachment_id}")
+                return {"status": "completed", "chunks": 0}
+        except Exception as e:
+            logger.warning(f"Failed to extract text from attachment {attachment_id}: {e}")
+            return {"status": "error", "reason": "text_extraction_failed", "error": str(e)}
+        
+        # Create chunks
+        attachment_chunks = chunking.chunk_document(
+            text,
+            metadata={
+                "section": "attachment",
+                "attachment_id": attachment.id,
+                "attachment_name": attachment.filename
+            }
+        )
+        
+        if not attachment_chunks:
+            logger.info(f"No chunks generated from attachment {attachment_id}")
+            return {"status": "completed", "chunks": 0}
+        
+        # Build payloads
+        payloads = []
+        meeting = crud.get_meeting(db, meeting_id)
+        for i, chunk in enumerate(attachment_chunks):
+            metadata = dict(chunk.metadata or {})
+            metadata.setdefault("meeting_id", meeting_id)
+            metadata.setdefault("meeting_name", meeting.filename if meeting else "Unknown")
+            payloads.append({
+                "content": chunk.content,
+                "content_type": chunk.content_type,
+                "chunk_index": i,
+                "metadata": metadata,
+                "attachment_id": attachment.id
+            })
+        
+        # Compute embeddings
+        embeddings = batched_embeddings([p["content"] for p in payloads], config)
+        
+        # Store in vector store
+        DEFAULT_VECTOR_STORE.add_documents(
+            db,
+            meeting_id=meeting_id,
+            chunks=payloads,
+            embeddings=embeddings,
+            embedding_config_id=config.id,
+        )
+        
+        logger.info(f"Indexed {len(payloads)} chunks for attachment {attachment_id}")
+        return {"status": "completed", "chunks": len(payloads), "attachment_id": attachment_id}
+        
+    except Exception as e:
+        logger.error(f"Error indexing attachment {attachment_id}: {e}", exc_info=True)
+        return {"status": "error", "attachment_id": attachment_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError,),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3
+)
+def remove_attachment_embeddings(self, meeting_id: int, attachment_id: int):
+    """
+    Remove embeddings for a deleted attachment from the vector store.
+    
+    Args:
+        meeting_id: ID of the meeting
+        attachment_id: ID of the deleted attachment
+    
+    Auto-retries on ConnectionError with exponential backoff.
+    """
+    db = SessionLocal()
+    try:
+        logger.info(f"Removing embeddings for attachment {attachment_id} from meeting {meeting_id}")
+        
+        # Remove chunks associated with this attachment
+        DEFAULT_VECTOR_STORE.delete_chunks_by_metadata(
+            db,
+            meeting_id=meeting_id,
+            metadata_filter={"attachment_id": attachment_id}
+        )
+        
+        logger.info(f"Removed embeddings for attachment {attachment_id}")
+        return {"status": "completed", "attachment_id": attachment_id, "meeting_id": meeting_id}
+        
+    except Exception as e:
+        logger.error(f"Error removing embeddings for attachment {attachment_id}: {e}", exc_info=True)
+        return {"status": "error", "attachment_id": attachment_id, "error": str(e)}
+    finally:
+        db.close()
+
 

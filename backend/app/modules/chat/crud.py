@@ -14,11 +14,19 @@ def create_chat_message(db: Session, meeting_id: int, role: str, content: str):
     db.refresh(db_message)
     return db_message
 
-def get_chat_history(db: Session, meeting_id: int, limit: int = 50):
-    """Get chat history for a meeting"""
+def get_chat_history(db: Session, meeting_id: int, skip: int = 0, limit: int = 100):
+    """
+    Get chat history for a meeting with pagination.
+    
+    Args:
+        db: Database session
+        meeting_id: ID of the meeting
+        skip: Number of messages to skip (default: 0)
+        limit: Maximum number of messages to return (default: 100)
+    """
     return db.query(models.ChatMessage).filter(
         models.ChatMessage.meeting_id == meeting_id
-    ).order_by(models.ChatMessage.created_at.asc()).limit(limit).all()
+    ).order_by(models.ChatMessage.created_at.asc()).offset(skip).limit(limit).all()
 
 def clear_chat_history(db: Session, meeting_id: int):
     """Clear all chat messages for a meeting"""
@@ -27,8 +35,18 @@ def clear_chat_history(db: Session, meeting_id: int):
     ).delete()
     db.commit()
 
-def list_global_chat_sessions(db: Session):
-    return db.query(models.GlobalChatSession).order_by(models.GlobalChatSession.updated_at.desc()).all()
+def list_global_chat_sessions(db: Session, skip: int = 0, limit: int = 100):
+    """
+    List global chat sessions with pagination.
+    
+    Args:
+        db: Database session
+        skip: Number of sessions to skip (default: 0)
+        limit: Maximum number of sessions to return (default: 100)
+    """
+    return db.query(models.GlobalChatSession).order_by(
+        models.GlobalChatSession.updated_at.desc()
+    ).offset(skip).limit(limit).all()
 
 def create_global_chat_session(db: Session, title: str | None = None, tags: str | None = None, 
                               filter_folder: str | None = None, filter_tags: str | None = None):
@@ -87,10 +105,21 @@ def add_global_chat_message(db: Session, session_id: int, role: str, content: st
     db.refresh(message)
     return message
 
-def get_global_chat_messages(db: Session, session_id: int):
+def get_global_chat_messages(db: Session, session_id: int, skip: int = 0, limit: int = 100):
+    """
+    Get global chat messages for a session with pagination.
+    
+    Args:
+        db: Database session
+        session_id: ID of the chat session
+        skip: Number of messages to skip (default: 0)
+        limit: Maximum number of messages to return (default: 100)
+    """
     return (
         db.query(models.GlobalChatMessage)
         .filter(models.GlobalChatMessage.session_id == session_id)
         .order_by(models.GlobalChatMessage.created_at.asc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )

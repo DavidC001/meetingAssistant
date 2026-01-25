@@ -246,6 +246,7 @@ const MeetingDetails = () => {
   }, [meetingId]);
 
   let pollTimeout = null;
+  let pollCount = 0;
   const startSmartPolling = (currentMeeting) => {
     let pollInterval = 5000;
     if (currentMeeting.status === 'pending') pollInterval = 10000;
@@ -253,8 +254,19 @@ const MeetingDetails = () => {
 
     const doPoll = async () => {
       const updated = await fetchMeetingDetails(false);
+      pollCount++;
+      
+      // Continue polling if still processing
       if (updated && (updated.status === 'pending' || updated.status === 'processing')) {
         pollTimeout = setTimeout(doPoll, pollInterval);
+      } 
+      // After completion, poll a few more times to catch audio_filepath update
+      else if (updated && updated.status === 'completed' && pollCount <= 3 && !updated.audio_filepath) {
+        pollTimeout = setTimeout(doPoll, 3000); // Check every 3 seconds
+      }
+      // Final check after a short delay if audio still missing
+      else if (updated && updated.status === 'completed' && !updated.audio_filepath && pollCount === 4) {
+        pollTimeout = setTimeout(doPoll, 5000); // One last check after 5 seconds
       }
     };
     pollTimeout = setTimeout(doPoll, pollInterval);
@@ -655,6 +667,22 @@ const MeetingDetails = () => {
                     />
                   </CardContent>
                 </Card>
+              )}
+              
+              {/* Audio Generation Notice */}
+              {meeting.status === 'completed' && !meeting.audio_filepath && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <AlertTitle>Audio Playback Unavailable</AlertTitle>
+                  Audio playback is being generated for this meeting. Please refresh in a few moments.
+                  <Button 
+                    size="small" 
+                    startIcon={<RefreshIcon />}
+                    onClick={handleManualRefresh}
+                    sx={{ ml: 2 }}
+                  >
+                    Refresh Now
+                  </Button>
+                </Alert>
               )}
 
               {/* Summary */}

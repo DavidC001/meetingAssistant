@@ -6,7 +6,8 @@ from sqlalchemy import (
     DateTime,
     Text,
     Boolean,
-    JSON
+    JSON,
+    Index
 )
 from sqlalchemy.sql import func
 from ...database import Base
@@ -19,7 +20,7 @@ class MeetingTemplate(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    template_type = Column(String, nullable=False)  # standup, retrospective, 1on1, brainstorm, planning, review, custom
+    template_type = Column(String, nullable=False, index=True)  # standup, retrospective, 1on1, brainstorm, planning, review, custom
     
     # Default settings
     default_language = Column(String, default="en-US")
@@ -39,9 +40,14 @@ class MeetingTemplate(Base):
     # Metadata
     icon = Column(String, default="📋")
     color = Column(String, default="#1976d2")
-    is_default = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    usage_count = Column(Integer, default=0)
+    is_default = Column(Boolean, default=False, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+    usage_count = Column(Integer, default=0, index=True)
     
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    __table_args__ = (
+        Index('idx_template_type_active', 'template_type', 'is_active'),
+        Index('idx_template_usage', 'usage_count', 'is_active'),
+    )

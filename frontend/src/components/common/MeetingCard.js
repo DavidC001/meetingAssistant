@@ -32,6 +32,9 @@ import {
   Folder as FolderIcon,
   CalendarToday as CalendarIcon,
   Schedule as ScheduleIcon,
+  Visibility as ViewIcon,
+  Refresh as RefreshIcon,
+  GraphicEq as AudioIcon,
 } from '@mui/icons-material';
 import StatusChip from './StatusChip';
 
@@ -42,6 +45,9 @@ const MeetingCard = ({
   onEdit,
   onDownload,
   onChat,
+  onView,
+  onRegenerateAudio,
+  onRestartProcessing,
   showProgress = true,
 }) => {
   const [anchorEl, setAnchorEl] = React.useState(null);
@@ -186,22 +192,52 @@ const MeetingCard = ({
           onClose={handleMenuClose}
           onClick={(e) => e.stopPropagation()}
         >
+          {onView && (
+            <MenuItem onClick={() => { handleMenuClose(); onView(meeting); }}>
+              <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>View Details</ListItemText>
+            </MenuItem>
+          )}
           {onChat && (
             <MenuItem onClick={() => { handleMenuClose(); onChat(meeting); }}>
               <ListItemIcon><ChatIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Quick Chat</ListItemText>
             </MenuItem>
           )}
-          {onDownload && (
-            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting); }}>
-              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
-              <ListItemText>Download</ListItemText>
-            </MenuItem>
-          )}
           {onEdit && (
             <MenuItem onClick={() => { handleMenuClose(); onEdit(meeting); }}>
               <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Edit</ListItemText>
+            </MenuItem>
+          )}
+          {onRegenerateAudio && meeting.status === 'completed' && (
+            <MenuItem onClick={() => { handleMenuClose(); onRegenerateAudio(meeting); }}>
+              <ListItemIcon><AudioIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Regenerate Audio</ListItemText>
+            </MenuItem>
+          )}
+          {onRestartProcessing && meeting.status === 'failed' && (
+            <MenuItem onClick={() => { handleMenuClose(); onRestartProcessing(meeting); }}>
+              <ListItemIcon><RefreshIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Restart Processing</ListItemText>
+            </MenuItem>
+          )}
+          {onDownload && (
+            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'txt'); }}>
+              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Download (TXT)</ListItemText>
+            </MenuItem>
+          )}
+          {onDownload && (
+            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'json'); }}>
+              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Download (JSON)</ListItemText>
+            </MenuItem>
+          )}
+          {onDownload && (
+            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'srt'); }}>
+              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+              <ListItemText>Download (SRT)</ListItemText>
             </MenuItem>
           )}
           {onDelete && (

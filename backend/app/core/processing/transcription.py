@@ -59,16 +59,30 @@ def _load_whisper(model_size: str = "base", provider: str = "faster-whisper") ->
     device = _get_device()
     logger.info(f"Loading whisper model '{model_size}' ({provider}) on {device.type}...")
     
+    # Use persistent cache directory for model downloads
+    cache_dir = Path("/app/cache/models/whisper")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    
     # Adjust compute_type based on device
     compute_type = "int8" if device.type == "cpu" else "float16"
     
     try:
         if provider == "faster-whisper":
-            model = WhisperModel(model_size, device=device.type, compute_type=compute_type)
+            model = WhisperModel(
+                model_size, 
+                device=device.type, 
+                compute_type=compute_type,
+                download_root=str(cache_dir)
+            )
         else:
             # For future extensibility, could add other providers here
             logger.warning(f"Unknown provider '{provider}', falling back to faster-whisper")
-            model = WhisperModel(model_size, device=device.type, compute_type=compute_type)
+            model = WhisperModel(
+                model_size, 
+                device=device.type, 
+                compute_type=compute_type,
+                download_root=str(cache_dir)
+            )
             
         logger.info(f"Whisper model loaded successfully on {device.type}")
         return model
@@ -76,7 +90,12 @@ def _load_whisper(model_size: str = "base", provider: str = "faster-whisper") ->
         if "CUDA" in str(e) and device.type == "cuda":
             logger.warning(f"CUDA failed during model loading: {e}, falling back to CPU")
             # Force CPU and try again
-            model = WhisperModel(model_size, device="cpu", compute_type="int8")
+            model = WhisperModel(
+                model_size, 
+                device="cpu", 
+                compute_type="int8",
+                download_root=str(cache_dir)
+            )
             logger.info("Whisper model loaded successfully on CPU (fallback)")
             return model
         else:

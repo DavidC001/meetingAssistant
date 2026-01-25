@@ -59,7 +59,8 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     task_time_limit=3600,  # 1 hour timeout for large files
     task_soft_time_limit=3300,  # 55 minute soft timeout
-    worker_max_memory_per_child=4000000,  # 4GB memory limit per worker
+    worker_max_memory_per_child=4000000,  # 4GB memory limit per worker - worker will restart after this
+    worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to prevent memory accumulation
     # Force spawn method for CUDA compatibility
     worker_pool='solo',  # Use solo pool which avoids multiprocessing issues with CUDA
 )
@@ -100,11 +101,28 @@ def on_worker_shutdown(**kwargs):
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 
+def on_task_postrun(**kwargs):
+    """Called after each task completes - cleanup resources"""
+    try:
+        # Clear GPU cache after each task
+        if torch and hasattr(torch, 'cuda') and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        # Force garbage collection
+        import gc
+        gc.collect()
+        
+        logger.debug("Task cleanup completed")
+    except Exception as e:
+        logger.error(f"Error during task postrun cleanup: {e}")
+
 # Connect the signals using the new Celery 5.x syntax
 try:
-    from celery.signals import worker_ready, worker_shutdown
+    from celery.signals import worker_ready, worker_shutdown, task_postrun
     worker_ready.connect(on_worker_init)
     worker_shutdown.connect(on_worker_shutdown)
+    task_postrun.connect(on_task_postrun)
+    logger.info("Worker signals connected successfully")
 except ImportError:
     logger.warning("Could not import Celery signals")
 except Exception as e:

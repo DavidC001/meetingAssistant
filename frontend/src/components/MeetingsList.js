@@ -32,7 +32,11 @@ import {
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  Pending as PendingIcon
+  Pending as PendingIcon,
+  Refresh as RefreshIcon,
+  GraphicEq as AudioIcon,
+  Download as DownloadIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -170,6 +174,61 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
       const errorMessage = err.response?.data?.detail || 'Failed to delete meeting. Please try again.';
       setError(errorMessage);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleRegenerateAudio = async () => {
+    handleMenuClose();
+    try {
+      await api.post(`/meetings/${selectedMeeting.id}/audio/regenerate`);
+      setError(null);
+      await fetchMeetings();
+      if (onMeetingUpdate) onMeetingUpdate();
+    } catch (err) {
+      console.error('Regenerate audio error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to regenerate audio. Please try again.';
+      setError(errorMessage);
+    }
+  };
+
+  const handleRestartProcessing = async () => {
+    handleMenuClose();
+    try {
+      await api.post(`/meetings/${selectedMeeting.id}/restart-processing`);
+      setError(null);
+      await fetchMeetings();
+      if (onMeetingUpdate) onMeetingUpdate();
+    } catch (err) {
+      console.error('Restart processing error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to restart processing. Please try again.';
+      setError(errorMessage);
+    }
+  };
+
+  const handleDownloadTranscript = async (format = 'txt') => {
+    handleMenuClose();
+    try {
+      const response = await api.get(`/meetings/${selectedMeeting.id}/download/${format}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${selectedMeeting.filename}.${format}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('Download transcript error:', err);
+      const errorMessage = err.response?.data?.detail || 'Failed to download transcript. Please try again.';
+      setError(errorMessage);
+    }
+  };
+
+  const handleViewDetails = () => {
+    handleMenuClose();
+    if (selectedMeeting) {
+      navigate(`/meetings/${selectedMeeting.id}`);
     }
   };
 
@@ -336,9 +395,39 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
+        <MenuItem onClick={handleViewDetails}>
+          <ViewIcon sx={{ mr: 1 }} fontSize="small" />
+          View Details
+        </MenuItem>
         <MenuItem onClick={handleRename}>
           <EditIcon sx={{ mr: 1 }} fontSize="small" />
           Rename
+        </MenuItem>
+        <MenuItem 
+          onClick={handleRegenerateAudio}
+          disabled={selectedMeeting?.status !== 'completed'}
+        >
+          <AudioIcon sx={{ mr: 1 }} fontSize="small" />
+          Regenerate Audio
+        </MenuItem>
+        <MenuItem 
+          onClick={handleRestartProcessing}
+          disabled={selectedMeeting?.status !== 'failed'}
+        >
+          <RefreshIcon sx={{ mr: 1 }} fontSize="small" />
+          Restart Processing
+        </MenuItem>
+        <MenuItem onClick={() => handleDownloadTranscript('txt')}>
+          <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
+          Download (TXT)
+        </MenuItem>
+        <MenuItem onClick={() => handleDownloadTranscript('json')}>
+          <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
+          Download (JSON)
+        </MenuItem>
+        <MenuItem onClick={() => handleDownloadTranscript('srt')}>
+          <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
+          Download (SRT)
         </MenuItem>
         <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
           <DeleteIcon sx={{ mr: 1 }} fontSize="small" />

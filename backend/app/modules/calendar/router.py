@@ -84,7 +84,7 @@ def get_action_item(
     db: Session = Depends(get_db)
 ):
     """Get a specific action item by ID."""
-    action_item = crud.get_action_item(db, item_id)
+    action_item = meetings_crud.get_action_item(db, item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     return action_item
@@ -100,7 +100,7 @@ def update_action_item(
     Update an action item (e.g., change due date, status, priority, etc.).
     This is useful for drag-and-drop calendar interactions.
     """
-    action_item = crud.update_action_item(db, item_id, action_item_update)
+    action_item = meetings_crud.update_action_item(db, item_id, action_item_update)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     
@@ -218,7 +218,7 @@ def sync_action_item_to_calendar(
             detail="Not connected to Google Calendar. Please authorize first."
         )
     
-    action_item = crud.get_action_item(db, item_id)
+    action_item = meetings_crud.get_action_item(db, item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     
@@ -267,7 +267,7 @@ def sync_action_item_to_calendar(
                 action_item,
                 meeting_title
             )
-            crud.update_action_item_calendar_sync(db, item_id, event_id, True)
+            meetings_crud.update_action_item_calendar_sync(db, item_id, event_id, True)
         
         return {"message": "Action item synced to Google Calendar", "event_id": action_item.google_calendar_event_id}
     except Exception as e:
@@ -285,7 +285,7 @@ def unsync_action_item_from_calendar(
     """Remove an action item from Google Calendar."""
     calendar_service = GoogleCalendarService(db)
     
-    action_item = crud.get_action_item(db, item_id)
+    action_item = meetings_crud.get_action_item(db, item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     
@@ -294,16 +294,16 @@ def unsync_action_item_from_calendar(
     
     if not calendar_service.is_connected():
         # Just update the database status if not connected
-        crud.update_action_item_calendar_sync(db, item_id, None, False)
+        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
         return {"message": "Action item marked as unsynced (Google Calendar not connected)"}
     
     try:
         calendar_service.delete_event(action_item.google_calendar_event_id)
-        crud.update_action_item_calendar_sync(db, item_id, None, False)
+        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
         return {"message": "Action item removed from Google Calendar"}
     except Exception as e:
         # Update database even if deletion fails
-        crud.update_action_item_calendar_sync(db, item_id, None, False)
+        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
         return {"message": f"Action item marked as unsynced, but calendar deletion failed: {str(e)}"}
 
 
@@ -370,7 +370,7 @@ def sync_all_action_items(
                 action_item,
                 meeting_title
             )
-            crud.update_action_item_calendar_sync(db, action_item.id, event_id, True)
+            meetings_crud.update_action_item_calendar_sync(db, action_item.id, event_id, True)
             synced_count += 1
         except Exception as e:
             print(f"Failed to sync action item {action_item.id}: {e}")

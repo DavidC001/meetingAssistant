@@ -8,7 +8,8 @@ from sqlalchemy import (
     Text,
     Float,
     Boolean,
-    JSON
+    JSON,
+    Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -34,13 +35,13 @@ class Meeting(Base):
     filename = Column(String, index=True)
     filepath = Column(String, unique=True)
     audio_filepath = Column(String, nullable=True)
-    status = Column(String, default=MeetingStatus.PENDING.value)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    meeting_date = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String, default=MeetingStatus.PENDING.value, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    meeting_date = Column(DateTime(timezone=True), nullable=True, index=True)
     
     transcription_language = Column(String, default="en-US")
     number_of_speakers = Column(String, default="auto")
-    model_configuration_id = Column(Integer, ForeignKey("model_configurations.id"), nullable=True)
+    model_configuration_id = Column(Integer, ForeignKey("model_configurations.id"), nullable=True, index=True)
     
     current_stage = Column(String, nullable=True)
     stage_progress = Column(Float, default=0.0)
@@ -62,19 +63,26 @@ class Meeting(Base):
     chat_messages = relationship("ChatMessage", back_populates="meeting", cascade="all, delete-orphan")
     embedding_config = relationship("EmbeddingConfiguration", back_populates="meetings")
 
-    tags = Column(String, nullable=True)
-    folder = Column(String, nullable=True)
+    tags = Column(String, nullable=True, index=True)
+    folder = Column(String, nullable=True, index=True)
     notes = Column(Text, nullable=True)
 
     speakers = relationship("Speaker", back_populates="meeting", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="meeting", cascade="all, delete-orphan")
     document_chunks = relationship("DocumentChunk", back_populates="meeting", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index('idx_meeting_status_date', 'status', 'created_at'),
+        Index('idx_meeting_folder_status', 'folder', 'status'),
+        Index('idx_meeting_date_status', 'meeting_date', 'status'),
+        Index('idx_meeting_embeddings', 'embeddings_computed', 'embeddings_updated_at'),
+    )
+
 class Attachment(Base):
     __tablename__ = "attachments"
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     filepath = Column(String, nullable=False)
     file_size = Column(Integer, nullable=True)
@@ -88,7 +96,7 @@ class Transcription(Base):
     __tablename__ = "transcriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True)
     summary = Column(Text)
     full_text = Column(Text)
 
@@ -99,7 +107,7 @@ class ActionItem(Base):
     __tablename__ = "action_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    transcription_id = Column(Integer, ForeignKey("transcriptions.id"))
+    transcription_id = Column(Integer, ForeignKey("transcriptions.id"), index=True)
     task = Column(String)
     owner = Column(String, nullable=True)
     due_date = Column(String, nullable=True)
@@ -107,7 +115,7 @@ class ActionItem(Base):
     google_calendar_event_id = Column(String, nullable=True)
     synced_to_calendar = Column(Boolean, default=False)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
-    status = Column(String, default="pending")
+    status = Column(String, default="pending", index=True)
     priority = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -117,7 +125,7 @@ class Speaker(Base):
     __tablename__ = "speakers"
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True)
     name = Column(String, nullable=False)
     label = Column(String, nullable=True)
 
@@ -127,7 +135,7 @@ class DiarizationTiming(Base):
     __tablename__ = "diarization_timings"
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True)
     audio_duration_seconds = Column(Float)
     processing_time_seconds = Column(Float)
     num_speakers = Column(Integer, nullable=True)

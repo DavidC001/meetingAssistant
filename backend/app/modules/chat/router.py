@@ -20,6 +20,31 @@ router = APIRouter(
 
 @router.post("/sessions", response_model=schemas.GlobalChatSession)
 def create_session(payload: schemas.GlobalChatSessionCreate, db: Session = Depends(get_db)):
+    """
+    Create a new global chat session.
+    
+    Global chat sessions enable semantic search and Q&A across multiple meetings
+    using RAG (Retrieval-Augmented Generation). Filter meetings by folder or tags
+    to scope the knowledge base.
+    
+    **Parameters:**
+    - **title**: Descriptive name for the chat session
+    - **tags**: Optional list of tags for organizing sessions
+    - **filter_folder**: Optional folder filter to scope search to specific meetings
+    - **filter_tags**: Optional tag filter to scope search to specific meetings
+    
+    **Returns:**
+    New chat session object with unique session_id
+    
+    **Example:**
+    ```json
+    {
+        "title": "Q1 2024 Planning Discussions",
+        "filter_folder": "planning",
+        "filter_tags": ["2024", "q1"]
+    }
+    ```
+    """
     session = crud.create_global_chat_session(
         db, 
         payload.title, 
@@ -31,16 +56,43 @@ def create_session(payload: schemas.GlobalChatSessionCreate, db: Session = Depen
 
 
 @router.get("/sessions", response_model=list[schemas.GlobalChatSession])
-def list_sessions(db: Session = Depends(get_db)):
-    return crud.list_global_chat_sessions(db)
+def list_sessions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    List all global chat sessions with pagination.
+    
+    Returns sessions ordered by last update (most recent first). Each session
+    includes metadata about its scope (filtered folders/tags) and last activity.
+    
+    **Parameters:**
+    - **skip**: Number of sessions to skip for pagination (default: 0)
+    - **limit**: Maximum number of sessions to return (max: 1000, default: 100)
+    
+    **Returns:**
+    List of chat session objects without message history (use GET /sessions/{id}
+    to retrieve messages)
+    
+    **Example:**
+    ```
+    GET /api/v1/global-chat/sessions?skip=0&limit=20
+    ```
+    """
+    return crud.list_global_chat_sessions(db, skip=skip, limit=limit)
 
 
 @router.get("/sessions/{session_id}", response_model=schemas.GlobalChatSessionDetail)
-def get_session(session_id: int, db: Session = Depends(get_db)):
+def get_session(session_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    Get a global chat session with its messages.
+    
+    Args:
+        session_id: ID of the session
+        skip: Number of messages to skip (default: 0)
+        limit: Maximum number of messages to return (default: 100)
+    """
     session = crud.get_global_chat_session(db, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    messages = crud.get_global_chat_messages(db, session_id)
+    messages = crud.get_global_chat_messages(db, session_id, skip=skip, limit=limit)
     return schemas.GlobalChatSessionDetail(session=session, messages=messages)
 
 

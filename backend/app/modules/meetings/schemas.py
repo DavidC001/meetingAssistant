@@ -4,6 +4,20 @@ from typing import List, Optional, Dict, Any
 from .models import MeetingStatus, ProcessingStage
 from ..settings.schemas import ModelConfiguration
 
+class TaskStatus(BaseModel):
+    """Status of an asynchronous task."""
+    status: str
+    task_id: Optional[str] = None
+    audio_filepath: Optional[str] = None
+    message: Optional[str] = None
+
+class BatchTaskStatus(BaseModel):
+    """Status of a batch operation."""
+    status: str
+    count: int
+    task_ids: List[str]
+    message: Optional[str] = None
+
 class SpeakerBase(BaseModel):
     name: str
     label: Optional[str] = None
@@ -168,3 +182,22 @@ class DocumentChunk(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BulkDeleteRequest(BaseModel):
+    """Schema for bulk delete operation"""
+    meeting_ids: list[int]
+
+
+class BulkUpdateRequest(BaseModel):
+    """Schema for bulk update operation"""
+    meeting_ids: list[int]
+    updates: MeetingUpdate
+
+
+class BulkOperationResponse(BaseModel):
+    """Response for bulk operations"""
+    success_count: int
+    failed_count: int
+    failed_ids: list[int]
+    errors: Optional[Dict[int, str]] = None

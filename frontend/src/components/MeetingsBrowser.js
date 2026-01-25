@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -29,6 +29,10 @@ import {
   Slide,
   Alert,
   Snackbar,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -36,6 +40,11 @@ import {
   Label as TagIcon,
   Download as DownloadIcon,
   Close as CloseIcon,
+  Refresh as RefreshIcon,
+  GraphicEq as AudioIcon,
+  Visibility as ViewIcon,
+  Edit as EditIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import FilterBar from './common/FilterBar';
 import ViewModeToggle from './common/ViewModeToggle';
@@ -327,6 +336,71 @@ const MeetingsBrowser = () => {
     );
   };
 
+  // Individual meeting action handlers
+  const navigate = useNavigate();
+
+  const handleViewMeeting = (meeting) => {
+    navigate(`/meetings/${meeting.id}`);
+  };
+
+  const handleEditMeeting = (meeting) => {
+    navigate(`/meetings/${meeting.id}`);
+  };
+
+  const handleChatMeeting = (meeting) => {
+    navigate(`/meetings/${meeting.id}?tab=chat`);
+  };
+
+  const handleDownloadMeeting = async (meeting, format = 'txt') => {
+    try {
+      const response = await api.get(`/api/v1/meetings/${meeting.id}/download/${format}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${meeting.filename}.${format}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setSnackbar({ open: true, message: 'Download started', severity: 'success' });
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Failed to download transcript', severity: 'error' });
+    }
+  };
+
+  const handleRegenerateAudio = async (meeting) => {
+    try {
+      await api.post(`/api/v1/meetings/${meeting.id}/audio/regenerate`);
+      setSnackbar({ open: true, message: 'Audio regeneration started', severity: 'success' });
+      await fetchMeetings();
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Failed to regenerate audio', severity: 'error' });
+    }
+  };
+
+  const handleRestartProcessing = async (meeting) => {
+    try {
+      await api.post(`/api/v1/meetings/${meeting.id}/restart-processing`);
+      setSnackbar({ open: true, message: 'Processing restarted', severity: 'success' });
+      await fetchMeetings();
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Failed to restart processing', severity: 'error' });
+    }
+  };
+
+  const handleDeleteMeeting = async (meeting) => {
+    if (window.confirm(`Are you sure you want to delete "${meeting.filename}"?`)) {
+      try {
+        await api.delete(`/api/v1/meetings/${meeting.id}`);
+        setSnackbar({ open: true, message: 'Meeting deleted', severity: 'success' });
+        await fetchMeetings();
+      } catch (err) {
+        setSnackbar({ open: true, message: 'Failed to delete meeting', severity: 'error' });
+      }
+    }
+  };
+
   const handleClearAllFilters = () => {
     setSearchQuery('');
     setFilters({ statuses: [], folder: null, tags: [], dateRange: null });
@@ -354,7 +428,17 @@ const MeetingsBrowser = () => {
                     '&:hover': { bgcolor: 'background.paper' },
                   }}
                 />
-                <MeetingCard meeting={meeting} variant="grid" />
+                <MeetingCard 
+                  meeting={meeting} 
+                  variant="grid"
+                  onView={handleViewMeeting}
+                  onEdit={handleEditMeeting}
+                  onChat={handleChatMeeting}
+                  onDownload={handleDownloadMeeting}
+                  onDelete={handleDeleteMeeting}
+                  onRegenerateAudio={handleRegenerateAudio}
+                  onRestartProcessing={handleRestartProcessing}
+                />
               </Box>
             </Grid>
           ))}
@@ -372,7 +456,17 @@ const MeetingsBrowser = () => {
                 onChange={() => handleToggleSelection(meeting.id)}
               />
               <Box sx={{ flexGrow: 1 }}>
-                <MeetingCard meeting={meeting} variant="list" />
+                <MeetingCard 
+                  meeting={meeting} 
+                  variant="list"
+                  onView={handleViewMeeting}
+                  onEdit={handleEditMeeting}
+                  onChat={handleChatMeeting}
+                  onDownload={handleDownloadMeeting}
+                  onDelete={handleDeleteMeeting}
+                  onRegenerateAudio={handleRegenerateAudio}
+                  onRestartProcessing={handleRestartProcessing}
+                />
               </Box>
             </Box>
           ))}
