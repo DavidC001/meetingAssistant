@@ -107,7 +107,7 @@ class ActionItem(Base):
     __tablename__ = "action_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    transcription_id = Column(Integer, ForeignKey("transcriptions.id"), index=True)
+    transcription_id = Column(Integer, ForeignKey("transcriptions.id"), nullable=True, index=True)
     task = Column(String)
     owner = Column(String, nullable=True)
     due_date = Column(String, nullable=True)

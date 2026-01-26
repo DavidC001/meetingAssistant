@@ -1,8 +1,61 @@
 /* Custom styles for Calendar component */
 
+/* Light mode defaults */
+:root {
+  --calendar-bg: #fff;
+  --calendar-text: #333;
+  --calendar-today: #e3f2fd;
+  --calendar-off-range: #f5f5f5;
+  --header-bg: #fafafa;
+  --border-color: #e0e0e0;
+  --border-light: #e0e0e0;
+  --bg-secondary: #fff;
+  --bg-hover: #f5f5f5;
+  --text-primary: #333;
+  --accent-primary: #2196f3;
+  --accent-secondary: #1976d2;
+  --time-indicator: #f44336;
+}
+
+/* Dark mode support */
+[data-theme='dark'] {
+  --calendar-bg: #1e1e1e;
+  --calendar-text: #e0e0e0;
+  --calendar-today: rgba(33, 150, 243, 0.15);
+  --calendar-off-range: #2a2a2a;
+  --header-bg: #2a2a2a;
+  --border-color: #444;
+  --border-light: #444;
+  --bg-secondary: #2a2a2a;
+  --bg-hover: #333;
+  --text-primary: #e0e0e0;
+  --accent-primary: #64b5f6;
+  --accent-secondary: #42a5f5;
+  --time-indicator: #ef5350;
+}
+
+/* Also support MUI dark mode class */
+.dark-mode,
+[data-mui-color-scheme='dark'] {
+  --calendar-bg: #1e1e1e;
+  --calendar-text: #e0e0e0;
+  --calendar-today: rgba(33, 150, 243, 0.15);
+  --calendar-off-range: #2a2a2a;
+  --header-bg: #2a2a2a;
+  --border-color: #444;
+  --border-light: #444;
+  --bg-secondary: #2a2a2a;
+  --bg-hover: #333;
+  --text-primary: #e0e0e0;
+  --accent-primary: #64b5f6;
+  --accent-secondary: #42a5f5;
+  --time-indicator: #ef5350;
+}
+
 .rbc-calendar {
   font-family: 'Roboto', sans-serif;
-  background: var(--calendar-bg, #fff);
+  background: var(--calendar-bg);
+  color: var(--calendar-text);
   border-radius: 8px;
   overflow: hidden;
 }

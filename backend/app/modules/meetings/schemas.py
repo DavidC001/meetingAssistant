@@ -71,7 +71,7 @@ class ActionItemUpdate(BaseModel):
 
 class ActionItem(ActionItemBase):
     id: int
-    transcription_id: int
+    transcription_id: Optional[int] = None
     is_manual: bool = False
     google_calendar_event_id: Optional[str] = None
     synced_to_calendar: bool = False

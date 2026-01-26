@@ -114,6 +114,13 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         raise RuntimeError(f"Unexpected Ollama embedding response format: {data}")
 
 
+from pathlib import Path
+
+
+# Model cache directory for persistent storage across restarts
+EMBEDDING_MODELS_CACHE_DIR = Path("/app/cache/models/embeddings")
+
+
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
     """Local embedding provider backed by sentence-transformers."""
 
@@ -132,8 +139,13 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             # Add HuggingFace token if available (needed for gated models)
             if runtime_config.api_key:
                 model_kwargs['token'] = runtime_config.api_key
+            
+            # Use persistent cache directory for model downloads
+            EMBEDDING_MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            model_kwargs['cache_folder'] = str(EMBEDDING_MODELS_CACHE_DIR)
+            
             try:
-                self.logger.info(f"Loading sentence-transformer model: {model_name}")
+                self.logger.info(f"Loading sentence-transformer model: {model_name} (cache: {EMBEDDING_MODELS_CACHE_DIR})")
                 self._cache[cache_key] = SentenceTransformer(model_name, **model_kwargs)
                 self.logger.info(f"Successfully loaded model: {model_name}")
             except Exception as e:
@@ -356,6 +368,10 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
     model_kwargs = {}
     if hf_token:
         model_kwargs['token'] = hf_token
+    
+    # Use persistent cache directory
+    EMBEDDING_MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    model_kwargs['cache_folder'] = str(EMBEDDING_MODELS_CACHE_DIR)
         
     try:
         model = SentenceTransformer(DEFAULT_LOCAL_MODEL, **model_kwargs)

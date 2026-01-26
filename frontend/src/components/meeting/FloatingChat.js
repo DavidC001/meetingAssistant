@@ -31,6 +31,11 @@ import {
   Minimize as MinimizeIcon,
   SmartToy as BotIcon,
   Person as PersonIcon,
+  DeleteSweep as ClearIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Fullscreen as FullscreenIcon,
+  FullscreenExit as FullscreenExitIcon,
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import api from '../../api';
@@ -38,11 +43,13 @@ import api from '../../api';
 const FloatingChat = ({ meetingId, meetingTitle }) => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [useFullTranscript, setUseFullTranscript] = useState(false);
+  const [expandedSources, setExpandedSources] = useState({});
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -55,33 +62,29 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
     }
   }, [messages, open]);
 
-  // Load existing session or create new one
+  // Load existing chat history for this meeting
   useEffect(() => {
-    if (open && !sessionId) {
-      // Try to get existing session for this meeting
-      fetchSession();
+    if (open && !historyLoaded && meetingId) {
+      fetchChatHistory();
     }
-  }, [open]);
+  }, [open, meetingId, historyLoaded]);
 
-  const fetchSession = async () => {
+  const fetchChatHistory = async () => {
     try {
-      // Get sessions filtered by this meeting
-      const response = await api.get('/api/v1/chat/sessions');
-      const sessions = response.data;
-      
-      // Find session for this meeting (you might need to adjust based on your API)
-      const meetingSession = sessions.find(s => 
-        s.filter_meeting_ids && s.filter_meeting_ids.includes(meetingId)
-      );
-      
-      if (meetingSession) {
-        setSessionId(meetingSession.id);
-        // Load messages
-        const messagesResponse = await api.get(`/api/v1/chat/sessions/${meetingSession.id}/messages`);
-        setMessages(messagesResponse.data);
+      // Get chat history for this specific meeting
+      const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history?limit=50`);
+      if (response.data && response.data.history) {
+        const formattedMessages = response.data.history.map(m => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.created_at,
+        }));
+        setMessages(formattedMessages);
       }
+      setHistoryLoaded(true);
     } catch (err) {
-      console.error('Error fetching session:', err);
+      console.error('Error fetching chat history:', err);
+      setHistoryLoaded(true);
     }
   };
 
@@ -94,34 +97,31 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       timestamp: new Date().toISOString(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     const messageText = input;
     setInput('');
     setIsLoading(true);
 
     try {
-      // Create session if it doesn't exist
-      let currentSessionId = sessionId;
-      if (!currentSessionId) {
-        const sessionResponse = await api.post('/api/v1/chat/sessions', {
-          title: `Chat about ${meetingTitle}`,
-          filter_meeting_ids: [meetingId],
-        });
-        currentSessionId = sessionResponse.data.id;
-        setSessionId(currentSessionId);
-      }
+      // Build chat history for context (last 6 messages)
+      const chatHistory = newMessages.slice(-6).map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
 
-      // Send message with use_full_transcript parameter
-      const response = await api.post(`/api/v1/chat/sessions/${currentSessionId}/messages`, {
-        message: messageText,
-        filter_meeting_ids: [meetingId],
+      // Send message to meeting-specific chat endpoint
+      const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
+        query: messageText,
+        chat_history: chatHistory,
+        top_k: 5,
         use_full_transcript: useFullTranscript,
       });
 
       const assistantMessage = {
         role: 'assistant',
         content: response.data.response,
-        sources: response.data.sources,
+        sources: response.data.sources || [],
         timestamp: new Date().toISOString(),
       };
 
@@ -145,6 +145,78 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      await api.delete(`/api/v1/meetings/${meetingId}/chat/history`);
+      setMessages([]);
+      setExpandedSources({});
+    } catch (err) {
+      console.error('Error clearing chat history:', err);
+    }
+  };
+
+  const toggleSourcesExpanded = (index) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
+  const renderSources = (sources, messageIndex) => {
+    if (!sources || sources.length === 0) {
+      return null;
+    }
+
+    const isExpanded = expandedSources[messageIndex];
+
+    return (
+      <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+        <Button
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSourcesExpanded(messageIndex);
+          }}
+          endIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          sx={{ py: 0, minHeight: 24, fontSize: '0.75rem' }}
+        >
+          {isExpanded ? 'Hide' : 'Show'} Sources ({sources.length})
+        </Button>
+        <Collapse in={isExpanded}>
+          <Stack spacing={1} sx={{ mt: 1 }}>
+            {sources.map((source, index) => (
+              <Paper
+                key={index}
+                variant="outlined"
+                sx={{ 
+                  p: 1,
+                  bgcolor: 'background.default',
+                }}
+              >
+                <Typography variant="caption" color="primary" fontWeight="medium">
+                  {source.content_type?.replace('_', ' ') || 'transcript'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  similarity: {(source.similarity || 0).toFixed(2)}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
+                  {source.snippet?.substring(0, 200)}{source.snippet?.length > 200 ? '...' : ''}
+                </Typography>
+                {source.metadata?.attachment_name && (
+                  <Chip 
+                    size="small" 
+                    label={`📎 ${source.metadata.attachment_name}`} 
+                    sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }} 
+                  />
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </Collapse>
+      </Box>
+    );
   };
 
   if (!open) {
@@ -173,14 +245,18 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       elevation={8}
       sx={{
         position: 'fixed',
-        right: { xs: 0, sm: 16 },
-        bottom: { xs: 0, sm: 16 },
-        width: { xs: '100%', sm: 400 },
-        height: minimized ? 'auto' : { xs: '100vh', sm: 600 },
+        right: fullscreen ? 0 : { xs: 0, sm: 16 },
+        bottom: fullscreen ? 0 : { xs: 0, sm: 16 },
+        top: fullscreen ? 0 : 'auto',
+        left: fullscreen ? 0 : 'auto',
+        width: fullscreen ? '100vw' : { xs: '100%', sm: 400 },
+        height: minimized ? 'auto' : fullscreen ? '100vh' : { xs: '100vh', sm: 600 },
+        maxWidth: fullscreen ? '100vw' : { xs: '100%', sm: 400 },
         display: 'flex',
         flexDirection: 'column',
         zIndex: 1300,
-        transition: 'height 0.3s ease',
+        transition: 'all 0.3s ease',
+        borderRadius: fullscreen ? 0 : undefined,
       }}
     >
       {/* Header */}
@@ -200,10 +276,30 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
         <Typography variant="h6" sx={{ flexGrow: 1, fontSize: '1rem' }}>
           Meeting Chat
         </Typography>
+        <Tooltip title="Clear chat history">
+          <IconButton
+            size="small"
+            onClick={handleClearHistory}
+            sx={{ color: 'inherit' }}
+            disabled={messages.length === 0}
+          >
+            <ClearIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={fullscreen ? "Exit fullscreen" : "Fullscreen"}>
+          <IconButton
+            size="small"
+            onClick={() => setFullscreen(!fullscreen)}
+            sx={{ color: 'inherit' }}
+          >
+            {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          </IconButton>
+        </Tooltip>
         <IconButton
           size="small"
           onClick={() => setMinimized(!minimized)}
           sx={{ color: 'inherit' }}
+          disabled={fullscreen}
         >
           <MinimizeIcon />
         </IconButton>
@@ -226,7 +322,9 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
-            height: { xs: 'calc(100vh - 220px)', sm: 400 },
+            height: fullscreen 
+              ? 'calc(100vh - 180px)' 
+              : { xs: 'calc(100vh - 220px)', sm: 400 },
           }}
         >
           {messages.length === 0 ? (
@@ -269,8 +367,8 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                 </Avatar>
                 <Paper
                   sx={{
-                    p: 1.5,
-                    maxWidth: '75%',
+                    p: fullscreen ? 2 : 1.5,
+                    maxWidth: fullscreen ? '800px' : '75%',
                     bgcolor: message.role === 'user' 
                       ? 'primary.main' 
                       : message.isError 
@@ -299,19 +397,12 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                       },
                     }}>
                       <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {renderSources(message.sources, index)}
                     </Box>
                   ) : (
                     <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                       {message.content}
                     </Typography>
-                  )}
-                  
-                  {message.sources && message.sources.length > 0 && (
-                    <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Sources: {message.sources.length} segment(s)
-                      </Typography>
-                    </Box>
                   )}
                 </Paper>
               </Box>

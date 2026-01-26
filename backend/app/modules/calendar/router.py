@@ -90,6 +90,34 @@ def get_action_item(
     return action_item
 
 
+@calendar_router.post("/action-items", response_model=meetings_schemas.ActionItem)
+def create_standalone_action_item(
+    action_item: meetings_schemas.ActionItemCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a standalone action item not tied to any specific meeting.
+    This is useful for creating tasks directly from the calendar view.
+    """
+    # Create action item without a transcription_id (standalone task)
+    db_action_item = models.ActionItem(
+        transcription_id=None,
+        task=action_item.task,
+        owner=action_item.owner,
+        due_date=action_item.due_date,
+        status=action_item.status or "pending",
+        priority=action_item.priority,
+        notes=action_item.notes,
+        is_manual=True,
+        synced_to_calendar=False
+    )
+    db.add(db_action_item)
+    db.commit()
+    db.refresh(db_action_item)
+    
+    return db_action_item
+
+
 @calendar_router.put("/action-items/{item_id}", response_model=meetings_schemas.ActionItem)
 def update_action_item(
     item_id: int,
@@ -142,6 +170,34 @@ def update_action_item(
             # Don't fail the request if calendar sync fails
     
     return action_item
+
+
+@calendar_router.delete("/action-items/{item_id}", status_code=204)
+def delete_action_item(
+    item_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an action item.
+    If the item is synced to Google Calendar, also removes the calendar event.
+    """
+    action_item = meetings_crud.get_action_item(db, item_id)
+    if not action_item:
+        raise HTTPException(status_code=404, detail="Action item not found")
+    
+    # If synced to Google Calendar, remove the event first
+    if action_item.synced_to_calendar and action_item.google_calendar_event_id:
+        try:
+            calendar_service = GoogleCalendarService(db)
+            if calendar_service.is_connected():
+                calendar_service.delete_event(action_item.google_calendar_event_id)
+        except Exception as e:
+            print(f"Error deleting Google Calendar event: {e}")
+            # Continue with deletion even if calendar sync fails
+    
+    # Delete from database
+    meetings_crud.delete_action_item(db, item_id)
+    return None
 
 
 # Google Calendar Authentication Endpoints

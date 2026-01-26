@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
+import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay, addDays, parseISO } from 'date-fns';
 import axios from 'axios';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Paper,
@@ -38,6 +40,7 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import './Calendar.css';
 
 const locales = {
@@ -52,9 +55,13 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
+const DnDCalendar = withDragAndDrop(BigCalendar);
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const Calendar = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   const [actionItems, setActionItems] = useState([]);
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -252,11 +259,9 @@ const Calendar = () => {
         await axios.put(`${API_BASE_URL}/calendar/action-items/${selectedEvent.id}`, formData);
         showSnackbar('Action item updated', 'success');
       } else {
-        // Create new action item - we need to create it via a meeting
-        // For now, show a message that action items must be created from meetings
-        showSnackbar('New action items must be created from meeting details', 'info');
-        setDialogOpen(false);
-        return;
+        // Create new standalone action item
+        await axios.post(`${API_BASE_URL}/calendar/action-items`, formData);
+        showSnackbar('Action item created', 'success');
       }
       
       setDialogOpen(false);
@@ -549,13 +554,13 @@ const Calendar = () => {
       </Paper>
 
       {/* Calendar */}
-      <Paper sx={{ flex: 1, p: 2, minHeight: '600px' }}>
+      <Paper sx={{ flex: 1, p: 2, minHeight: '600px' }} className={isDarkMode ? 'dark-mode' : ''}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <CircularProgress />
           </Box>
         ) : (
-          <BigCalendar
+          <DnDCalendar
             key={events.length} // Force re-render when events change
             localizer={localizer}
             events={events}
@@ -568,6 +573,7 @@ const Calendar = () => {
             onEventResize={handleEventResize}
             selectable
             resizable
+            draggableAccessor={() => true}
             eventPropGetter={eventStyleGetter}
             views={['month', 'week', 'day', 'agenda']}
             defaultView="month"

@@ -37,7 +37,7 @@ export const MeetingChatService = {
     } = options;
 
     const response = await apiClient.post(`${MEETINGS_URL}/${meetingId}/chat`, {
-      message,
+      query: message,
       chat_history: chatHistory,
       top_k: topK,
       use_full_transcript: useFullTranscript,
