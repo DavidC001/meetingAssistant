@@ -26,3 +26,4 @@ export {
   AppSettingsService,
 } from './settingsService';
 export { default as SettingsService } from './settingsService';
+export { default as DiaryService } from './diaryService';

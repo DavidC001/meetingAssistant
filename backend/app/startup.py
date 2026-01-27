@@ -149,6 +149,48 @@ def queue_missing_audio_generation():
     finally:
         db.close()
 
+def fix_diary_action_items():
+    """
+    Re-extract action items from existing diary entries.
+    This is a one-time fix for entries that were created before the column type fix.
+    """
+    logger.info("Checking diary entries for action item extraction...")
+    
+    db = SessionLocal()
+    try:
+        from .modules.diary.repository import extract_action_item_ids_from_content
+        from .modules.diary.models import DiaryEntry
+        
+        # Get all entries that have content but no action items extracted
+        entries = db.query(DiaryEntry).filter(
+            DiaryEntry.content.isnot(None),
+            DiaryEntry.action_items_worked_on.is_(None)
+        ).all()
+        
+        if not entries:
+            logger.info("No diary entries need action item extraction.")
+            return
+        
+        logger.info(f"Re-extracting action items from {len(entries)} diary entries")
+        
+        updated_count = 0
+        for entry in entries:
+            worked_on, completed = extract_action_item_ids_from_content(entry.content)
+            
+            if worked_on or completed:
+                entry.action_items_worked_on = worked_on if worked_on else None
+                entry.action_items_completed = completed if completed else None
+                updated_count += 1
+        
+        db.commit()
+        logger.info(f"Successfully updated {updated_count} diary entries with action items")
+        
+    except Exception as e:
+        logger.error(f"Error fixing diary action items: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 def startup_recovery():
     """
     Main startup recovery function to be called when the application starts.
@@ -163,5 +205,8 @@ def startup_recovery():
     
     # Queue audio generation for meetings missing audio files
     queue_missing_audio_generation()
+    
+    # Fix diary action items extraction
+    fix_diary_action_items()
     
     logger.info("Application recovery procedures completed.")

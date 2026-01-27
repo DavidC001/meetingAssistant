@@ -1,0 +1,35 @@
+.diary-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.diary-date-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diary-content-editor {
+  min-height: 400px;
+}
+
+.diary-highlights-section,
+.diary-blockers-section {
+  margin-top: 16px;
+}
+
+.diary-action-items-panel {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .diary-action-items-panel {
+    position: relative;
+    top: 0;
+    max-height: none;
+  }
+}

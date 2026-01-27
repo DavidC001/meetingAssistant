@@ -18,6 +18,9 @@ import ScheduledMeetings from './components/ScheduledMeetings';
 import MeetingsGraph from './components/MeetingsGraph';
 import MeetingTemplates from './components/MeetingTemplates';
 import KanbanBoard from './components/KanbanBoard';
+import Diary from './components/Diary';
+import DiaryReminder from './components/DiaryReminder';
+import DiaryStatistics from './components/DiaryStatistics';
 import Sidebar from './components/layout/Sidebar';
 import AppHeader from './components/layout/AppHeader';
 import PageTransition from './components/common/PageTransition';
@@ -78,6 +81,9 @@ function AppContent() {
             px: { xs: 2, sm: 3, md: 4 },
           }}
         >
+          {/* Diary Reminder Modal */}
+          <DiaryReminder />
+          
           <Routes>
             <Route path="/" element={<PageTransition><MeetingsDashboard /></PageTransition>} />
             <Route path="/meetings/browse" element={<PageTransition><MeetingsBrowser /></PageTransition>} />
@@ -87,6 +93,8 @@ function AppContent() {
             <Route path="/graph" element={<PageTransition><MeetingsGraph /></PageTransition>} />
             <Route path="/calendar" element={<PageTransition><Calendar /></PageTransition>} />
             <Route path="/kanban" element={<PageTransition><KanbanBoard /></PageTransition>} />
+            <Route path="/diary" element={<PageTransition><Diary /></PageTransition>} />
+            <Route path="/diary/statistics" element={<PageTransition><DiaryStatistics /></PageTransition>} />
             <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
             <Route path="/templates" element={<PageTransition><MeetingTemplates /></PageTransition>} />
           </Routes>

@@ -33,6 +33,7 @@ import {
   Article as TemplatesIcon,
   Settings as SettingsIcon,
   ViewKanban as KanbanIcon,
+  EditNote as DiaryIcon,
 } from '@mui/icons-material';
 
 const DRAWER_WIDTH = 280;
@@ -59,6 +60,7 @@ const navigationGroups = [
       { path: '/calendar', label: 'Calendar', icon: CalendarIcon },
       { path: '/scheduled-meetings', label: 'Scheduled', icon: EventIcon },
       { path: '/kanban', label: 'Action Items', icon: KanbanIcon },
+      { path: '/diary', label: 'Daily Diary', icon: DiaryIcon },
       { path: '/templates', label: 'Templates', icon: TemplatesIcon },
     ],
   },

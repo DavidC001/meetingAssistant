@@ -209,7 +209,9 @@ const KanbanBoard = () => {
         if (!item.due_date) return true; // Include items without due date
         if (!timeLimit) return true; // No time limit (show all)
         const dueDate = new Date(item.due_date);
-        return dueDate >= now && dueDate <= timeLimit;
+        // Include items within time horizon OR expired items that are not completed
+        const isExpiredIncomplete = dueDate < now && item.status !== 'completed';
+        return isExpiredIncomplete || (dueDate >= now && dueDate <= timeLimit);
       });
       
       // Apply user filter if enabled

@@ -568,7 +568,7 @@ def update_notes_embeddings(self, meeting_id: int, notes: str):
             return {"status": "error", "reason": "meeting_not_found"}
         
         # Get embedding provider
-        config = get_embedding_provider(db, meeting_id)
+        provider, config = get_embedding_provider(db)
         
         # Remove old notes embeddings
         DEFAULT_VECTOR_STORE.delete_chunks_by_metadata(
@@ -598,7 +598,7 @@ def update_notes_embeddings(self, meeting_id: int, notes: str):
             })
         
         # Compute embeddings
-        embeddings = batched_embeddings([p["content"] for p in payloads], config)
+        embeddings = batched_embeddings(provider, [p["content"] for p in payloads])
         
         # Store in vector store
         DEFAULT_VECTOR_STORE.add_documents(
@@ -651,7 +651,7 @@ def index_attachment(self, attachment_id: int):
         meeting_id = attachment.meeting_id
         
         # Get embedding provider
-        config = get_embedding_provider(db, meeting_id)
+        provider, config = get_embedding_provider(db)
         
         # Extract text from attachment
         try:
@@ -693,7 +693,7 @@ def index_attachment(self, attachment_id: int):
             })
         
         # Compute embeddings
-        embeddings = batched_embeddings([p["content"] for p in payloads], config)
+        embeddings = batched_embeddings(provider, [p["content"] for p in payloads])
         
         # Store in vector store
         DEFAULT_VECTOR_STORE.add_documents(

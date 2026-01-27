@@ -21,6 +21,7 @@ from ...models import (
     UserMapping, GoogleDriveSyncConfig, GoogleDriveProcessedFile,
     GlobalChatSession, MeetingLink
 )
+from ..diary.models import DiaryEntry
 from ... import crud
 
 router = APIRouter(prefix="/backup", tags=["backup"])
@@ -133,6 +134,10 @@ async def export_data(db: Session = Depends(get_db)):
         worker_config = db.query(WorkerConfiguration).first()
         worker_config_data = serialize_model(worker_config) if worker_config else None
         
+        # Export diary entries
+        diary_entries = db.query(DiaryEntry).all()
+        diary_entries_data = [serialize_model(de) for de in diary_entries]
+        
         # Compile export data
         export_data = {
             "export_metadata": {
@@ -146,7 +151,8 @@ async def export_data(db: Session = Depends(get_db)):
                     "chat_sessions": len(chat_sessions_data),
                     "api_keys": len(api_keys_data),
                     "model_configs": len(model_configs_data),
-                    "embedding_configs": len(embedding_configs_data)
+                    "embedding_configs": len(embedding_configs_data),
+                    "diary_entries": len(diary_entries_data)
                 }
             },
             "meetings": meetings_data,
@@ -158,7 +164,8 @@ async def export_data(db: Session = Depends(get_db)):
             "api_keys": api_keys_data,
             "model_configurations": model_configs_data,
             "embedding_configurations": embedding_configs_data,
-            "worker_configuration": worker_config_data
+            "worker_configuration": worker_config_data,
+            "diary_entries": diary_entries_data
         }
         
         # Create JSON file
@@ -214,6 +221,7 @@ async def import_data(
             "model_configs_imported": 0,
             "embedding_configs_imported": 0,
             "worker_config_imported": 0,
+            "diary_entries_imported": 0,
             "errors": []
         }
         
@@ -611,6 +619,45 @@ async def import_data(
                     
             except Exception as e:
                 stats["errors"].append(f"Chat session '{cs_data.get('title')}': {str(e)}")
+        
+        db.commit()
+        
+        # Import diary entries
+        for de_data in data.get("diary_entries", []):
+            try:
+                # Convert datetime fields
+                for field in ['created_at', 'updated_at', 'date']:
+                    if field in de_data and de_data[field]:
+                        try:
+                            if field == 'date':
+                                # date field is date type, not datetime
+                                from datetime import date
+                                de_data[field] = datetime.fromisoformat(de_data[field]).date()
+                            else:
+                                de_data[field] = datetime.fromisoformat(de_data[field])
+                        except:
+                            de_data[field] = None
+                
+                # Check if already exists by date
+                existing_de = db.query(DiaryEntry).filter(
+                    DiaryEntry.date == de_data.get("date")
+                ).first()
+                
+                if not existing_de:
+                    # Create new diary entry
+                    de_dict = {k: v for k, v in de_data.items() if k != 'id'}
+                    diary_entry = DiaryEntry(**de_dict)
+                    db.add(diary_entry)
+                    stats["diary_entries_imported"] += 1
+                elif merge_mode:
+                    # Update existing entry if merge mode
+                    for key, value in de_data.items():
+                        if key not in ['id', 'date', 'created_at']:
+                            setattr(existing_de, key, value)
+                    stats["diary_entries_imported"] += 1
+                    
+            except Exception as e:
+                stats["errors"].append(f"Diary entry '{de_data.get('date')}': {str(e)}")
         
         db.commit()
         

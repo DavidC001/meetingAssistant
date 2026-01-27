@@ -31,4 +31,8 @@ from .modules.calendar.models import (
     ScheduledMeeting
 )
 from .modules.users.models import UserMapping
+from .modules.diary.models import (
+    DiaryEntry,
+    DiaryActionItemSnapshot
+)
 from .database import Base
