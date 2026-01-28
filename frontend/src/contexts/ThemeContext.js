@@ -145,15 +145,12 @@ const getDesignTokens = (mode) => ({
     MuiCard: {
       styleOverrides: {
         root: {
-          boxShadow: mode === 'light' 
-            ? '0 2px 8px rgba(0,0,0,0.1)' 
-            : '0 2px 8px rgba(0,0,0,0.4)',
+          boxShadow: mode === 'light' ? '0 2px 8px rgba(0,0,0,0.1)' : '0 2px 8px rgba(0,0,0,0.4)',
           transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           '&:hover': {
             transform: 'translateY(-2px)',
-            boxShadow: mode === 'light'
-              ? '0 4px 16px rgba(0,0,0,0.15)'
-              : '0 4px 16px rgba(0,0,0,0.6)',
+            boxShadow:
+              mode === 'light' ? '0 4px 16px rgba(0,0,0,0.15)' : '0 4px 16px rgba(0,0,0,0.6)',
           },
         },
       },
@@ -215,13 +212,15 @@ export const ThemeProvider = ({ children }) => {
   }, []);
 
   const toggleTheme = () => {
-    setMode(prev => prev === 'light' ? 'dark' : 'light');
+    setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   const setThemeMode = (newMode) => {
     if (newMode === 'system') {
       localStorage.removeItem('themeMode');
-      const systemMode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      const systemMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
       setMode(systemMode);
     } else {
       setMode(newMode);
@@ -234,14 +233,12 @@ export const ThemeProvider = ({ children }) => {
     mode,
     toggleTheme,
     setThemeMode,
-    isDark: mode === 'dark'
+    isDark: mode === 'dark',
   };
 
   return (
     <ThemeContext.Provider value={value}>
-      <MuiThemeProvider theme={theme}>
-        {children}
-      </MuiThemeProvider>
+      <MuiThemeProvider theme={theme}>{children}</MuiThemeProvider>
     </ThemeContext.Provider>
   );
 };

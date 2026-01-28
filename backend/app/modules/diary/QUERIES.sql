@@ -6,7 +6,7 @@
 -- =====================================================
 
 -- 1. View all diary entries
-SELECT 
+SELECT
     id,
     date,
     SUBSTRING(content, 1, 50) as content_preview,
@@ -21,7 +21,7 @@ FROM diary_entries
 ORDER BY date DESC;
 
 -- 2. View diary entries for current month
-SELECT 
+SELECT
     id,
     date,
     mood,
@@ -34,7 +34,7 @@ WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
 ORDER BY date DESC;
 
 -- 3. Count entries by mood
-SELECT 
+SELECT
     mood,
     COUNT(*) as count
 FROM diary_entries
@@ -62,7 +62,7 @@ WHERE de.id IS NULL
 ORDER BY wd.date DESC;
 
 -- 5. View diary entries with action item counts
-SELECT 
+SELECT
     de.date,
     de.mood,
     COUNT(DISTINCT dais.action_item_id) as action_items_count
@@ -72,7 +72,7 @@ GROUP BY de.id, de.date, de.mood
 ORDER BY de.date DESC;
 
 -- 6. View action item snapshots for a specific date
-SELECT 
+SELECT
     de.date,
     ai.task,
     ai.owner,
@@ -87,7 +87,7 @@ WHERE de.date = '2026-01-27'  -- Change to your date
 ORDER BY ai.task;
 
 -- 7. Find entries with highlights or blockers
-SELECT 
+SELECT
     date,
     mood,
     ARRAY_LENGTH(highlights, 1) as highlights_count,
@@ -97,7 +97,7 @@ WHERE highlights IS NOT NULL OR blockers IS NOT NULL
 ORDER BY date DESC;
 
 -- 8. Most productive days (most completed action items)
-SELECT 
+SELECT
     de.date,
     de.mood,
     COUNT(DISTINCT dais.action_item_id) as completed_items
@@ -109,10 +109,10 @@ ORDER BY completed_items DESC
 LIMIT 10;
 
 -- 9. Entries that need attention (dismissed reminders but no content)
-SELECT 
+SELECT
     date,
     reminder_dismissed,
-    CASE 
+    CASE
         WHEN content IS NULL OR content = '' THEN 'Empty'
         ELSE 'Has content'
     END as content_status
@@ -122,7 +122,7 @@ WHERE reminder_dismissed = TRUE
 ORDER BY date DESC;
 
 -- 10. Weekly summary
-SELECT 
+SELECT
     DATE_TRUNC('week', date) as week_start,
     COUNT(*) as entries_count,
     COUNT(CASE WHEN mood = 'productive' THEN 1 END) as productive_days,
@@ -150,7 +150,7 @@ ON CONFLICT (date) DO NOTHING;
 
 -- Insert multiple sample entries for the past week
 INSERT INTO diary_entries (date, content, mood, is_work_day)
-SELECT 
+SELECT
     date,
     '# Daily Diary - ' || TO_CHAR(date, 'YYYY-MM-DD') || E'\n\nSample entry.',
     CASE (RANDOM() * 3)::INT
@@ -176,7 +176,7 @@ ON CONFLICT (date) DO NOTHING;
 -- DELETE FROM diary_entries WHERE date < CURRENT_DATE - INTERVAL '1 year';
 
 -- Remove entries with no content and dismissed reminders (older than 30 days)
--- DELETE FROM diary_entries 
+-- DELETE FROM diary_entries
 -- WHERE (content IS NULL OR content = '')
 --   AND reminder_dismissed = TRUE
 --   AND date < CURRENT_DATE - INTERVAL '30 days';
@@ -189,7 +189,7 @@ ON CONFLICT (date) DO NOTHING;
 -- =====================================================
 
 -- Average entries per month
-SELECT 
+SELECT
     DATE_TRUNC('month', date) as month,
     COUNT(*) as entries_count
 FROM diary_entries
@@ -197,7 +197,7 @@ GROUP BY DATE_TRUNC('month', date)
 ORDER BY month DESC;
 
 -- Mood distribution
-SELECT 
+SELECT
     mood,
     COUNT(*) as count,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage
@@ -222,7 +222,7 @@ entries AS (
     WHERE date >= CURRENT_DATE - INTERVAL '30 days'
       AND is_work_day = TRUE
 )
-SELECT 
+SELECT
     total_entries,
     total_work_days,
     ROUND((total_entries::numeric / total_work_days::numeric) * 100, 2) as completion_percentage
@@ -239,7 +239,7 @@ LEFT JOIN diary_entries de ON dais.diary_entry_id = de.id
 WHERE de.id IS NULL;
 
 -- Check for invalid dates (non-work days marked as work days)
-SELECT 
+SELECT
     date,
     is_work_day,
     EXTRACT(DOW FROM date) as day_of_week,
@@ -249,11 +249,11 @@ WHERE is_work_day = TRUE
   AND EXTRACT(DOW FROM date) NOT BETWEEN 1 AND 5;
 
 -- Find entries created but never updated
-SELECT 
+SELECT
     date,
     created_at,
     updated_at,
-    CASE 
+    CASE
         WHEN created_at = updated_at THEN 'Never updated'
         ELSE 'Updated'
     END as update_status
@@ -265,7 +265,7 @@ ORDER BY date DESC;
 -- =====================================================
 
 -- Check index usage
-SELECT 
+SELECT
     schemaname,
     tablename,
     indexname,
@@ -277,7 +277,7 @@ WHERE tablename IN ('diary_entries', 'diary_action_item_snapshots')
 ORDER BY idx_scan DESC;
 
 -- Table sizes
-SELECT 
+SELECT
     tablename,
     pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
 FROM pg_tables

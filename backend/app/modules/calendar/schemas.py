@@ -1,60 +1,70 @@
-from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+
+from pydantic import BaseModel
+
 from ..meetings.schemas import Meeting
+
 
 class GoogleCalendarAuthUrl(BaseModel):
     auth_url: str
 
+
 class GoogleCalendarAuthCode(BaseModel):
     code: str
 
+
 class GoogleCalendarStatus(BaseModel):
     is_connected: bool
-    calendar_id: Optional[str] = None
-    email: Optional[str] = None
+    calendar_id: str | None = None
+    email: str | None = None
+
 
 class CalendarEventSync(BaseModel):
     action_item_id: int
     sync: bool
 
+
 class ScheduledMeetingBase(BaseModel):
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     scheduled_time: datetime
-    duration_minutes: Optional[int] = 60
-    location: Optional[str] = None
-    attendees: Optional[str] = None
+    duration_minutes: int | None = 60
+    location: str | None = None
+    attendees: str | None = None
+
 
 class ScheduledMeetingCreate(ScheduledMeetingBase):
-    google_calendar_event_id: Optional[str] = None
-    google_meet_link: Optional[str] = None
+    google_calendar_event_id: str | None = None
+    google_meet_link: str | None = None
+
 
 class ScheduledMeetingUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    scheduled_time: Optional[datetime] = None
-    duration_minutes: Optional[int] = None
-    location: Optional[str] = None
-    attendees: Optional[str] = None
-    status: Optional[str] = None
-    linked_meeting_id: Optional[int] = None
+    title: str | None = None
+    description: str | None = None
+    scheduled_time: datetime | None = None
+    duration_minutes: int | None = None
+    location: str | None = None
+    attendees: str | None = None
+    status: str | None = None
+    linked_meeting_id: int | None = None
+
 
 class ScheduledMeeting(ScheduledMeetingBase):
     id: int
-    google_calendar_event_id: Optional[str] = None
-    google_meet_link: Optional[str] = None
+    google_calendar_event_id: str | None = None
+    google_meet_link: str | None = None
     status: str
-    linked_meeting_id: Optional[int] = None
+    linked_meeting_id: int | None = None
     created_at: datetime
     updated_at: datetime
-    last_synced_at: Optional[datetime] = None
-    
+    last_synced_at: datetime | None = None
+
     class Config:
         from_attributes = True
 
+
 class ScheduledMeetingWithLinkedMeeting(ScheduledMeeting):
-    linked_meeting: Optional[Meeting] = None
-    
+    linked_meeting: Meeting | None = None
+
     class Config:
         from_attributes = True

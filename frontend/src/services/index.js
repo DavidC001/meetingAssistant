@@ -1,8 +1,8 @@
 /**
  * Services barrel file.
- * 
+ *
  * Re-exports all service modules for convenient importing.
- * 
+ *
  * Usage:
  *   import { MeetingService, ChatService } from './services';
  *   // or

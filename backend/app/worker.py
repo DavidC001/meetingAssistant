@@ -1,5 +1,6 @@
-from celery import Celery
 import logging
+
+from celery import Celery
 
 from .core.config import config
 
@@ -10,8 +11,9 @@ logger = logging.getLogger(__name__)
 # Download NLTK data at startup
 try:
     import nltk
-    nltk.download('punkt_tab', quiet=True)
-    nltk.download('stopwords', quiet=True)
+
+    nltk.download("punkt_tab", quiet=True)
+    nltk.download("stopwords", quiet=True)
     logger.info("NLTK data downloaded successfully")
 except Exception as e:
     logger.warning(f"Could not download NLTK data: {e}")
@@ -19,6 +21,7 @@ except Exception as e:
 # Try to import torch and check for GPU availability
 try:
     import torch
+
     gpu_available = torch.cuda.is_available()
     logger.info(f"CUDA available: {gpu_available}")
     if gpu_available:
@@ -46,7 +49,7 @@ celery_app = Celery(
     "tasks",
     broker=celery_broker_url,
     backend=celery_result_backend,
-    include=["app.tasks"]  # Point to the module where tasks are defined
+    include=["app.tasks"],  # Point to the module where tasks are defined
 )
 
 # Enhanced Celery configuration
@@ -62,19 +65,20 @@ celery_app.conf.update(
     worker_max_memory_per_child=4000000,  # 4GB memory limit per worker - worker will restart after this
     worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to prevent memory accumulation
     # Force spawn method for CUDA compatibility
-    worker_pool='solo',  # Use solo pool which avoids multiprocessing issues with CUDA
+    worker_pool="solo",  # Use solo pool which avoids multiprocessing issues with CUDA
 )
 
 # Configure Celery Beat for periodic tasks
 from celery.schedules import crontab
 
 celery_app.conf.beat_schedule = {
-    'sync-google-drive-daily': {
-        'task': 'app.tasks.sync_google_drive_folder',
-        'schedule': crontab(minute='*/30'),  # Check every 30 minutes, task will decide if it should run
-        'options': {'expires': 1500}  # Task expires after 25 minutes if not executed
+    "sync-google-drive-daily": {
+        "task": "app.tasks.sync_google_drive_folder",
+        "schedule": crontab(minute="*/30"),  # Check every 30 minutes, task will decide if it should run
+        "options": {"expires": 1500},  # Task expires after 25 minutes if not executed
     },
 }
+
 
 # Worker shutdown signal handler to properly cleanup GPU resources
 @celery_app.task(bind=True)
@@ -87,38 +91,44 @@ def cleanup_gpu_resources(self):
     except Exception as e:
         logger.error(f"Error cleaning up GPU resources: {e}")
 
+
 # Worker signal handlers (simplified)
 def on_worker_init(**kwargs):
     """Worker startup callback"""
     logger.info("Worker started - CUDA initialization will happen as needed")
 
+
 def on_worker_shutdown(**kwargs):
     """Worker shutdown callback"""
     logger.info("Worker shutdown")
     try:
-        if torch and hasattr(torch, 'cuda') and torch.cuda.is_available():
+        if torch and hasattr(torch, "cuda") and torch.cuda.is_available():
             torch.cuda.empty_cache()
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
+
 
 def on_task_postrun(**kwargs):
     """Called after each task completes - cleanup resources"""
     try:
         # Clear GPU cache after each task
-        if torch and hasattr(torch, 'cuda') and torch.cuda.is_available():
+        if torch and hasattr(torch, "cuda") and torch.cuda.is_available():
             torch.cuda.empty_cache()
-            
+
         # Force garbage collection
         import gc
+
         gc.collect()
-        
+
         logger.debug("Task cleanup completed")
     except Exception as e:
         logger.error(f"Error during task postrun cleanup: {e}")
 
+
 # Connect the signals using the new Celery 5.x syntax
 try:
-    from celery.signals import worker_ready, worker_shutdown, task_postrun
+    from celery.signals import task_postrun, worker_ready, worker_shutdown
+
     worker_ready.connect(on_worker_init)
     worker_shutdown.connect(on_worker_shutdown)
     task_postrun.connect(on_task_postrun)

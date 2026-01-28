@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -27,10 +28,10 @@ class VectorStore:
         db: Session,
         *,
         meeting_id: int,
-        chunks: Sequence[Dict[str, Any]],
+        chunks: Sequence[dict[str, Any]],
         embeddings: Sequence[Sequence[float]],
         embedding_config_id: int,
-    ) -> List[models.DocumentChunk]:
+    ) -> list[models.DocumentChunk]:
         raise NotImplementedError
 
     def delete_by_meeting_id(self, db: Session, meeting_id: int) -> None:
@@ -41,11 +42,11 @@ class VectorStore:
         db: Session,
         query_embedding: Sequence[float],
         *,
-        meeting_id: Optional[int] = None,
+        meeting_id: int | None = None,
         top_k: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
-        meeting_ids: Optional[List[int]] = None,
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any] | None = None,
+        meeting_ids: list[int] | None = None,
+    ) -> list[RetrievedChunk]:
         raise NotImplementedError
 
 
@@ -57,16 +58,16 @@ class PgVectorStore(VectorStore):
         db: Session,
         *,
         meeting_id: int,
-        chunks: Sequence[Dict[str, Any]],
+        chunks: Sequence[dict[str, Any]],
         embeddings: Sequence[Sequence[float]],
         embedding_config_id: int,
-    ) -> List[models.DocumentChunk]:
+    ) -> list[models.DocumentChunk]:
         if not chunks:
             return []
         if len(chunks) != len(embeddings):
             raise ValueError("Chunks and embeddings must have the same length.")
-        records: List[models.DocumentChunk] = []
-        for chunk, embedding in zip(chunks, embeddings):
+        records: list[models.DocumentChunk] = []
+        for chunk, embedding in zip(chunks, embeddings, strict=False):
             record = models.DocumentChunk(
                 meeting_id=meeting_id,
                 attachment_id=chunk.get("attachment_id"),
@@ -93,11 +94,11 @@ class PgVectorStore(VectorStore):
         db: Session,
         query_embedding: Sequence[float],
         *,
-        meeting_id: Optional[int] = None,
+        meeting_id: int | None = None,
         top_k: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
-        meeting_ids: Optional[List[int]] = None,
-    ) -> List[RetrievedChunk]:
+        filters: dict[str, Any] | None = None,
+        meeting_ids: list[int] | None = None,
+    ) -> list[RetrievedChunk]:
         if not query_embedding:
             return []
         similarity_filters = filters or {}
@@ -118,4 +119,3 @@ class PgVectorStore(VectorStore):
 
 
 DEFAULT_VECTOR_STORE = PgVectorStore()
-

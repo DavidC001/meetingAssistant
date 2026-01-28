@@ -1,6 +1,6 @@
 /**
  * FilterBar Component
- * 
+ *
  * Unified filter bar with search, filter chips, sort, and clear all functionality.
  * Designed for meetings browser and other list views.
  */

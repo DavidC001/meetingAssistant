@@ -1,6 +1,6 @@
 /**
  * UploadFAB Component
- * 
+ *
  * Floating Action Button for triggering file upload.
  * Shows processing count badge and pulsing animation when files are being processed.
  */
@@ -21,10 +21,7 @@ import {
   Tooltip,
   keyframes,
 } from '@mui/material';
-import {
-  Upload as UploadIcon,
-  Close as CloseIcon,
-} from '@mui/icons-material';
+import { Upload as UploadIcon, Close as CloseIcon } from '@mui/icons-material';
 import UploadForm from '../UploadForm';
 
 // Pulsing animation for FAB when processing
@@ -146,7 +143,7 @@ const UploadFAB = ({ processingCount = 0, onUploadComplete }) => {
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        
+
         <DialogContent dividers>
           <UploadForm onUploadSuccess={handleUploadSuccess} />
         </DialogContent>

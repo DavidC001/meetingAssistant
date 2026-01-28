@@ -30,11 +30,7 @@ export const MeetingChatService = {
    * @returns {Promise<Object>} Chat response
    */
   async sendMessage(meetingId, message, options = {}) {
-    const {
-      chatHistory = [],
-      topK = 5,
-      useFullTranscript = false,
-    } = options;
+    const { chatHistory = [], topK = 5, useFullTranscript = false } = options;
 
     const response = await apiClient.post(`${MEETINGS_URL}/${meetingId}/chat`, {
       query: message,
@@ -74,12 +70,7 @@ export const GlobalChatService = {
    * @returns {Promise<Object>} Created session
    */
   async createSession(options = {}) {
-    const {
-      title = 'New chat',
-      tags = null,
-      filterFolder = null,
-      filterTags = null,
-    } = options;
+    const { title = 'New chat', tags = null, filterFolder = null, filterTags = null } = options;
 
     const response = await apiClient.post(`${GLOBAL_CHAT_URL}/sessions`, {
       title,

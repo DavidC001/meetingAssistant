@@ -6,73 +6,74 @@ import {
   Person as PersonIcon,
   Lightbulb as LightbulbIcon,
   Timeline as TimelineIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
 } from '@mui/icons-material';
 
 const QUICK_PROMPTS = [
   {
-    label: "Summarize key points",
-    prompt: "Please summarize the key points discussed in this meeting.",
+    label: 'Summarize key points',
+    prompt: 'Please summarize the key points discussed in this meeting.',
     icon: <SummarizeIcon fontSize="small" />,
-    color: "primary"
+    color: 'primary',
   },
   {
-    label: "List action items",
-    prompt: "What are all the action items from this meeting? Please list them with owners and due dates if mentioned.",
+    label: 'List action items',
+    prompt:
+      'What are all the action items from this meeting? Please list them with owners and due dates if mentioned.',
     icon: <AssignmentIcon fontSize="small" />,
-    color: "success"
+    color: 'success',
   },
   {
-    label: "Key decisions",
-    prompt: "What were the key decisions made during this meeting?",
+    label: 'Key decisions',
+    prompt: 'What were the key decisions made during this meeting?',
     icon: <LightbulbIcon fontSize="small" />,
-    color: "warning"
+    color: 'warning',
   },
   {
-    label: "Topics discussed",
-    prompt: "What are the main topics that were discussed in this meeting?",
+    label: 'Topics discussed',
+    prompt: 'What are the main topics that were discussed in this meeting?',
     icon: <TimelineIcon fontSize="small" />,
-    color: "info"
+    color: 'info',
   },
   {
-    label: "Speaker summary",
-    prompt: "Can you summarize what each speaker contributed to the meeting?",
+    label: 'Speaker summary',
+    prompt: 'Can you summarize what each speaker contributed to the meeting?',
     icon: <PersonIcon fontSize="small" />,
-    color: "secondary"
+    color: 'secondary',
   },
   {
-    label: "Follow-ups needed",
-    prompt: "What follow-up items or unanswered questions need to be addressed after this meeting?",
+    label: 'Follow-ups needed',
+    prompt: 'What follow-up items or unanswered questions need to be addressed after this meeting?',
     icon: <SearchIcon fontSize="small" />,
-    color: "default"
-  }
+    color: 'default',
+  },
 ];
 
 const GLOBAL_QUICK_PROMPTS = [
   {
-    label: "Find action items",
-    prompt: "Show me all pending action items across my meetings.",
+    label: 'Find action items',
+    prompt: 'Show me all pending action items across my meetings.',
     icon: <AssignmentIcon fontSize="small" />,
-    color: "success"
+    color: 'success',
   },
   {
-    label: "Recent decisions",
-    prompt: "What were the key decisions made in recent meetings?",
+    label: 'Recent decisions',
+    prompt: 'What were the key decisions made in recent meetings?',
     icon: <LightbulbIcon fontSize="small" />,
-    color: "warning"
+    color: 'warning',
   },
   {
-    label: "Project updates",
-    prompt: "Summarize recent updates and progress mentioned in meetings.",
+    label: 'Project updates',
+    prompt: 'Summarize recent updates and progress mentioned in meetings.',
     icon: <TimelineIcon fontSize="small" />,
-    color: "info"
+    color: 'info',
   },
   {
-    label: "Team discussions",
-    prompt: "What topics have been frequently discussed across meetings?",
+    label: 'Team discussions',
+    prompt: 'What topics have been frequently discussed across meetings?',
     icon: <SearchIcon fontSize="small" />,
-    color: "primary"
-  }
+    color: 'primary',
+  },
 ];
 
 const QuickActions = ({ onSelectPrompt, isGlobal = false }) => {
@@ -93,13 +94,13 @@ const QuickActions = ({ onSelectPrompt, isGlobal = false }) => {
               color={item.color}
               variant="outlined"
               onClick={() => onSelectPrompt(item.prompt)}
-              sx={{ 
+              sx={{
                 cursor: 'pointer',
                 mb: 1,
                 '&:hover': {
                   bgcolor: `${item.color}.lighter`,
-                  borderColor: `${item.color}.main`
-                }
+                  borderColor: `${item.color}.main`,
+                },
               }}
             />
           </Tooltip>

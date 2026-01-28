@@ -1,0 +1,233 @@
+.meeting-details-container {
+  background-color: var(--bg-secondary);
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px var(--shadow-color);
+}
+
+.details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+}
+
+.details-header h2 {
+  margin: 0;
+}
+
+.status-badge {
+  font-weight: bold;
+  text-transform: capitalize;
+  padding: 0.5rem 1rem;
+  border-radius: 16px;
+  color: white;
+  font-size: 1rem;
+}
+
+.content-section {
+  margin-top: 2rem;
+}
+
+.summary-box,
+.transcript-box {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  padding: 1.5rem;
+  border-radius: 8px;
+  white-space: pre-wrap; /* Preserves line breaks in transcript */
+  line-height: 1.6;
+}
+
+.action-items-list {
+  list-style: none;
+  padding: 0;
+}
+
+.action-items-list li {
+  background-color: #f1f8e9;
+  border-left: 5px solid #81c784;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+}
+
+.action-items-list p {
+  margin: 0.2rem 0;
+}
+
+.processing-notice {
+  text-align: center;
+  padding: 3rem;
+  background-color: var(--calendar-today);
+  border-radius: 8px;
+  margin-top: 2rem;
+}
+
+.processing-notice.error {
+  background-color: var(--time-indicator);
+  color: #ffffff;
+}
+
+/* Processing Progress Styles */
+.processing-container {
+  margin-top: 2rem;
+  padding: 2rem;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+}
+
+.processing-container h3 {
+  text-align: center;
+  color: var(--text-heading);
+  margin-bottom: 2rem;
+}
+
+.processing-stage {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.current-stage {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2rem;
+}
+
+.progress-bars {
+  margin-bottom: 3rem;
+}
+
+.progress-section {
+  margin-bottom: 1.5rem;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.progress-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.progress-percentage {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 12px;
+  background-color: var(--border-light);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px var(--shadow-color);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.stage-progress {
+  background: linear-gradient(90deg, #4fc3f7, #29b6f6);
+}
+
+.overall-progress {
+  background: linear-gradient(90deg, #1a237e, #3f51b5);
+}
+
+/* Processing Stages Indicator */
+.processing-stages {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  margin-top: 2rem;
+}
+
+.processing-stages::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background-color: var(--border-light);
+  z-index: 1;
+}
+
+.stage-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  max-width: 100px;
+}
+
+.stage-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.stage-name {
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Stage indicator states */
+.stage-indicator.pending .stage-number {
+  background-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+.stage-indicator.active .stage-number {
+  background-color: #4fc3f7;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.stage-indicator.completed .stage-number {
+  background-color: #4caf50;
+  color: white;
+}
+
+.stage-indicator.active .stage-name,
+.stage-indicator.completed .stage-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(79, 195, 247, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(79, 195, 247, 0);
+  }
+}

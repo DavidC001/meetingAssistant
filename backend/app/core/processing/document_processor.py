@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ def _read_plaintext(file_path: Path, encoding: str = "utf-8") -> str:
     return file_path.read_text(encoding=encoding, errors="ignore")
 
 
-def extract_text(file_path: str, mime_type: Optional[str] = None) -> str:
+def extract_text(file_path: str, mime_type: str | None = None) -> str:
     """Extract plain text from a supported document type."""
 
     path = Path(file_path)
@@ -71,4 +70,3 @@ def extract_text(file_path: str, mime_type: Optional[str] = None) -> str:
 
     LOGGER.warning("Unsupported document format for text extraction: %s", path)
     return ""
-

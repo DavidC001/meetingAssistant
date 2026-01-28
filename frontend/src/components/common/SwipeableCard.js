@@ -4,12 +4,12 @@ import { useSwipeable } from 'react-swipeable';
 
 /**
  * SwipeableCard Component
- * 
+ *
  * Wraps content to make it swipeable on mobile devices.
  * Reveals action buttons when swiped left.
  */
-const SwipeableCard = ({ 
-  children, 
+const SwipeableCard = ({
+  children,
   actions = [], // Array of { icon, label, color, onClick }
   enabled = true,
 }) => {
@@ -24,14 +24,14 @@ const SwipeableCard = ({
   const handlers = useSwipeable({
     onSwiping: (eventData) => {
       if (!enabled || !isMobile) return;
-      
+
       setIsSwiping(true);
       const newOffset = Math.max(-maxSwipe, Math.min(0, eventData.deltaX));
       setOffset(newOffset);
     },
     onSwiped: () => {
       if (!enabled || !isMobile) return;
-      
+
       setIsSwiping(false);
       // Snap to open or closed based on swipe distance
       if (offset < -maxSwipe / 2) {

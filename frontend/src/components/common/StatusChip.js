@@ -1,6 +1,6 @@
 /**
  * StatusChip Component
- * 
+ *
  * Displays status with appropriate color and icon.
  */
 
@@ -11,7 +11,7 @@ import {
   HourglassEmpty as PendingIcon,
   Sync as ProcessingIcon,
   Error as ErrorIcon,
-  Help as UnknownIcon
+  Help as UnknownIcon,
 } from '@mui/icons-material';
 import { MEETING_STATUS } from '../../constants';
 
@@ -38,21 +38,15 @@ const statusConfig = {
   },
 };
 
-const StatusChip = ({ 
-  status, 
-  size = 'small',
-  showIcon = true,
-  customLabel = null,
-  ...props 
-}) => {
+const StatusChip = ({ status, size = 'small', showIcon = true, customLabel = null, ...props }) => {
   const config = statusConfig[status] || {
     color: 'default',
     icon: UnknownIcon,
     label: status || 'Unknown',
   };
-  
+
   const Icon = config.icon;
-  
+
   return (
     <Chip
       size={size}

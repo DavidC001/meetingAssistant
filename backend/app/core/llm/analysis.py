@@ -4,14 +4,15 @@ This module provides functionality for analyzing meeting transcripts using
 various LLM providers (OpenAI, Ollama) with automatic fallback and error handling.
 """
 
-import logging
 import asyncio
-from typing import Dict, Any, Optional, Callable
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from ..base.retry import retry_api_call
-from .providers import ProviderFactory, LLMConfig
 from ..config import config
+from .providers import LLMConfig, ProviderFactory
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -19,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMConfig:
     """Convert database ModelConfiguration to LLMConfig for LLM operations.
-    
+
     Args:
         model_config: Database ModelConfiguration object
         use_analysis: If True, use analysis settings; if False, use chat settings
-    
+
     Returns:
         LLMConfig object for the specified provider
     """
@@ -37,11 +38,11 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
         model = model_config.chat_model
         base_url = model_config.chat_base_url
         api_key_id = model_config.chat_api_key_id
-    
+
     # Get API key from the associated API key configuration or environment
     api_key = None
     api_key_env = None
-    
+
     if api_key_id:
         # Load the API key configuration from the relationship
         if use_analysis and model_config.analysis_api_key:
@@ -50,16 +51,16 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
             api_key_config = model_config.chat_api_key
         else:
             api_key_config = None
-            
+
         if api_key_config:
             # Get the environment variable name and load the key from environment
             api_key_env = api_key_config.environment_variable
             api_key = config.get_api_key(api_key_env)
-    
+
     # Fallback to hardcoded OpenAI key if provider is openai and no key found
     if not api_key and provider == "openai":
         api_key = config.get_api_key("OPENAI_API_KEY")
-    
+
     return LLMConfig(
         provider=provider,
         model=model,
@@ -73,16 +74,17 @@ def model_config_to_llm_config(model_config, use_analysis: bool = True) -> LLMCo
 @dataclass
 class AnalysisResult:
     """Structured result from transcript analysis."""
+
     summary: list[str]
     decisions: list[str]
-    action_items: list[Dict[str, str]]
+    action_items: list[dict[str, str]]
     success: bool = True
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class AnalysisPrompts:
     """Centralized analysis prompts."""
-    
+
     SYSTEM_PROMPT = (
         "You are a senior executive assistant. Given a verbatim, speaker-labelled transcript of a meeting, "
         "respond in valid JSON with keys: summary (a list of 3-5 bullet points as strings), "
@@ -94,7 +96,7 @@ class AnalysisPrompts:
 
 class AnalysisConfigFactory:
     """Factory for creating analysis configurations."""
-    
+
     @staticmethod
     def get_default_config() -> LLMConfig:
         """Get default analysis configuration with intelligent provider selection."""
@@ -121,7 +123,7 @@ class AnalysisConfigFactory:
                 api_key=openai_api_key,
                 **default_kwargs,
             )
-        
+
         # Fallback logic: try openai first if key exists, otherwise ollama
         if openai_api_key:
             return LLMConfig(
@@ -140,7 +142,7 @@ class AnalysisConfigFactory:
 
 
 @retry_api_call(max_retries=3, delay=5.0)
-async def analyze_transcript_with_provider(transcript: str, llm_config: LLMConfig) -> Dict[str, Any]:
+async def analyze_transcript_with_provider(transcript: str, llm_config: LLMConfig) -> dict[str, Any]:
     """Analyze transcript using the specified provider configuration."""
     try:
         provider = ProviderFactory.create_provider(llm_config)
@@ -154,88 +156,82 @@ async def analyze_transcript_with_provider(transcript: str, llm_config: LLMConfi
 
 class TranscriptAnalyzer:
     """Main class for analyzing meeting transcripts."""
-    
-    def __init__(self, llm_config: Optional[LLMConfig] = None):
+
+    def __init__(self, llm_config: LLMConfig | None = None):
         """Initialize analyzer with configuration."""
         self.config = llm_config or AnalysisConfigFactory.get_default_config()
-    
+
     async def analyze_async(
-        self, 
-        transcript: str, 
-        progress_callback: Optional[Callable[[int, str], None]] = None
+        self, transcript: str, progress_callback: Callable[[int, str], None] | None = None
     ) -> AnalysisResult:
         """Analyze transcript asynchronously."""
         try:
             if progress_callback:
                 progress_callback(10, "Preparing transcript for analysis...")
-            
+
             logger.info(f"Using {self.config.provider} provider for analysis")
-            
+
             if progress_callback:
                 progress_callback(30, f"Sending transcript to {self.config.provider}...")
-            
+
             result = await analyze_transcript_with_provider(transcript, self.config)
-            
+
             if progress_callback:
                 progress_callback(100, "Analysis completed successfully")
-            
+
             return AnalysisResult(
                 summary=result.get("summary", []),
                 decisions=result.get("decisions", []),
-                action_items=result.get("action_items", [])
+                action_items=result.get("action_items", []),
             )
-            
+
         except Exception as e:
             logger.error(f"Analysis failed: {e}")
-            
+
             if progress_callback:
                 progress_callback(100, "Analysis failed - using fallback")
-            
+
             return AnalysisResult(
                 summary=["Meeting analysis failed due to technical issues."],
                 decisions=[],
                 action_items=[],
                 success=False,
-                error_message=str(e)
+                error_message=str(e),
             )
-    
-    def analyze(
-        self, 
-        transcript: str, 
-        progress_callback: Optional[Callable[[int, str], None]] = None
-    ) -> AnalysisResult:
+
+    def analyze(self, transcript: str, progress_callback: Callable[[int, str], None] | None = None) -> AnalysisResult:
         """Analyze transcript synchronously."""
         return asyncio.run(self.analyze_async(transcript, progress_callback))
 
 
 def analyse_meeting(
     transcript: str,
-    llm_config: Optional[LLMConfig] = None,
-    progress_callback: Optional[Callable[[int, str], None]] = None
-) -> Dict[str, Any]:
+    llm_config: LLMConfig | None = None,
+    progress_callback: Callable[[int, str], None] | None = None,
+) -> dict[str, Any]:
     """
     Analyze a meeting transcript using the specified or default LLM configuration.
-    
+
     This is the main entry point for transcript analysis with backward compatibility.
-    
+
     Args:
         transcript: The meeting transcript to analyze
         llm_config: LLM configuration (if None, uses default)
         progress_callback: Optional progress callback function
-        
+
     Returns:
         Dict containing analysis results (summary, decisions, action_items)
     """
     analyzer = TranscriptAnalyzer(llm_config)
     result = analyzer.analyze(transcript, progress_callback)
-    
+
     # Convert to legacy dict format for backward compatibility
     return {
         "summary": result.summary,
         "decisions": result.decisions,
         "action_items": result.action_items,
         "success": result.success,
-        "error": result.error_message
+        "error": result.error_message,
     }
 
 
@@ -246,28 +242,25 @@ def analyse_meeting_legacy(
     openai_model: str = "gpt-4o-mini",
     ollama_model: str = "llama3",
     ollama_url: str = "http://localhost:11434",
-    progress_callback: Optional[Callable[[int, str], None]] = None
-) -> Dict[str, Any]:
+    progress_callback: Callable[[int, str], None] | None = None,
+) -> dict[str, Any]:
     """Legacy wrapper for analyse_meeting with old parameter format."""
-    
+
     # Convert legacy parameters to new LLMConfig format
     openai_api_key = config.get_api_key("OPENAI_API_KEY")
 
     if backend == "openai":
         llm_config = LLMConfig(
-            provider="openai",
-            model=openai_model,
-            api_key=openai_api_key,
-            max_tokens=config.model.default_max_tokens
+            provider="openai", model=openai_model, api_key=openai_api_key, max_tokens=config.model.default_max_tokens
         )
     elif backend == "ollama":
         llm_config = LLMConfig(
             provider="ollama",
             model=ollama_model,
             base_url=ollama_url or config.model.ollama_base_url,
-            max_tokens=config.model.default_max_tokens
+            max_tokens=config.model.default_max_tokens,
         )
     else:  # auto mode
         llm_config = None  # Will use default detection
-    
+
     return analyse_meeting(transcript, llm_config, progress_callback)

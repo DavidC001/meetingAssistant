@@ -1,6 +1,6 @@
 /**
  * ViewModeToggle Component
- * 
+ *
  * Toggle buttons for switching between different view modes (grid, list, table).
  */
 
@@ -12,7 +12,11 @@ import {
   TableRows as TableIcon,
 } from '@mui/icons-material';
 
-const ViewModeToggle = ({ value = 'grid', onChange, availableModes = ['grid', 'list', 'table'] }) => {
+const ViewModeToggle = ({
+  value = 'grid',
+  onChange,
+  availableModes = ['grid', 'list', 'table'],
+}) => {
   const modes = {
     grid: { icon: <GridIcon />, label: 'Grid View' },
     list: { icon: <ListIcon />, label: 'List View' },
@@ -33,9 +37,7 @@ const ViewModeToggle = ({ value = 'grid', onChange, availableModes = ['grid', 'l
     >
       {availableModes.map((mode) => (
         <ToggleButton key={mode} value={mode} aria-label={modes[mode].label}>
-          <Tooltip title={modes[mode].label}>
-            {modes[mode].icon}
-          </Tooltip>
+          <Tooltip title={modes[mode].label}>{modes[mode].icon}</Tooltip>
         </ToggleButton>
       ))}
     </ToggleButtonGroup>

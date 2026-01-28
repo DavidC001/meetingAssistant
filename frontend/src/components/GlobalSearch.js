@@ -20,7 +20,7 @@ import {
   FormControlLabel,
   Checkbox,
   Stack,
-  Fade
+  Fade,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -31,7 +31,7 @@ import {
   Title as TitleIcon,
   Close as CloseIcon,
   Keyboard as KeyboardIcon,
-  Folder as FolderIcon
+  Folder as FolderIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -40,7 +40,7 @@ const CONTENT_TYPE_ICONS = {
   summary: <SummarizeIcon color="secondary" />,
   action_item: <AssignmentIcon color="success" />,
   note: <NoteIcon color="warning" />,
-  title: <TitleIcon color="info" />
+  title: <TitleIcon color="info" />,
 };
 
 const CONTENT_TYPE_LABELS = {
@@ -48,7 +48,7 @@ const CONTENT_TYPE_LABELS = {
   summary: 'Summary',
   action_item: 'Action Item',
   note: 'Note',
-  title: 'Title'
+  title: 'Title',
 };
 
 const GlobalSearch = ({ open, onClose }) => {
@@ -76,31 +76,34 @@ const GlobalSearch = ({ open, onClose }) => {
   }, [open]);
 
   // Debounced search
-  const performSearch = useCallback(async (searchQuery) => {
-    if (!searchQuery.trim()) {
-      setResults([]);
-      setTotal(0);
-      return;
-    }
+  const performSearch = useCallback(
+    async (searchQuery) => {
+      if (!searchQuery.trim()) {
+        setResults([]);
+        setTotal(0);
+        return;
+      }
 
-    setLoading(true);
-    try {
-      const response = await api.post('/api/v1/search/', {
-        query: searchQuery,
-        search_in: searchIn,
-        limit: 20
-      });
-      setResults(response.data.results || []);
-      setTotal(response.data.total || 0);
-      setSearchTime(response.data.search_time_ms || 0);
-      setSelectedIndex(0);
-    } catch (error) {
-      console.error('Search error:', error);
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [searchIn]);
+      setLoading(true);
+      try {
+        const response = await api.post('/api/v1/search/', {
+          query: searchQuery,
+          search_in: searchIn,
+          limit: 20,
+        });
+        setResults(response.data.results || []);
+        setTotal(response.data.total || 0);
+        setSearchTime(response.data.search_time_ms || 0);
+        setSelectedIndex(0);
+      } catch (error) {
+        console.error('Search error:', error);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [searchIn]
+  );
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -120,10 +123,10 @@ const GlobalSearch = ({ open, onClose }) => {
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
+      setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex(prev => Math.max(prev - 1, 0));
+      setSelectedIndex((prev) => Math.max(prev - 1, 0));
     } else if (e.key === 'Enter' && results[selectedIndex]) {
       handleResultClick(results[selectedIndex]);
     } else if (e.key === 'Escape') {
@@ -137,24 +140,22 @@ const GlobalSearch = ({ open, onClose }) => {
   };
 
   const toggleSearchFilter = (filter) => {
-    setSearchIn(prev => 
-      prev.includes(filter) 
-        ? prev.filter(f => f !== filter)
-        : [...prev, filter]
+    setSearchIn((prev) =>
+      prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
     );
   };
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
       PaperProps={{
         sx: {
           borderRadius: 3,
-          maxHeight: '80vh'
-        }
+          maxHeight: '80vh',
+        },
       }}
     >
       <DialogContent sx={{ p: 0 }}>
@@ -184,15 +185,15 @@ const GlobalSearch = ({ open, onClose }) => {
               ),
               sx: {
                 '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                fontSize: '1.1rem'
-              }
+                fontSize: '1.1rem',
+              },
             }}
             autoComplete="off"
           />
-          
+
           {/* Search Filters */}
           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-            {['transcripts', 'summaries', 'action_items', 'notes'].map(filter => (
+            {['transcripts', 'summaries', 'action_items', 'notes'].map((filter) => (
               <Chip
                 key={filter}
                 label={filter.replace('_', ' ')}
@@ -210,9 +211,7 @@ const GlobalSearch = ({ open, onClose }) => {
         <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
           {results.length === 0 && query && !loading && (
             <Box sx={{ p: 4, textAlign: 'center' }}>
-              <Typography color="text.secondary">
-                No results found for "{query}"
-              </Typography>
+              <Typography color="text.secondary">No results found for "{query}"</Typography>
             </Box>
           )}
 
@@ -223,7 +222,12 @@ const GlobalSearch = ({ open, onClose }) => {
               </Typography>
               <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 2 }}>
                 <Chip icon={<KeyboardIcon />} label="↑↓ Navigate" size="small" variant="outlined" />
-                <Chip icon={<KeyboardIcon />} label="Enter Select" size="small" variant="outlined" />
+                <Chip
+                  icon={<KeyboardIcon />}
+                  label="Enter Select"
+                  size="small"
+                  variant="outlined"
+                />
                 <Chip icon={<KeyboardIcon />} label="Esc Close" size="small" variant="outlined" />
               </Stack>
             </Box>
@@ -239,32 +243,30 @@ const GlobalSearch = ({ open, onClose }) => {
                 sx={{
                   py: 1.5,
                   '&.Mui-selected': {
-                    bgcolor: 'action.selected'
+                    bgcolor: 'action.selected',
                   },
                   '&:hover': {
-                    bgcolor: 'action.hover'
-                  }
+                    bgcolor: 'action.hover',
+                  },
                 }}
               >
-                <ListItemIcon>
-                  {CONTENT_TYPE_ICONS[result.content_type]}
-                </ListItemIcon>
+                <ListItemIcon>{CONTENT_TYPE_ICONS[result.content_type]}</ListItemIcon>
                 <ListItemText
                   primary={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="subtitle2" noWrap sx={{ maxWidth: 300 }}>
                         {result.meeting_title}
                       </Typography>
-                      <Chip 
-                        label={CONTENT_TYPE_LABELS[result.content_type]} 
-                        size="small" 
+                      <Chip
+                        label={CONTENT_TYPE_LABELS[result.content_type]}
+                        size="small"
                         variant="outlined"
                         sx={{ height: 20, fontSize: '0.7rem' }}
                       />
                       {result.folder && (
-                        <Chip 
+                        <Chip
                           icon={<FolderIcon sx={{ fontSize: 14 }} />}
-                          label={result.folder} 
+                          label={result.folder}
                           size="small"
                           sx={{ height: 20, fontSize: '0.7rem' }}
                         />
@@ -272,15 +274,15 @@ const GlobalSearch = ({ open, onClose }) => {
                     </Box>
                   }
                   secondary={
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary" 
-                      sx={{ 
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        mt: 0.5
+                        mt: 0.5,
                       }}
                     >
                       {result.snippet}
@@ -294,7 +296,9 @@ const GlobalSearch = ({ open, onClose }) => {
 
         {/* Footer */}
         {results.length > 0 && (
-          <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
+          <Box
+            sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}
+          >
             <Typography variant="caption" color="text.secondary">
               Found {total} results in {searchTime.toFixed(1)}ms
             </Typography>

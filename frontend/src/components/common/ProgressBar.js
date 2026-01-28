@@ -1,6 +1,6 @@
 /**
  * ProgressBar Component
- * 
+ *
  * Enhanced progress bar with labels and animation.
  */
 
@@ -28,12 +28,7 @@ const ProgressBar = ({
   return (
     <Box width="100%">
       {(label || showPercentage) && (
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={0.5}
-        >
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
           {label && (
             <Typography variant="body2" color="text.secondary">
               {label}
@@ -46,7 +41,7 @@ const ProgressBar = ({
           )}
         </Box>
       )}
-      
+
       <LinearProgress
         variant={variant}
         value={displayValue}

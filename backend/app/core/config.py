@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 
@@ -19,7 +18,7 @@ class UploadConfig:
 
     max_file_size_mb: int
     upload_dir: str
-    allowed_extensions: Tuple[str, ...]
+    allowed_extensions: tuple[str, ...]
 
     @property
     def max_file_size_bytes(self) -> int:
@@ -49,11 +48,11 @@ class ModelConfig:
 class APIConfig:
     """Centralised storage for API credentials."""
 
-    _openai_api_key: Optional[str] = None
-    _huggingface_token: Optional[str] = None
-    extra_keys: Dict[str, str] = field(default_factory=dict)
+    _openai_api_key: str | None = None
+    _huggingface_token: str | None = None
+    extra_keys: dict[str, str] = field(default_factory=dict)
 
-    def get(self, name: Optional[str]) -> Optional[str]:
+    def get(self, name: str | None) -> str | None:
         """Return a credential by its environment variable style name."""
         if not name:
             return None
@@ -69,12 +68,12 @@ class APIConfig:
         return known.get(normalized) or os.getenv(normalized)
 
     @property
-    def openai_api_key(self) -> Optional[str]:
+    def openai_api_key(self) -> str | None:
         """Convenience accessor for the OpenAI API key."""
         return self.get("OPENAI_API_KEY")
 
     @property
-    def huggingface_token(self) -> Optional[str]:
+    def huggingface_token(self) -> str | None:
         """Convenience accessor for the Hugging Face token."""
         return self.get("HUGGINGFACE_TOKEN")
 
@@ -100,8 +99,8 @@ class GoogleDriveConfig:
     """Google Drive synchronization settings."""
 
     enabled: bool
-    sync_folder_id: Optional[str]
-    processed_folder_id: Optional[str]
+    sync_folder_id: str | None
+    processed_folder_id: str | None
     sync_mode: str
     sync_time: str
     auto_process: bool
@@ -126,7 +125,7 @@ class AppConfig:
     api: APIConfig
     google_drive: GoogleDriveConfig
 
-    def get_api_key(self, name: Optional[str]) -> Optional[str]:
+    def get_api_key(self, name: str | None) -> str | None:
         """Proxy helper for fetching an API key from :class:`APIConfig`."""
         return self.api.get(name)
 

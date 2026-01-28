@@ -1,23 +1,13 @@
 /**
  * LoadingState Component
- * 
+ *
  * Reusable loading state component with skeleton loaders.
  */
 
 import React from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Skeleton,
-  Typography
-} from '@mui/material';
+import { Box, Card, CardContent, Skeleton, Typography } from '@mui/material';
 
-const LoadingState = ({ 
-  message = "Loading...", 
-  showSkeleton = true, 
-  itemCount = 3 
-}) => {
+const LoadingState = ({ message = 'Loading...', showSkeleton = true, itemCount = 3 }) => {
   if (!showSkeleton) {
     return (
       <Card>
@@ -38,7 +28,7 @@ const LoadingState = ({
         <Typography variant="h6" gutterBottom>
           <Skeleton width="40%" />
         </Typography>
-        
+
         {Array.from({ length: itemCount }).map((_, index) => (
           <Box key={index} mb={2}>
             <Box display="flex" alignItems="center" mb={1}>

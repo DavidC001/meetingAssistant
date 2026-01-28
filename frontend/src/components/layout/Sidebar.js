@@ -1,6 +1,6 @@
 /**
  * Sidebar Navigation Component
- * 
+ *
  * Responsive collapsible sidebar with grouped navigation items:
  * - Persistent on desktop (≥1200px)
  * - Collapsible to icons-only on medium screens (900-1199px)
@@ -66,9 +66,7 @@ const navigationGroups = [
   },
   {
     label: 'System',
-    items: [
-      { path: '/settings', label: 'Settings', icon: SettingsIcon },
-    ],
+    items: [{ path: '/settings', label: 'Settings', icon: SettingsIcon }],
   },
 ];
 
@@ -111,12 +109,12 @@ const Sidebar = ({ open, onClose, variant = 'permanent', collapsed = false }) =>
               {group.label}
             </Typography>
           )}
-          
+
           <List sx={{ px: 1 }}>
             {group.items.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
-              
+
               const listItemButton = (
                 <ListItemButton
                   component={Link}
@@ -140,13 +138,15 @@ const Sidebar = ({ open, onClose, variant = 'permanent', collapsed = false }) =>
                       transition: 'background-color 0.2s',
                     },
                     '&.Mui-selected': {
-                      backgroundColor: theme.palette.mode === 'light' 
-                        ? 'rgba(25, 118, 210, 0.08)' 
-                        : 'rgba(144, 202, 249, 0.16)',
+                      backgroundColor:
+                        theme.palette.mode === 'light'
+                          ? 'rgba(25, 118, 210, 0.08)'
+                          : 'rgba(144, 202, 249, 0.16)',
                       '&:hover': {
-                        backgroundColor: theme.palette.mode === 'light'
-                          ? 'rgba(25, 118, 210, 0.12)'
-                          : 'rgba(144, 202, 249, 0.24)',
+                        backgroundColor:
+                          theme.palette.mode === 'light'
+                            ? 'rgba(25, 118, 210, 0.12)'
+                            : 'rgba(144, 202, 249, 0.24)',
                       },
                     },
                     justifyContent: collapsed ? 'center' : 'flex-start',
@@ -185,10 +185,8 @@ const Sidebar = ({ open, onClose, variant = 'permanent', collapsed = false }) =>
               );
             })}
           </List>
-          
-          {groupIndex < navigationGroups.length - 1 && (
-            <Divider sx={{ my: 1, mx: 2 }} />
-          )}
+
+          {groupIndex < navigationGroups.length - 1 && <Divider sx={{ my: 1, mx: 2 }} />}
         </Box>
       ))}
     </Box>

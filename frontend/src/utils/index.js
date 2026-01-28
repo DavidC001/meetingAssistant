@@ -11,11 +11,11 @@ import { MEETING_STATUS, ERROR_MESSAGES } from '../constants';
  */
 export const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
@@ -26,11 +26,11 @@ export const formatFileSize = (bytes) => {
  */
 export const formatDuration = (seconds) => {
   if (!seconds || seconds < 0) return '0:00';
-  
+
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
-  
+
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
@@ -44,16 +44,16 @@ export const formatDuration = (seconds) => {
  */
 export const formatDate = (date) => {
   if (!date) return 'Unknown';
-  
+
   const dateObj = new Date(date);
   if (isNaN(dateObj.getTime())) return 'Invalid Date';
-  
+
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   }).format(dateObj);
 };
 
@@ -115,23 +115,27 @@ export const getStatusIcon = (status) => {
  * @param {string[]} allowedExtensions - Allowed file extensions
  * @returns {string|null} Error message or null if valid
  */
-export const validateFile = (file, maxSizeMB = 3000, allowedExtensions = ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.mkv', '.avi', '.mov']) => {
+export const validateFile = (
+  file,
+  maxSizeMB = 3000,
+  allowedExtensions = ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.mkv', '.avi', '.mov']
+) => {
   if (!file) {
     return 'Please select a file';
   }
-  
+
   // Check file size
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
   if (file.size > maxSizeBytes) {
     return `${ERROR_MESSAGES.FILE_TOO_LARGE} (${formatFileSize(maxSizeBytes)} max)`;
   }
-  
+
   // Check file extension
   const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
   if (!allowedExtensions.includes(fileExtension)) {
     return `${ERROR_MESSAGES.INVALID_FILE_TYPE} Allowed: ${allowedExtensions.join(', ')}`;
   }
-  
+
   return null;
 };
 

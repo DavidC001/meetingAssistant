@@ -19,7 +19,7 @@
   gap: 1rem;
 }
 
-.upload-form-container input[type="file"] {
+.upload-form-container input[type='file'] {
   border: 1px solid var(--border-color);
   padding: 0.5rem;
   border-radius: 4px;

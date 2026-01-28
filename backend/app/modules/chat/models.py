@@ -1,16 +1,9 @@
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    ForeignKey,
-    Text,
-    JSON,
-    Index
-)
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from ...database import Base
+
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
@@ -23,9 +16,8 @@ class ChatMessage(Base):
 
     meeting = relationship("Meeting", back_populates="chat_messages")
 
-    __table_args__ = (
-        Index('idx_chat_meeting_created', 'meeting_id', 'created_at'),
-    )
+    __table_args__ = (Index("idx_chat_meeting_created", "meeting_id", "created_at"),)
+
 
 class GlobalChatSession(Base):
     __tablename__ = "global_chat_sessions"
@@ -35,11 +27,12 @@ class GlobalChatSession(Base):
     tags = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
-    
+
     filter_folder = Column(String, nullable=True)
     filter_tags = Column(String, nullable=True)
 
     messages = relationship("GlobalChatMessage", back_populates="session", cascade="all, delete-orphan")
+
 
 class GlobalChatMessage(Base):
     __tablename__ = "global_chat_messages"
@@ -53,6 +46,4 @@ class GlobalChatMessage(Base):
 
     session = relationship("GlobalChatSession", back_populates="messages")
 
-    __table_args__ = (
-        Index('idx_global_chat_session_created', 'session_id', 'created_at'),
-    )
+    __table_args__ = (Index("idx_global_chat_session_created", "session_id", "created_at"),)

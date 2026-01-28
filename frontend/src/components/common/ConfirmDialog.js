@@ -1,6 +1,6 @@
 /**
  * ConfirmDialog Component
- * 
+ *
  * Reusable confirmation dialog for destructive actions.
  */
 
@@ -11,19 +11,19 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
-  Button
+  Button,
 } from '@mui/material';
 
 const ConfirmDialog = ({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
-  confirmColor = "primary",
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  confirmColor = 'primary',
   onConfirm,
   onCancel,
-  maxWidth = "sm"
+  maxWidth = 'sm',
 }) => {
   return (
     <Dialog
@@ -34,26 +34,17 @@ const ConfirmDialog = ({
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
     >
-      <DialogTitle id="confirm-dialog-title">
-        {title}
-      </DialogTitle>
-      
+      <DialogTitle id="confirm-dialog-title">{title}</DialogTitle>
+
       <DialogContent>
-        <DialogContentText id="confirm-dialog-description">
-          {message}
-        </DialogContentText>
+        <DialogContentText id="confirm-dialog-description">{message}</DialogContentText>
       </DialogContent>
-      
+
       <DialogActions>
         <Button onClick={onCancel} color="inherit">
           {cancelLabel}
         </Button>
-        <Button 
-          onClick={onConfirm} 
-          color={confirmColor}
-          variant="contained"
-          autoFocus
-        >
+        <Button onClick={onConfirm} color={confirmColor} variant="contained" autoFocus>
           {confirmLabel}
         </Button>
       </DialogActions>

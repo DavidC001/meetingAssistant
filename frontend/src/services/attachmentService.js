@@ -54,7 +54,9 @@ const AttachmentService = {
    * @returns {Promise<Object>} Updated attachment
    */
   async update(attachmentId, description) {
-    const response = await apiClient.put(`${BASE_URL}/attachments/${attachmentId}`, { description });
+    const response = await apiClient.put(`${BASE_URL}/attachments/${attachmentId}`, {
+      description,
+    });
     return response.data;
   },
 

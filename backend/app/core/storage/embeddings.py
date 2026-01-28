@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 import requests
 from sqlalchemy.orm import Session
 
-from ...modules.meetings import crud, models, schemas
+from ...modules.meetings import crud, models
 from ...modules.settings import crud as settings_crud
 from ...modules.settings import schemas as settings_schemas
 from ..config import config
@@ -38,9 +39,9 @@ class EmbeddingConfig:
     provider: str
     model_name: str
     dimension: int
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    settings: dict[str, Any] | None = None
 
 
 class EmbeddingProvider(ABC):
@@ -55,10 +56,10 @@ class EmbeddingProvider(ABC):
         return self.runtime_config.dimension
 
     @abstractmethod
-    def embed_documents(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a sequence of texts."""
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         """Embed a single query string."""
         vectors = self.embed_documents([text])
         return vectors[0] if vectors else []
@@ -69,18 +70,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def __init__(self, runtime_config: EmbeddingConfig):
         if OpenAI is None:
-            raise RuntimeError(
-                "openai package is not installed. Please install it to use OpenAI embeddings."
-            )
+            raise RuntimeError("openai package is not installed. Please install it to use OpenAI embeddings.")
         if not runtime_config.api_key:
             raise RuntimeError("OpenAI API key is required for the OpenAI embedding provider.")
         super().__init__(runtime_config)
-        client_kwargs: Dict[str, Any] = {"api_key": runtime_config.api_key}
+        client_kwargs: dict[str, Any] = {"api_key": runtime_config.api_key}
         if runtime_config.base_url:
             client_kwargs["base_url"] = runtime_config.base_url
         self._client = OpenAI(**client_kwargs)
 
-    def embed_documents(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         cleaned_texts = [text if text.strip() else " " for text in texts]
         response = self._client.embeddings.create(
             model=self.runtime_config.model_name,
@@ -98,7 +97,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         super().__init__(runtime_config)
         self._endpoint = runtime_config.base_url.rstrip("/") + "/api/embed"
 
-    def embed_documents(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         payload = {
             "model": self.runtime_config.model_name,
             "input": list(texts),
@@ -116,7 +115,6 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
 from pathlib import Path
 
-
 # Model cache directory for persistent storage across restarts
 EMBEDDING_MODELS_CACHE_DIR = Path("/app/cache/models/embeddings")
 
@@ -124,7 +122,7 @@ EMBEDDING_MODELS_CACHE_DIR = Path("/app/cache/models/embeddings")
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
     """Local embedding provider backed by sentence-transformers."""
 
-    _cache: Dict[str, SentenceTransformer] = {}
+    _cache: dict[str, SentenceTransformer] = {}
 
     def __init__(self, runtime_config: EmbeddingConfig):
         if SentenceTransformer is None:
@@ -138,20 +136,22 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
             model_kwargs = runtime_config.settings or {}
             # Add HuggingFace token if available (needed for gated models)
             if runtime_config.api_key:
-                model_kwargs['token'] = runtime_config.api_key
-            
+                model_kwargs["token"] = runtime_config.api_key
+
             # Use persistent cache directory for model downloads
             EMBEDDING_MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            model_kwargs['cache_folder'] = str(EMBEDDING_MODELS_CACHE_DIR)
-            
+            model_kwargs["cache_folder"] = str(EMBEDDING_MODELS_CACHE_DIR)
+
             try:
-                self.logger.info(f"Loading sentence-transformer model: {model_name} (cache: {EMBEDDING_MODELS_CACHE_DIR})")
+                self.logger.info(
+                    f"Loading sentence-transformer model: {model_name} (cache: {EMBEDDING_MODELS_CACHE_DIR})"
+                )
                 self._cache[cache_key] = SentenceTransformer(model_name, **model_kwargs)
                 self.logger.info(f"Successfully loaded model: {model_name}")
             except Exception as e:
                 self.logger.error(f"Failed to load model {model_name}: {e}")
                 error_msg = str(e)
-                
+
                 # Provide helpful error messages based on the error type
                 if "does not recognize this architecture" in error_msg:
                     raise RuntimeError(
@@ -176,7 +176,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
                     )
         self._model = self._cache[cache_key]
 
-    def embed_documents(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         # The encode method already batches internally; we still wrap for logging
         embeddings = self._model.encode(
             list(texts),
@@ -189,7 +189,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
 class EmbeddingProviderFactory:
     """Factory responsible for instantiating embedding providers."""
 
-    _registry: Dict[str, type[EmbeddingProvider]] = {
+    _registry: dict[str, type[EmbeddingProvider]] = {
         "openai": OpenAIEmbeddingProvider,
         "ollama": OllamaEmbeddingProvider,
         "sentence-transformers": SentenceTransformerEmbeddingProvider,
@@ -208,9 +208,9 @@ class EmbeddingProviderFactory:
 DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
-def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]:
+def _check_huggingface_model(model_name: str) -> tuple[bool, str, int | None]:
     """Check whether a Hugging Face model repository exists and get its dimension.
-    
+
     Returns:
         Tuple of (valid, message, dimension)
     """
@@ -219,13 +219,13 @@ def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]
         return False, "A model name is required.", None
 
     url = HF_MODEL_INFO_URL.format(model_id=model_name)
-    
+
     # Try to get HuggingFace token for authentication
     headers = {}
     hf_token = config.api.huggingface_token
     if hf_token:
         headers["Authorization"] = f"Bearer {hf_token}"
-    
+
     try:
         response = requests.get(url, headers=headers, timeout=10)
     except requests.RequestException as exc:  # pragma: no cover - network failure
@@ -234,13 +234,21 @@ def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]
 
     if response.status_code == 404:
         return False, "Model not found on Hugging Face. Check the repository name.", None
-    
+
     if response.status_code == 401 or response.status_code == 403:
         if not hf_token:
-            return False, "This model requires authentication. Please provide a HuggingFace token in the HUGGINGFACE_TOKEN environment variable.", None
+            return (
+                False,
+                "This model requires authentication. Please provide a HuggingFace token in the HUGGINGFACE_TOKEN environment variable.",
+                None,
+            )
         else:
-            return False, "Access denied. Your HuggingFace token may not have access to this model, or the token is invalid.", None
-    
+            return (
+                False,
+                "Access denied. Your HuggingFace token may not have access to this model, or the token is invalid.",
+                None,
+            )
+
     if response.status_code != 200:
         LOGGER.warning(
             "Unexpected response when checking Hugging Face model %s: %s %s",
@@ -253,7 +261,7 @@ def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]
             "Unable to confirm the model on Hugging Face due to an unexpected response.",
             None,
         )
-    
+
     # Model found, try to extract dimension from config
     dimension = None
     try:
@@ -262,20 +270,13 @@ def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]
         if "config" in model_info:
             config_data = model_info["config"]
             # Common keys for embedding dimension in different model architectures
-            dimension_keys = [
-                "hidden_size",
-                "d_model", 
-                "embedding_size",
-                "n_embd",
-                "dim",
-                "embedding_dim"
-            ]
+            dimension_keys = ["hidden_size", "d_model", "embedding_size", "n_embd", "dim", "embedding_dim"]
             for key in dimension_keys:
                 if key in config_data:
                     dimension = int(config_data[key])
                     LOGGER.info(f"Found dimension {dimension} for model {model_name} via key '{key}'")
                     break
-        
+
         # If dimension still not found, try to load the actual config file
         if dimension is None:
             config_url = f"https://huggingface.co/{model_name}/resolve/main/config.json"
@@ -289,22 +290,24 @@ def _check_huggingface_model(model_name: str) -> Tuple[bool, str, Optional[int]]
                     for key in dimension_keys:
                         if key in config_json:
                             dimension = int(config_json[key])
-                            LOGGER.info(f"Found dimension {dimension} for model {model_name} via config.json key '{key}'")
+                            LOGGER.info(
+                                f"Found dimension {dimension} for model {model_name} via config.json key '{key}'"
+                            )
                             break
             except Exception as e:
                 LOGGER.debug(f"Could not fetch config.json for {model_name}: {e}")
-        
+
         message = f"Model found on Hugging Face{f' (dimension: {dimension})' if dimension else ''}."
         return True, message, dimension
-        
+
     except Exception as e:
         LOGGER.warning(f"Error extracting dimension for {model_name}: {e}")
         return True, "Model found on Hugging Face.", None
 
 
-def validate_embedding_model(provider: str, model_name: str) -> Tuple[bool, str, Optional[int]]:
+def validate_embedding_model(provider: str, model_name: str) -> tuple[bool, str, int | None]:
     """Validate that a requested embedding model is available for the provider.
-    
+
     Returns:
         Tuple of (valid, message, dimension) where dimension is only available for sentence-transformers
     """
@@ -321,7 +324,7 @@ def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguratio
     """Convert a database configuration into a runtime configuration."""
 
     provider = db_config.provider.lower()
-    api_key: Optional[str] = None
+    api_key: str | None = None
     if db_config.api_key_id:
         api_key_record = crud.get_api_key(db, db_config.api_key_id)
         if api_key_record:
@@ -362,17 +365,17 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
         )
 
     LOGGER.info("Creating default local embedding configuration using %s", DEFAULT_LOCAL_MODEL)
-    
+
     # Get HuggingFace token if available
     hf_token = config.api.huggingface_token
     model_kwargs = {}
     if hf_token:
-        model_kwargs['token'] = hf_token
-    
+        model_kwargs["token"] = hf_token
+
     # Use persistent cache directory
     EMBEDDING_MODELS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    model_kwargs['cache_folder'] = str(EMBEDDING_MODELS_CACHE_DIR)
-        
+    model_kwargs["cache_folder"] = str(EMBEDDING_MODELS_CACHE_DIR)
+
     try:
         model = SentenceTransformer(DEFAULT_LOCAL_MODEL, **model_kwargs)
         dimension = int(model.get_sentence_embedding_dimension())
@@ -383,7 +386,7 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
             f"Error: {str(e)}. "
             "Please create an embedding configuration manually in the settings."
         )
-    
+
     create_schema = settings_schemas.EmbeddingConfigurationCreate(
         provider="sentence-transformers",
         model_name=DEFAULT_LOCAL_MODEL,
@@ -394,7 +397,7 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
     return settings_crud.create_embedding_configuration(db, create_schema)
 
 
-def get_embedding_provider(db: Session) -> Tuple[EmbeddingProvider, models.EmbeddingConfiguration]:
+def get_embedding_provider(db: Session) -> tuple[EmbeddingProvider, models.EmbeddingConfiguration]:
     """Return an embedding provider bound to the active configuration."""
 
     db_config = ensure_active_embedding_configuration(db)
@@ -409,10 +412,10 @@ def batched_embeddings(
     *,
     batch_size: int = 32,
     sleep: float = 0.0,
-) -> List[List[float]]:
+) -> list[list[float]]:
     """Generate embeddings in batches to avoid hitting rate limits."""
 
-    batches: List[List[float]] = []
+    batches: list[list[float]] = []
     for index in range(0, len(texts), batch_size):
         chunk = texts[index : index + batch_size]
         if not chunk:
@@ -422,4 +425,3 @@ def batched_embeddings(
         if sleep:
             time.sleep(sleep)
     return batches
-

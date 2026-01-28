@@ -1,6 +1,6 @@
 /**
  * AppHeader Component
- * 
+ *
  * Simplified AppBar with:
  * - Logo
  * - Global Search trigger

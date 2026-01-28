@@ -1,6 +1,6 @@
 /**
  * Diary Service
- * 
+ *
  * Provides API methods for managing daily work diary entries and reminders.
  */
 
@@ -66,10 +66,7 @@ const diaryService = {
     const params = new URLSearchParams();
     params.append('auto_generate', autoGenerate);
 
-    const response = await apiClient.post(
-      `/api/v1/diary/entries?${params}`,
-      entryData
-    );
+    const response = await apiClient.post(`/api/v1/diary/entries?${params}`, entryData);
     return response.data;
   },
 

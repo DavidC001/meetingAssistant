@@ -1,35 +1,42 @@
 """CRUD operations for meeting templates."""
-from typing import List, Optional
+
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from . import models, schemas
 
 
-def get_templates(db: Session, skip: int = 0, limit: int = 100, active_only: bool = True) -> List[models.MeetingTemplate]:
+def get_templates(
+    db: Session, skip: int = 0, limit: int = 100, active_only: bool = True
+) -> list[models.MeetingTemplate]:
     """Get all templates."""
     query = db.query(models.MeetingTemplate)
     if active_only:
         query = query.filter(models.MeetingTemplate.is_active == True)
-    return query.order_by(models.MeetingTemplate.is_default.desc(), models.MeetingTemplate.usage_count.desc()).offset(skip).limit(limit).all()
+    return (
+        query.order_by(models.MeetingTemplate.is_default.desc(), models.MeetingTemplate.usage_count.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
-def get_template(db: Session, template_id: int) -> Optional[models.MeetingTemplate]:
+def get_template(db: Session, template_id: int) -> models.MeetingTemplate | None:
     """Get a template by ID."""
     return db.query(models.MeetingTemplate).filter(models.MeetingTemplate.id == template_id).first()
 
 
-def get_template_by_name(db: Session, name: str) -> Optional[models.MeetingTemplate]:
+def get_template_by_name(db: Session, name: str) -> models.MeetingTemplate | None:
     """Get a template by name."""
     return db.query(models.MeetingTemplate).filter(models.MeetingTemplate.name == name).first()
 
 
-def get_templates_by_type(db: Session, template_type: str) -> List[models.MeetingTemplate]:
+def get_templates_by_type(db: Session, template_type: str) -> list[models.MeetingTemplate]:
     """Get templates by type."""
-    return db.query(models.MeetingTemplate).filter(
-        models.MeetingTemplate.template_type == template_type,
-        models.MeetingTemplate.is_active == True
-    ).all()
+    return (
+        db.query(models.MeetingTemplate)
+        .filter(models.MeetingTemplate.template_type == template_type, models.MeetingTemplate.is_active == True)
+        .all()
+    )
 
 
 def create_template(db: Session, template: schemas.MeetingTemplateCreate) -> models.MeetingTemplate:
@@ -48,7 +55,7 @@ def create_template(db: Session, template: schemas.MeetingTemplateCreate) -> mod
         custom_summary_prompt=template.custom_summary_prompt,
         custom_action_item_prompt=template.custom_action_item_prompt,
         icon=template.icon,
-        color=template.color
+        color=template.color,
     )
     db.add(db_template)
     db.commit()
@@ -56,16 +63,18 @@ def create_template(db: Session, template: schemas.MeetingTemplateCreate) -> mod
     return db_template
 
 
-def update_template(db: Session, template_id: int, template: schemas.MeetingTemplateUpdate) -> Optional[models.MeetingTemplate]:
+def update_template(
+    db: Session, template_id: int, template: schemas.MeetingTemplateUpdate
+) -> models.MeetingTemplate | None:
     """Update an existing template."""
     db_template = get_template(db, template_id)
     if not db_template:
         return None
-    
+
     update_data = template.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_template, field, value)
-    
+
     db.commit()
     db.refresh(db_template)
     return db_template
@@ -76,7 +85,7 @@ def delete_template(db: Session, template_id: int) -> bool:
     db_template = get_template(db, template_id)
     if not db_template:
         return False
-    
+
     # Don't allow deleting default templates, just deactivate them
     if db_template.is_default:
         db_template.is_active = False
@@ -89,9 +98,9 @@ def delete_template(db: Session, template_id: int) -> bool:
 
 def increment_usage(db: Session, template_id: int) -> None:
     """Increment the usage count of a template."""
-    db.query(models.MeetingTemplate).filter(
-        models.MeetingTemplate.id == template_id
-    ).update({models.MeetingTemplate.usage_count: models.MeetingTemplate.usage_count + 1})
+    db.query(models.MeetingTemplate).filter(models.MeetingTemplate.id == template_id).update(
+        {models.MeetingTemplate.usage_count: models.MeetingTemplate.usage_count + 1}
+    )
     db.commit()
 
 
@@ -101,9 +110,6 @@ def initialize_default_templates(db: Session) -> None:
         existing = get_template_by_name(db, template_data["name"])
         if not existing:
             template = schemas.MeetingTemplateCreate(**template_data)
-            db_template = models.MeetingTemplate(
-                **template.model_dump(),
-                is_default=True
-            )
+            db_template = models.MeetingTemplate(**template.model_dump(), is_default=True)
             db.add(db_template)
     db.commit()

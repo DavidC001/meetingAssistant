@@ -1,18 +1,22 @@
-from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+
+from pydantic import BaseModel
+
 
 class UserMappingBase(BaseModel):
     name: str
     email: str
 
+
 class UserMappingCreate(UserMappingBase):
     pass
 
+
 class UserMappingUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    email: str | None = None
+    is_active: bool | None = None
+
 
 class UserMapping(UserMappingBase):
     id: int

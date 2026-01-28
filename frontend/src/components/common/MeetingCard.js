@@ -1,6 +1,6 @@
 /**
  * MeetingCard Component
- * 
+ *
  * Reusable card for displaying meeting information consistently across the app.
  * Supports list view, grid view, and recent meetings display.
  */
@@ -69,7 +69,7 @@ const MeetingCard = ({
     const now = new Date();
     const diffTime = Math.abs(now - date);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) {
       return 'Today';
     } else if (diffDays === 1) {
@@ -77,8 +77,8 @@ const MeetingCard = ({
     } else if (diffDays < 7) {
       return `${diffDays} days ago`;
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
       });
@@ -88,8 +88,8 @@ const MeetingCard = ({
   const formatTime = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
     });
   };
@@ -116,15 +116,12 @@ const MeetingCard = ({
         }}
       >
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography
-            variant="body1"
-            noWrap
-            sx={{ fontWeight: 500, mb: 0.5 }}
-          >
+          <Typography variant="body1" noWrap sx={{ fontWeight: 500, mb: 0.5 }}>
             {meeting.title || meeting.filename || 'Untitled Meeting'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {formatDate(meeting.meeting_date || meeting.created_at)} • {formatTime(meeting.meeting_date || meeting.created_at)}
+            {formatDate(meeting.meeting_date || meeting.created_at)} •{' '}
+            {formatTime(meeting.meeting_date || meeting.created_at)}
           </Typography>
         </Box>
         <StatusChip status={meeting.status} size="small" />
@@ -156,11 +153,7 @@ const MeetingCard = ({
       >
         <Box sx={{ flexGrow: 1, minWidth: 0, mr: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <Typography
-              variant="body1"
-              noWrap
-              sx={{ fontWeight: 500 }}
-            >
+            <Typography variant="body1" noWrap sx={{ fontWeight: 500 }}>
               {meeting.title || meeting.filename || 'Untitled Meeting'}
             </Typography>
             {meeting.folder && (
@@ -174,7 +167,8 @@ const MeetingCard = ({
             )}
           </Box>
           <Typography variant="caption" color="text.secondary">
-            {formatDate(meeting.meeting_date || meeting.created_at)} • {formatTime(meeting.meeting_date || meeting.created_at)}
+            {formatDate(meeting.meeting_date || meeting.created_at)} •{' '}
+            {formatTime(meeting.meeting_date || meeting.created_at)}
           </Typography>
         </Box>
         <StatusChip status={meeting.status} size="small" sx={{ mr: 1 }} />
@@ -193,56 +187,119 @@ const MeetingCard = ({
           onClick={(e) => e.stopPropagation()}
         >
           {onView && (
-            <MenuItem onClick={() => { handleMenuClose(); onView(meeting); }}>
-              <ListItemIcon><ViewIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onView(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <ViewIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>View Details</ListItemText>
             </MenuItem>
           )}
           {onChat && (
-            <MenuItem onClick={() => { handleMenuClose(); onChat(meeting); }}>
-              <ListItemIcon><ChatIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onChat(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <ChatIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Quick Chat</ListItemText>
             </MenuItem>
           )}
           {onEdit && (
-            <MenuItem onClick={() => { handleMenuClose(); onEdit(meeting); }}>
-              <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onEdit(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <EditIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Edit</ListItemText>
             </MenuItem>
           )}
           {onRegenerateAudio && meeting.status === 'completed' && (
-            <MenuItem onClick={() => { handleMenuClose(); onRegenerateAudio(meeting); }}>
-              <ListItemIcon><AudioIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onRegenerateAudio(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <AudioIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Regenerate Audio</ListItemText>
             </MenuItem>
           )}
           {onRestartProcessing && meeting.status === 'failed' && (
-            <MenuItem onClick={() => { handleMenuClose(); onRestartProcessing(meeting); }}>
-              <ListItemIcon><RefreshIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onRestartProcessing(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <RefreshIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Restart Processing</ListItemText>
             </MenuItem>
           )}
           {onDownload && (
-            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'txt'); }}>
-              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onDownload(meeting, 'txt');
+              }}
+            >
+              <ListItemIcon>
+                <DownloadIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Download (TXT)</ListItemText>
             </MenuItem>
           )}
           {onDownload && (
-            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'json'); }}>
-              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onDownload(meeting, 'json');
+              }}
+            >
+              <ListItemIcon>
+                <DownloadIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Download (JSON)</ListItemText>
             </MenuItem>
           )}
           {onDownload && (
-            <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting, 'srt'); }}>
-              <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onDownload(meeting, 'srt');
+              }}
+            >
+              <ListItemIcon>
+                <DownloadIcon fontSize="small" />
+              </ListItemIcon>
               <ListItemText>Download (SRT)</ListItemText>
             </MenuItem>
           )}
           {onDelete && (
-            <MenuItem onClick={() => { handleMenuClose(); onDelete(meeting); }}>
-              <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <MenuItem
+              onClick={() => {
+                handleMenuClose();
+                onDelete(meeting);
+              }}
+            >
+              <ListItemIcon>
+                <DeleteIcon fontSize="small" color="error" />
+              </ListItemIcon>
               <ListItemText>Delete</ListItemText>
             </MenuItem>
           )}
@@ -279,7 +336,9 @@ const MeetingCard = ({
           pl: 6, // Add left padding to avoid checkbox overlap
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Box
+          sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}
+        >
           <Typography
             variant="h6"
             sx={{
@@ -296,11 +355,7 @@ const MeetingCard = ({
           >
             {meeting.title || meeting.filename || 'Untitled Meeting'}
           </Typography>
-          <IconButton
-            size="small"
-            onClick={handleMenuClick}
-            sx={{ mt: -0.5 }}
-          >
+          <IconButton size="small" onClick={handleMenuClick} sx={{ mt: -0.5 }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -319,12 +374,7 @@ const MeetingCard = ({
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
           <StatusChip status={meeting.status} size="small" />
           {meeting.folder && (
-            <Chip
-              icon={<FolderIcon />}
-              label={meeting.folder}
-              size="small"
-              variant="outlined"
-            />
+            <Chip icon={<FolderIcon />} label={meeting.folder} size="small" variant="outlined" />
           )}
         </Box>
 
@@ -333,14 +383,17 @@ const MeetingCard = ({
           let tagsArray = [];
           if (meeting.tags) {
             if (typeof meeting.tags === 'string') {
-              tagsArray = meeting.tags.split(',').map(t => t.trim()).filter(Boolean);
+              tagsArray = meeting.tags
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean);
             } else if (Array.isArray(meeting.tags)) {
               tagsArray = meeting.tags;
             }
           }
-          
+
           if (tagsArray.length === 0) return null;
-          
+
           return (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
               {tagsArray.slice(0, 3).map((tag, index) => (
@@ -363,9 +416,7 @@ const MeetingCard = ({
         })()}
       </CardContent>
 
-      {isProcessing && showProgress && (
-        <LinearProgress sx={{ height: 2 }} />
-      )}
+      {isProcessing && showProgress && <LinearProgress sx={{ height: 2 }} />}
 
       <Menu
         anchorEl={anchorEl}
@@ -374,26 +425,54 @@ const MeetingCard = ({
         onClick={(e) => e.stopPropagation()}
       >
         {onChat && (
-          <MenuItem onClick={() => { handleMenuClose(); onChat(meeting); }}>
-            <ListItemIcon><ChatIcon fontSize="small" /></ListItemIcon>
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              onChat(meeting);
+            }}
+          >
+            <ListItemIcon>
+              <ChatIcon fontSize="small" />
+            </ListItemIcon>
             <ListItemText>Quick Chat</ListItemText>
           </MenuItem>
         )}
         {onDownload && (
-          <MenuItem onClick={() => { handleMenuClose(); onDownload(meeting); }}>
-            <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              onDownload(meeting);
+            }}
+          >
+            <ListItemIcon>
+              <DownloadIcon fontSize="small" />
+            </ListItemIcon>
             <ListItemText>Download</ListItemText>
           </MenuItem>
         )}
         {onEdit && (
-          <MenuItem onClick={() => { handleMenuClose(); onEdit(meeting); }}>
-            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              onEdit(meeting);
+            }}
+          >
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
             <ListItemText>Edit</ListItemText>
           </MenuItem>
         )}
         {onDelete && (
-          <MenuItem onClick={() => { handleMenuClose(); onDelete(meeting); }}>
-            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+          <MenuItem
+            onClick={() => {
+              handleMenuClose();
+              onDelete(meeting);
+            }}
+          >
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" color="error" />
+            </ListItemIcon>
             <ListItemText>Delete</ListItemText>
           </MenuItem>
         )}

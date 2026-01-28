@@ -14,35 +14,34 @@ Re-exports from existing modules for a cleaner API:
 """
 
 # Provider abstraction layer
-from .providers import (
-    LLMConfig,
-    LLMProvider,
-    OpenAIProvider,
-    OllamaProvider,
-    ProviderFactory,
+# Analysis functionality
+from .analysis import (
+    AnalysisConfigFactory,
+    AnalysisPrompts,
+    AnalysisResult,
+    TranscriptAnalyzer,
+    analyse_meeting,
+    analyze_transcript_with_provider,
 )
 
 # Chat functionality
 from .chat import (
     chat_with_meeting,
-    model_config_to_llm_config,
     get_default_chat_config,
+    model_config_to_llm_config,
 )
-
-# Analysis functionality
-from .analysis import (
-    analyse_meeting,
-    analyze_transcript_with_provider,
-    AnalysisResult,
-    AnalysisPrompts,
-    AnalysisConfigFactory,
-    TranscriptAnalyzer,
+from .providers import (
+    LLMConfig,
+    LLMProvider,
+    OllamaProvider,
+    OpenAIProvider,
+    ProviderFactory,
 )
 
 # Tool use
 from .tools import (
-    tool_registry,
     ToolRegistry,
+    tool_registry,
 )
 
 __all__ = [

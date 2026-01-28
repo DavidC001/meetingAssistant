@@ -1,6 +1,6 @@
 /**
  * EmptyState Component
- * 
+ *
  * Displays a friendly message when no data is available.
  */
 
@@ -39,32 +39,19 @@ const EmptyState = ({
           mb: 2,
         }}
       />
-      
-      <Typography
-        variant={size === 'small' ? 'body1' : 'h6'}
-        color="text.secondary"
-        gutterBottom
-      >
+
+      <Typography variant={size === 'small' ? 'body1' : 'h6'} color="text.secondary" gutterBottom>
         {title}
       </Typography>
-      
+
       {description && (
-        <Typography
-          variant="body2"
-          color="text.disabled"
-          sx={{ mb: 2, maxWidth: 400 }}
-        >
+        <Typography variant="body2" color="text.disabled" sx={{ mb: 2, maxWidth: 400 }}>
           {description}
         </Typography>
       )}
-      
+
       {actionLabel && onAction && (
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={onAction}
-          sx={{ mt: 1 }}
-        >
+        <Button variant="contained" startIcon={<AddIcon />} onClick={onAction} sx={{ mt: 1 }}>
           {actionLabel}
         </Button>
       )}

@@ -1,32 +1,32 @@
 """Schemas for meeting templates."""
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class MeetingTemplateBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     template_type: str  # standup, retrospective, 1on1, brainstorm, planning, review, custom
-    
+
     # Default settings
-    default_language: Optional[str] = "en-US"
-    default_speakers: Optional[str] = "auto"
-    default_folder: Optional[str] = None
-    default_tags: Optional[str] = None
-    
+    default_language: str | None = "en-US"
+    default_speakers: str | None = "auto"
+    default_folder: str | None = None
+    default_tags: str | None = None
+
     # Expected structure
-    expected_speakers: Optional[List[str]] = None
-    summary_sections: Optional[List[str]] = None
-    action_item_categories: Optional[List[str]] = None
-    
+    expected_speakers: list[str] | None = None
+    summary_sections: list[str] | None = None
+    action_item_categories: list[str] | None = None
+
     # AI prompts
-    custom_summary_prompt: Optional[str] = None
-    custom_action_item_prompt: Optional[str] = None
-    
+    custom_summary_prompt: str | None = None
+    custom_action_item_prompt: str | None = None
+
     # Metadata
-    icon: Optional[str] = "📋"
-    color: Optional[str] = "#1976d2"
+    icon: str | None = "📋"
+    color: str | None = "#1976d2"
 
 
 class MeetingTemplateCreate(MeetingTemplateBase):
@@ -34,21 +34,21 @@ class MeetingTemplateCreate(MeetingTemplateBase):
 
 
 class MeetingTemplateUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    template_type: Optional[str] = None
-    default_language: Optional[str] = None
-    default_speakers: Optional[str] = None
-    default_folder: Optional[str] = None
-    default_tags: Optional[str] = None
-    expected_speakers: Optional[List[str]] = None
-    summary_sections: Optional[List[str]] = None
-    action_item_categories: Optional[List[str]] = None
-    custom_summary_prompt: Optional[str] = None
-    custom_action_item_prompt: Optional[str] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    template_type: str | None = None
+    default_language: str | None = None
+    default_speakers: str | None = None
+    default_folder: str | None = None
+    default_tags: str | None = None
+    expected_speakers: list[str] | None = None
+    summary_sections: list[str] | None = None
+    action_item_categories: list[str] | None = None
+    custom_summary_prompt: str | None = None
+    custom_action_item_prompt: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    is_active: bool | None = None
 
 
 class MeetingTemplate(MeetingTemplateBase):
@@ -75,7 +75,7 @@ DEFAULT_TEMPLATES = [
         "default_tags": "standup,daily",
         "summary_sections": ["Yesterday's Progress", "Today's Goals", "Blockers"],
         "action_item_categories": ["Follow-up", "Blocker Resolution"],
-        "is_default": True
+        "is_default": True,
     },
     {
         "name": "Sprint Retrospective",
@@ -87,7 +87,7 @@ DEFAULT_TEMPLATES = [
         "default_tags": "retro,sprint",
         "summary_sections": ["What Went Well", "What Could Be Improved", "Action Items"],
         "action_item_categories": ["Process Improvement", "Team Action", "Technical Debt"],
-        "is_default": True
+        "is_default": True,
     },
     {
         "name": "1:1 Meeting",
@@ -100,7 +100,7 @@ DEFAULT_TEMPLATES = [
         "default_tags": "1on1,private",
         "summary_sections": ["Updates", "Feedback", "Career Development", "Personal"],
         "action_item_categories": ["Growth", "Feedback", "Support Needed"],
-        "is_default": True
+        "is_default": True,
     },
     {
         "name": "Brainstorming Session",
@@ -112,7 +112,7 @@ DEFAULT_TEMPLATES = [
         "default_tags": "brainstorm,ideas",
         "summary_sections": ["Ideas Generated", "Top Concepts", "Next Steps"],
         "action_item_categories": ["Research", "Prototype", "Validate"],
-        "is_default": True
+        "is_default": True,
     },
     {
         "name": "Sprint Planning",
@@ -124,7 +124,7 @@ DEFAULT_TEMPLATES = [
         "default_tags": "planning,sprint",
         "summary_sections": ["Sprint Goals", "Stories Committed", "Capacity", "Risks"],
         "action_item_categories": ["Story Refinement", "Technical Spike", "Dependency"],
-        "is_default": True
+        "is_default": True,
     },
     {
         "name": "Project Review",
@@ -136,6 +136,6 @@ DEFAULT_TEMPLATES = [
         "default_tags": "review,project",
         "summary_sections": ["Progress Update", "Milestones", "Risks & Issues", "Decisions"],
         "action_item_categories": ["Decision", "Escalation", "Follow-up"],
-        "is_default": True
-    }
+        "is_default": True,
+    },
 ]

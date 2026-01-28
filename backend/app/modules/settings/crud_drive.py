@@ -3,22 +3,24 @@ CRUD operations for Google Drive integration.
 """
 
 from datetime import datetime
-from typing import Optional, List
+
 from sqlalchemy.orm import Session
 
-from .models_drive import GoogleDriveCredentials, GoogleDriveSyncConfig, GoogleDriveProcessedFile
+from .models_drive import GoogleDriveCredentials, GoogleDriveProcessedFile, GoogleDriveSyncConfig
 
 
 # Google Drive Credentials
-def get_google_drive_credentials(db: Session, user_id: str = "default") -> Optional[GoogleDriveCredentials]:
+def get_google_drive_credentials(db: Session, user_id: str = "default") -> GoogleDriveCredentials | None:
     """Retrieve Google Drive credentials for a user."""
     return db.query(GoogleDriveCredentials).filter(GoogleDriveCredentials.user_id == user_id).first()
 
 
-def save_google_drive_credentials(db: Session, credentials_json: str, user_id: str = "default") -> GoogleDriveCredentials:
+def save_google_drive_credentials(
+    db: Session, credentials_json: str, user_id: str = "default"
+) -> GoogleDriveCredentials:
     """Save or update Google Drive credentials for a user."""
     existing = get_google_drive_credentials(db, user_id)
-    
+
     if existing:
         existing.credentials_json = credentials_json
         existing.updated_at = datetime.utcnow()
@@ -26,10 +28,7 @@ def save_google_drive_credentials(db: Session, credentials_json: str, user_id: s
         db.refresh(existing)
         return existing
     else:
-        credentials = GoogleDriveCredentials(
-            user_id=user_id,
-            credentials_json=credentials_json
-        )
+        credentials = GoogleDriveCredentials(user_id=user_id, credentials_json=credentials_json)
         db.add(credentials)
         db.commit()
         db.refresh(credentials)
@@ -47,24 +46,24 @@ def delete_google_drive_credentials(db: Session, user_id: str = "default") -> bo
 
 
 # Google Drive Sync Configuration
-def get_google_drive_sync_config(db: Session, user_id: str = "default") -> Optional[GoogleDriveSyncConfig]:
+def get_google_drive_sync_config(db: Session, user_id: str = "default") -> GoogleDriveSyncConfig | None:
     """Retrieve Google Drive sync configuration for a user."""
     return db.query(GoogleDriveSyncConfig).filter(GoogleDriveSyncConfig.user_id == user_id).first()
 
 
 def save_google_drive_sync_config(
     db: Session,
-    sync_folder_id: Optional[str] = None,
-    processed_folder_id: Optional[str] = None,
+    sync_folder_id: str | None = None,
+    processed_folder_id: str | None = None,
     enabled: bool = False,
     auto_process: bool = True,
     sync_mode: str = "manual",
     sync_time: str = "04:00",
-    user_id: str = "default"
+    user_id: str = "default",
 ) -> GoogleDriveSyncConfig:
     """Save or update Google Drive sync configuration."""
     existing = get_google_drive_sync_config(db, user_id)
-    
+
     if existing:
         if sync_folder_id is not None:
             existing.sync_folder_id = sync_folder_id
@@ -86,7 +85,7 @@ def save_google_drive_sync_config(
             enabled=enabled,
             auto_process=auto_process,
             sync_mode=sync_mode,
-            sync_time=sync_time
+            sync_time=sync_time,
         )
         db.add(config)
         db.commit()
@@ -105,24 +104,25 @@ def update_sync_last_run(db: Session, user_id: str = "default") -> None:
 # Google Drive Processed Files
 def is_file_processed(db: Session, drive_file_id: str) -> bool:
     """Check if a file has already been processed."""
-    return db.query(GoogleDriveProcessedFile).filter(
-        GoogleDriveProcessedFile.drive_file_id == drive_file_id
-    ).first() is not None
+    return (
+        db.query(GoogleDriveProcessedFile).filter(GoogleDriveProcessedFile.drive_file_id == drive_file_id).first()
+        is not None
+    )
 
 
 def mark_file_as_processed(
     db: Session,
     drive_file_id: str,
     drive_file_name: str,
-    meeting_id: Optional[int] = None,
-    moved_to_processed: bool = False
+    meeting_id: int | None = None,
+    moved_to_processed: bool = False,
 ) -> GoogleDriveProcessedFile:
     """Mark a file as processed."""
     processed_file = GoogleDriveProcessedFile(
         drive_file_id=drive_file_id,
         drive_file_name=drive_file_name,
         meeting_id=meeting_id,
-        moved_to_processed=moved_to_processed
+        moved_to_processed=moved_to_processed,
     )
     db.add(processed_file)
     db.commit()
@@ -130,12 +130,12 @@ def mark_file_as_processed(
     return processed_file
 
 
-def update_processed_file_meeting(db: Session, drive_file_id: str, meeting_id: int) -> Optional[GoogleDriveProcessedFile]:
+def update_processed_file_meeting(db: Session, drive_file_id: str, meeting_id: int) -> GoogleDriveProcessedFile | None:
     """Update the meeting ID for a processed file."""
-    processed_file = db.query(GoogleDriveProcessedFile).filter(
-        GoogleDriveProcessedFile.drive_file_id == drive_file_id
-    ).first()
-    
+    processed_file = (
+        db.query(GoogleDriveProcessedFile).filter(GoogleDriveProcessedFile.drive_file_id == drive_file_id).first()
+    )
+
     if processed_file:
         processed_file.meeting_id = meeting_id
         db.commit()
@@ -144,12 +144,12 @@ def update_processed_file_meeting(db: Session, drive_file_id: str, meeting_id: i
     return None
 
 
-def mark_file_moved_to_processed(db: Session, drive_file_id: str) -> Optional[GoogleDriveProcessedFile]:
+def mark_file_moved_to_processed(db: Session, drive_file_id: str) -> GoogleDriveProcessedFile | None:
     """Mark that a file has been moved to the processed folder."""
-    processed_file = db.query(GoogleDriveProcessedFile).filter(
-        GoogleDriveProcessedFile.drive_file_id == drive_file_id
-    ).first()
-    
+    processed_file = (
+        db.query(GoogleDriveProcessedFile).filter(GoogleDriveProcessedFile.drive_file_id == drive_file_id).first()
+    )
+
     if processed_file:
         processed_file.moved_to_processed = True
         db.commit()
@@ -158,8 +158,6 @@ def mark_file_moved_to_processed(db: Session, drive_file_id: str) -> Optional[Go
     return None
 
 
-def get_processed_files(db: Session, limit: int = 100) -> List[GoogleDriveProcessedFile]:
+def get_processed_files(db: Session, limit: int = 100) -> list[GoogleDriveProcessedFile]:
     """Get a list of processed files."""
-    return db.query(GoogleDriveProcessedFile).order_by(
-        GoogleDriveProcessedFile.processed_at.desc()
-    ).limit(limit).all()
+    return db.query(GoogleDriveProcessedFile).order_by(GoogleDriveProcessedFile.processed_at.desc()).limit(limit).all()

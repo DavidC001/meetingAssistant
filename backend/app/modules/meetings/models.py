@@ -1,20 +1,12 @@
 import enum
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    ForeignKey,
-    Text,
-    Float,
-    Boolean,
-    JSON,
-    Index
-)
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from ...database import Base
-from pgvector.sqlalchemy import Vector
+
 
 class MeetingStatus(enum.Enum):
     PENDING = "pending"
@@ -22,11 +14,13 @@ class MeetingStatus(enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+
 class ProcessingStage(enum.Enum):
     CONVERSION = "conversion"
     DIARIZATION = "diarization"
     TRANSCRIPTION = "transcription"
     ANALYSIS = "analysis"
+
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -38,15 +32,15 @@ class Meeting(Base):
     status = Column(String, default=MeetingStatus.PENDING.value, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     meeting_date = Column(DateTime(timezone=True), nullable=True, index=True)
-    
+
     transcription_language = Column(String, default="en-US")
     number_of_speakers = Column(String, default="auto")
     model_configuration_id = Column(Integer, ForeignKey("model_configurations.id"), nullable=True, index=True)
-    
+
     current_stage = Column(String, nullable=True)
     stage_progress = Column(Float, default=0.0)
     overall_progress = Column(Float, default=0.0)
-    
+
     file_size = Column(Integer, nullable=True)
     estimated_duration = Column(Float, nullable=True)
     processing_start_time = Column(DateTime(timezone=True), nullable=True)
@@ -72,11 +66,12 @@ class Meeting(Base):
     document_chunks = relationship("DocumentChunk", back_populates="meeting", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index('idx_meeting_status_date', 'status', 'created_at'),
-        Index('idx_meeting_folder_status', 'folder', 'status'),
-        Index('idx_meeting_date_status', 'meeting_date', 'status'),
-        Index('idx_meeting_embeddings', 'embeddings_computed', 'embeddings_updated_at'),
+        Index("idx_meeting_status_date", "status", "created_at"),
+        Index("idx_meeting_folder_status", "folder", "status"),
+        Index("idx_meeting_date_status", "meeting_date", "status"),
+        Index("idx_meeting_embeddings", "embeddings_computed", "embeddings_updated_at"),
     )
+
 
 class Attachment(Base):
     __tablename__ = "attachments"
@@ -92,6 +87,7 @@ class Attachment(Base):
 
     meeting = relationship("Meeting", back_populates="attachments")
 
+
 class Transcription(Base):
     __tablename__ = "transcriptions"
 
@@ -102,6 +98,7 @@ class Transcription(Base):
 
     meeting = relationship("Meeting", back_populates="transcription")
     action_items = relationship("ActionItem", back_populates="transcription", cascade="all, delete-orphan")
+
 
 class ActionItem(Base):
     __tablename__ = "action_items"
@@ -121,6 +118,7 @@ class ActionItem(Base):
 
     transcription = relationship("Transcription", back_populates="action_items")
 
+
 class Speaker(Base):
     __tablename__ = "speakers"
 
@@ -130,6 +128,7 @@ class Speaker(Base):
     label = Column(String, nullable=True)
 
     meeting = relationship("Meeting", back_populates="speakers")
+
 
 class DiarizationTiming(Base):
     __tablename__ = "diarization_timings"
@@ -141,8 +140,9 @@ class DiarizationTiming(Base):
     num_speakers = Column(Integer, nullable=True)
     file_size_bytes = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     meeting = relationship("Meeting")
+
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
@@ -162,6 +162,7 @@ class DocumentChunk(Base):
     embedding_config = relationship("EmbeddingConfiguration", back_populates="document_chunks")
     attachment = relationship("Attachment")
 
+
 class MeetingLink(Base):
     __tablename__ = "meeting_links"
 
@@ -169,8 +170,7 @@ class MeetingLink(Base):
     source_meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
     target_meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relationships
     source_meeting = relationship("Meeting", foreign_keys=[source_meeting_id], backref="outgoing_links")
     target_meeting = relationship("Meeting", foreign_keys=[target_meeting_id], backref="incoming_links")
-

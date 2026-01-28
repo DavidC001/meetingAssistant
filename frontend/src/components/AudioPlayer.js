@@ -9,7 +9,7 @@ import {
   Menu,
   MenuItem,
   Paper,
-  Chip
+  Chip,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -19,7 +19,7 @@ import {
   Speed as SpeedIcon,
   SkipNext as Skip10Icon,
   SkipPrevious as Back10Icon,
-  Fullscreen as FullscreenIcon
+  Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -141,26 +141,26 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
   }, []);
 
   return (
-    <Paper 
-      elevation={2} 
-      sx={{ 
-        p: 2, 
+    <Paper
+      elevation={2}
+      sx={{
+        p: 2,
         bgcolor: 'background.paper',
-        borderRadius: 2
+        borderRadius: 2,
       }}
     >
       <audio ref={audioRef} src={src} preload="metadata" />
-      
+
       {/* Waveform placeholder / Progress bar */}
-      <Box 
-        sx={{ 
-          height: 60, 
-          bgcolor: 'action.hover', 
-          borderRadius: 1, 
+      <Box
+        sx={{
+          height: 60,
+          bgcolor: 'action.hover',
+          borderRadius: 1,
           mb: 2,
           position: 'relative',
           overflow: 'hidden',
-          cursor: 'pointer'
+          cursor: 'pointer',
         }}
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
@@ -179,10 +179,10 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
             width: `${(currentTime / duration) * 100}%`,
             bgcolor: 'primary.light',
             opacity: 0.3,
-            transition: 'width 0.1s linear'
+            transition: 'width 0.1s linear',
           }}
         />
-        
+
         {/* Playhead */}
         <Box
           sx={{
@@ -192,10 +192,10 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
             width: 2,
             height: '100%',
             bgcolor: 'primary.main',
-            transition: 'left 0.1s linear'
+            transition: 'left 0.1s linear',
           }}
         />
-        
+
         {/* Center text */}
         <Box
           sx={{
@@ -205,7 +205,7 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
             transform: 'translate(-50%, -50%)',
             display: 'flex',
             alignItems: 'center',
-            gap: 1
+            gap: 1,
           }}
         >
           <Typography variant="caption" color="text.secondary">
@@ -224,13 +224,13 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
         </Tooltip>
 
         {/* Play/Pause */}
-        <IconButton 
-          onClick={togglePlay} 
+        <IconButton
+          onClick={togglePlay}
           color="primary"
-          sx={{ 
+          sx={{
             bgcolor: 'primary.main',
             color: 'white',
-            '&:hover': { bgcolor: 'primary.dark' }
+            '&:hover': { bgcolor: 'primary.dark' },
           }}
         >
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
@@ -273,9 +273,9 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
           open={Boolean(speedMenuAnchor)}
           onClose={() => setSpeedMenuAnchor(null)}
         >
-          {PLAYBACK_SPEEDS.map(speed => (
-            <MenuItem 
-              key={speed} 
+          {PLAYBACK_SPEEDS.map((speed) => (
+            <MenuItem
+              key={speed}
               onClick={() => handleSpeedChange(speed)}
               selected={speed === playbackSpeed}
             >
@@ -285,7 +285,7 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
         </Menu>
 
         {/* Volume */}
-        <Tooltip title={isMuted ? "Unmute" : "Mute"}>
+        <Tooltip title={isMuted ? 'Unmute' : 'Mute'}>
           <IconButton onClick={toggleMute} size="small">
             {isMuted ? <MuteIcon /> : <VolumeIcon />}
           </IconButton>
@@ -301,7 +301,11 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
       </Stack>
 
       {/* Keyboard shortcuts hint */}
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', mt: 1, textAlign: 'center' }}
+      >
         Space: Play/Pause • ← →: Seek • ↑ ↓: Volume
       </Typography>
     </Paper>

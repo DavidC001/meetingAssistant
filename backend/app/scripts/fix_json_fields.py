@@ -5,9 +5,9 @@ This script fixes the settings field in embedding_configurations that
 may have been stored as JSON strings instead of proper JSON objects.
 """
 
-import sys
-import os
 import json
+import os
+import sys
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +22,7 @@ def fix_json_fields():
     try:
         # Get all embedding configurations
         configs = db.query(EmbeddingConfiguration).all()
-        
+
         fixed_count = 0
         for config in configs:
             if config.settings and isinstance(config.settings, str):
@@ -36,13 +36,13 @@ def fix_json_fields():
                     print(f"Warning: Could not parse settings for config {config.id}")
                 except Exception as e:
                     print(f"Error fixing config {config.id}: {e}")
-        
+
         if fixed_count > 0:
             db.commit()
             print(f"\nFixed {fixed_count} embedding configuration(s)")
         else:
             print("No configurations needed fixing")
-            
+
     except Exception as e:
         print(f"Error: {e}")
         db.rollback()

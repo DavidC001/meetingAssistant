@@ -1,15 +1,12 @@
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Boolean
-)
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.sql import func
+
 from ...database import Base
+
 
 class UserMapping(Base):
     """Maps person names to email addresses for task assignment and calendar sync"""
+
     __tablename__ = "user_mappings"
 
     id = Column(Integer, primary_key=True, index=True)

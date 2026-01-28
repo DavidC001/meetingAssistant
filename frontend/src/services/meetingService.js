@@ -1,6 +1,6 @@
 /**
  * Meeting Service - Handles all meeting-related API operations.
- * 
+ *
  * This service encapsulates:
  * - Meeting CRUD operations
  * - File upload with progress tracking
@@ -209,7 +209,7 @@ const MeetingService = {
     const response = await apiClient.get(`${BASE_URL}/${meetingId}/download/${format}`, {
       responseType: 'blob',
     });
-    
+
     const defaultFilename = `meeting_${meetingId}.${format}`;
     downloadBlob(response.data, filename || defaultFilename);
   },

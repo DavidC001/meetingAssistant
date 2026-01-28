@@ -13,29 +13,28 @@ Re-exports from existing modules for a cleaner API:
 """
 
 # Vector store
-from .vector_store import (
-    VectorStore,
-    PgVectorStore,
-    RetrievedChunk,
-)
-
 # Embeddings
 from .embeddings import (
     EmbeddingConfig,
     EmbeddingProvider,
     EmbeddingProviderFactory,
-    OpenAIEmbeddingProvider,
     OllamaEmbeddingProvider,
+    OpenAIEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
-    validate_embedding_model,
-    get_embedding_provider,
     batched_embeddings,
+    get_embedding_provider,
+    validate_embedding_model,
 )
 
 # RAG (Retrieval Augmented Generation)
 from .rag import (
     generate_rag_response,
     retrieve_relevant_chunks,
+)
+from .vector_store import (
+    PgVectorStore,
+    RetrievedChunk,
+    VectorStore,
 )
 
 __all__ = [

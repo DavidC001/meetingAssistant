@@ -1,6 +1,6 @@
 /**
  * FormDialog Component
- * 
+ *
  * Generic dialog wrapper for forms.
  */
 
@@ -50,27 +50,17 @@ const FormDialog = ({
           <Box display="flex" alignItems="center" justifyContent="space-between">
             {title}
             {showCloseButton && !isLoading && (
-              <IconButton
-                onClick={onClose}
-                size="small"
-                aria-label="close"
-              >
+              <IconButton onClick={onClose} size="small" aria-label="close">
                 <CloseIcon />
               </IconButton>
             )}
           </Box>
         </DialogTitle>
-        
-        <DialogContent dividers>
-          {children}
-        </DialogContent>
-        
+
+        <DialogContent dividers>{children}</DialogContent>
+
         <DialogActions>
-          <Button
-            onClick={onClose}
-            disabled={isLoading}
-            color="inherit"
-          >
+          <Button onClick={onClose} disabled={isLoading} color="inherit">
             {cancelLabel}
           </Button>
           <Button

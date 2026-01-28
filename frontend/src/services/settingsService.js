@@ -128,7 +128,9 @@ export const ModelConfigService = {
    * @returns {Promise<Object>} Updated configuration
    */
   async setDefault(configId) {
-    const response = await apiClient.post(`${BASE_URL}/model-configurations/${configId}/set-default`);
+    const response = await apiClient.post(
+      `${BASE_URL}/model-configurations/${configId}/set-default`
+    );
     return response.data;
   },
 };

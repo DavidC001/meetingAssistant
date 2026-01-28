@@ -1,6 +1,6 @@
 /**
  * Base API configuration and client setup.
- * 
+ *
  * This module provides:
  * - Centralized axios instance configuration
  * - Request/response interceptors for error handling
@@ -54,9 +54,10 @@ apiClient.interceptors.response.use(
 
     if (error.response) {
       // Server responded with error
-      errorResponse.message = error.response.data?.message || 
-                              error.response.data?.detail || 
-                              `Error: ${error.response.status}`;
+      errorResponse.message =
+        error.response.data?.message ||
+        error.response.data?.detail ||
+        `Error: ${error.response.status}`;
     } else if (error.request) {
       // Request was made but no response
       errorResponse.message = 'Network error. Please check your connection.';

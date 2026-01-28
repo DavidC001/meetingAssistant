@@ -1,21 +1,14 @@
 /**
  * LoadingSkeleton Component
- * 
+ *
  * Provides skeleton screens for different content types while loading.
  * Supports meeting cards, list items, and custom layouts.
  */
 
 import React from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  Skeleton,
-  Stack,
-  Grid,
-} from '@mui/material';
+import { Box, Card, CardContent, Skeleton, Stack, Grid } from '@mui/material';
 
-const LoadingSkeleton = ({ 
+const LoadingSkeleton = ({
   variant = 'card', // 'card', 'list', 'compact', 'table'
   count = 3,
   animation = 'wave',
@@ -28,7 +21,13 @@ const LoadingSkeleton = ({
           <Grid item xs={12} sm={6} md={4} key={index}>
             <Card>
               <CardContent>
-                <Skeleton variant="text" width="80%" height={32} sx={{ mb: 1 }} animation={animation} />
+                <Skeleton
+                  variant="text"
+                  width="80%"
+                  height={32}
+                  sx={{ mb: 1 }}
+                  animation={animation}
+                />
                 <Stack direction="row" spacing={2} sx={{ mb: 1.5 }}>
                   <Skeleton variant="text" width={80} height={20} animation={animation} />
                   <Skeleton variant="text" width={60} height={20} animation={animation} />

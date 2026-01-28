@@ -39,18 +39,21 @@ export const useMeetings = (refreshKey = 0) => {
     }
   }, []);
 
-  const scheduleNextPoll = useCallback((currentMeetings) => {
-    const hasProcessingMeetings = currentMeetings.some(
-      m => m.status === MEETING_STATUS.PROCESSING || m.status === MEETING_STATUS.PENDING
-    );
+  const scheduleNextPoll = useCallback(
+    (currentMeetings) => {
+      const hasProcessingMeetings = currentMeetings.some(
+        (m) => m.status === MEETING_STATUS.PROCESSING || m.status === MEETING_STATUS.PENDING
+      );
 
-    if (hasProcessingMeetings) {
-      pollTimeoutRef.current = setTimeout(async () => {
-        const updatedMeetings = await fetchMeetings();
-        scheduleNextPoll(updatedMeetings);
-      }, POLLING.NORMAL_INTERVAL);
-    }
-  }, [fetchMeetings]);
+      if (hasProcessingMeetings) {
+        pollTimeoutRef.current = setTimeout(async () => {
+          const updatedMeetings = await fetchMeetings();
+          scheduleNextPoll(updatedMeetings);
+        }, POLLING.NORMAL_INTERVAL);
+      }
+    },
+    [fetchMeetings]
+  );
 
   useEffect(() => {
     fetchMeetings().then(scheduleNextPoll);
@@ -70,7 +73,7 @@ export const useMeetings = (refreshKey = 0) => {
     meetings,
     isLoading,
     error,
-    refreshMeetings
+    refreshMeetings,
   };
 };
 
@@ -97,7 +100,7 @@ export const useFileUpload = () => {
 
       const formData = new FormData();
       formData.append('file', file);
-      
+
       if (options.transcriptionLanguage) {
         formData.append('transcription_language', options.transcriptionLanguage);
       }
@@ -110,9 +113,7 @@ export const useFileUpload = () => {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);
         },
       });
@@ -133,7 +134,7 @@ export const useFileUpload = () => {
     isUploading,
     uploadError,
     uploadFile,
-    resetUpload
+    resetUpload,
   };
 };
 
@@ -154,14 +155,17 @@ export const useLocalStorage = (key, defaultValue) => {
     }
   });
 
-  const setStoredValue = useCallback((newValue) => {
-    try {
-      setValue(newValue);
-      window.localStorage.setItem(key, JSON.stringify(newValue));
-    } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
-    }
-  }, [key]);
+  const setStoredValue = useCallback(
+    (newValue) => {
+      try {
+        setValue(newValue);
+        window.localStorage.setItem(key, JSON.stringify(newValue));
+      } catch (error) {
+        console.error(`Error setting localStorage key "${key}":`, error);
+      }
+    },
+    [key]
+  );
 
   return [value, setStoredValue];
 };
@@ -176,20 +180,23 @@ export const useAsync = (asyncFunction) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const execute = useCallback(async (...args) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await asyncFunction(...args);
-      setData(result);
-      return result;
-    } catch (error) {
-      setError(error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, [asyncFunction]);
+  const execute = useCallback(
+    async (...args) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await asyncFunction(...args);
+        setData(result);
+        return result;
+      } catch (error) {
+        setError(error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [asyncFunction]
+  );
 
   return { data, loading, error, execute };
 };
@@ -299,29 +306,35 @@ export const useForm = (initialValues = {}, validationRules = {}) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const setValue = useCallback((name, value) => {
-    setValues(prev => ({ ...prev, [name]: value }));
+    setValues((prev) => ({ ...prev, [name]: value }));
   }, []);
 
   const setFieldTouched = useCallback((name) => {
-    setTouched(prev => ({ ...prev, [name]: true }));
+    setTouched((prev) => ({ ...prev, [name]: true }));
   }, []);
 
-  const handleChange = useCallback((e) => {
-    const { name, value, type, checked } = e.target;
-    setValue(name, type === 'checkbox' ? checked : value);
-  }, [setValue]);
+  const handleChange = useCallback(
+    (e) => {
+      const { name, value, type, checked } = e.target;
+      setValue(name, type === 'checkbox' ? checked : value);
+    },
+    [setValue]
+  );
 
-  const handleBlur = useCallback((e) => {
-    setFieldTouched(e.target.name);
-  }, [setFieldTouched]);
+  const handleBlur = useCallback(
+    (e) => {
+      setFieldTouched(e.target.name);
+    },
+    [setFieldTouched]
+  );
 
   const validate = useCallback(() => {
     const newErrors = {};
-    
-    Object.keys(validationRules).forEach(field => {
+
+    Object.keys(validationRules).forEach((field) => {
       const rules = validationRules[field];
       const value = values[field];
-      
+
       if (rules.required && !value) {
         newErrors[field] = rules.requiredMessage || 'This field is required';
       } else if (rules.minLength && value && value.length < rules.minLength) {
@@ -335,7 +348,7 @@ export const useForm = (initialValues = {}, validationRules = {}) => {
         if (error) newErrors[field] = error;
       }
     });
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [values, validationRules]);
@@ -347,20 +360,23 @@ export const useForm = (initialValues = {}, validationRules = {}) => {
     setIsSubmitting(false);
   }, [initialValues]);
 
-  const handleSubmit = useCallback((onSubmit) => async (e) => {
-    e?.preventDefault();
-    
-    if (!validate()) {
-      return;
-    }
-    
-    setIsSubmitting(true);
-    try {
-      await onSubmit(values);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [values, validate]);
+  const handleSubmit = useCallback(
+    (onSubmit) => async (e) => {
+      e?.preventDefault();
+
+      if (!validate()) {
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        await onSubmit(values);
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [values, validate]
+  );
 
   return {
     values,
@@ -391,12 +407,12 @@ export const useClipboard = () => {
       await navigator.clipboard.writeText(text);
       setCopiedValue(text);
       setCopySuccess(true);
-      
+
       // Reset success state after 2 seconds
       setTimeout(() => {
         setCopySuccess(false);
       }, 2000);
-      
+
       return true;
     } catch (error) {
       console.error('Failed to copy:', error);
@@ -421,14 +437,14 @@ export const useKeyboardShortcut = (keyMap, options = {}) => {
 
     const handleKeyDown = (event) => {
       const key = [];
-      
+
       if (event.ctrlKey || event.metaKey) key.push('ctrl');
       if (event.shiftKey) key.push('shift');
       if (event.altKey) key.push('alt');
       key.push(event.key.toLowerCase());
-      
+
       const combo = key.join('+');
-      
+
       if (keyMap[combo]) {
         event.preventDefault();
         keyMap[combo](event);
@@ -447,11 +463,11 @@ export const useKeyboardShortcut = (keyMap, options = {}) => {
  */
 export const useToggle = (initialValue = false) => {
   const [value, setValue] = useState(initialValue);
-  
+
   const toggle = useCallback(() => {
-    setValue(prev => !prev);
+    setValue((prev) => !prev);
   }, []);
-  
+
   return [value, toggle, setValue];
 };
 
@@ -472,7 +488,7 @@ export const useInterval = (callback, delay) => {
 
     const tick = () => savedCallback.current();
     const id = setInterval(tick, delay);
-    
+
     return () => clearInterval(id);
   }, [delay]);
 };

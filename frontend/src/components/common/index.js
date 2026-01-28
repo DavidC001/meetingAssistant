@@ -1,6 +1,6 @@
 /**
  * Common Components Barrel File
- * 
+ *
  * Re-exports all common components for convenient importing.
  */
 
@@ -17,3 +17,5 @@ export { default as MeetingCard } from './MeetingCard';
 export { default as LoadingSkeleton } from './LoadingSkeleton';
 export { default as FilterBar } from './FilterBar';
 export { default as ViewModeToggle } from './ViewModeToggle';
+export { default as ErrorBoundary } from './ErrorBoundary';
+export { default as ErrorBoundaryAlert } from './ErrorBoundaryAlert';

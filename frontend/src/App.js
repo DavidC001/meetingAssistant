@@ -1,26 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link, useLocation } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
-import {
-  Box,
-  Container,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
+import { Box, Container, useMediaQuery, useTheme } from '@mui/material';
 import { ThemeProvider } from './contexts/ThemeContext';
-import MeetingsDashboard from './components/MeetingsDashboard';
-import MeetingsBrowser from './components/MeetingsBrowser';
-import MeetingDetails from './components/MeetingDetails';
-import Settings from './components/Settings';
-import Calendar from './components/Calendar';
-import GlobalChat from './components/GlobalChat';
-import ScheduledMeetings from './components/ScheduledMeetings';
-import MeetingsGraph from './components/MeetingsGraph';
-import MeetingTemplates from './components/MeetingTemplates';
-import KanbanBoard from './components/KanbanBoard';
-import Diary from './components/Diary';
-import DiaryReminder from './components/DiaryReminder';
-import DiaryStatistics from './components/DiaryStatistics';
+import {
+  MeetingsDashboard,
+  MeetingsBrowser,
+  MeetingDetails,
+  ScheduledMeetings,
+  MeetingsGraph,
+  MeetingTemplates,
+} from './components/features/meetings';
+import { Settings } from './components/features/settings';
+import { Calendar } from './components/features/calendar';
+import { GlobalChat } from './components/features/chat';
+import { KanbanBoard } from './components/features/kanban';
+import { Diary, DiaryReminder, DiaryStatistics } from './components/features/diary';
 import Sidebar from './components/layout/Sidebar';
 import AppHeader from './components/layout/AppHeader';
 import PageTransition from './components/common/PageTransition';
@@ -83,20 +78,104 @@ function AppContent() {
         >
           {/* Diary Reminder Modal */}
           <DiaryReminder />
-          
+
           <Routes>
-            <Route path="/" element={<PageTransition><MeetingsDashboard /></PageTransition>} />
-            <Route path="/meetings/browse" element={<PageTransition><MeetingsBrowser /></PageTransition>} />
-            <Route path="/meetings/:meetingId" element={<PageTransition><MeetingDetails /></PageTransition>} />
-            <Route path="/global-chat" element={<PageTransition><GlobalChat /></PageTransition>} />
-            <Route path="/scheduled-meetings" element={<PageTransition><ScheduledMeetings /></PageTransition>} />
-            <Route path="/graph" element={<PageTransition><MeetingsGraph /></PageTransition>} />
-            <Route path="/calendar" element={<PageTransition><Calendar /></PageTransition>} />
-            <Route path="/kanban" element={<PageTransition><KanbanBoard /></PageTransition>} />
-            <Route path="/diary" element={<PageTransition><Diary /></PageTransition>} />
-            <Route path="/diary/statistics" element={<PageTransition><DiaryStatistics /></PageTransition>} />
-            <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
-            <Route path="/templates" element={<PageTransition><MeetingTemplates /></PageTransition>} />
+            <Route
+              path="/"
+              element={
+                <PageTransition>
+                  <MeetingsDashboard />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/meetings/browse"
+              element={
+                <PageTransition>
+                  <MeetingsBrowser />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/meetings/:meetingId"
+              element={
+                <PageTransition>
+                  <MeetingDetails />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/global-chat"
+              element={
+                <PageTransition>
+                  <GlobalChat />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/scheduled-meetings"
+              element={
+                <PageTransition>
+                  <ScheduledMeetings />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/graph"
+              element={
+                <PageTransition>
+                  <MeetingsGraph />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/calendar"
+              element={
+                <PageTransition>
+                  <Calendar />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/kanban"
+              element={
+                <PageTransition>
+                  <KanbanBoard />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/diary"
+              element={
+                <PageTransition>
+                  <Diary />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/diary/statistics"
+              element={
+                <PageTransition>
+                  <DiaryStatistics />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <PageTransition>
+                  <Settings />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/templates"
+              element={
+                <PageTransition>
+                  <MeetingTemplates />
+                </PageTransition>
+              }
+            />
           </Routes>
         </Container>
       </Box>

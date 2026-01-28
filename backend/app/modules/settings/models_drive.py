@@ -2,7 +2,7 @@
 Database models for Google Drive integration.
 """
 
-from sqlalchemy import Column, String, DateTime, Boolean, Integer
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.sql import func
 
 from ...database import Base
@@ -10,9 +10,9 @@ from ...database import Base
 
 class GoogleDriveCredentials(Base):
     """Model for storing Google Drive OAuth credentials."""
-    
+
     __tablename__ = "google_drive_credentials"
-    
+
     user_id = Column(String, primary_key=True, index=True, default="default")
     credentials_json = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -21,9 +21,9 @@ class GoogleDriveCredentials(Base):
 
 class GoogleDriveSyncConfig(Base):
     """Model for storing Google Drive synchronization configuration."""
-    
+
     __tablename__ = "google_drive_sync_config"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String, index=True, default="default")
     sync_folder_id = Column(String, nullable=True)
@@ -39,9 +39,9 @@ class GoogleDriveSyncConfig(Base):
 
 class GoogleDriveProcessedFile(Base):
     """Model for tracking files that have been processed from Google Drive."""
-    
+
     __tablename__ = "google_drive_processed_files"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     drive_file_id = Column(String, unique=True, index=True, nullable=False)
     drive_file_name = Column(String, nullable=False)

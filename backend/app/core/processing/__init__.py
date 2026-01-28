@@ -3,7 +3,7 @@ Processing pipeline module.
 
 This subpackage contains all media processing functionality:
 - Audio/video transcription
-- Speaker diarization  
+- Speaker diarization
 - Text chunking
 - Document processing
 - Transcript formatting
@@ -15,37 +15,25 @@ Re-exports from existing modules for a cleaner API:
 """
 
 # Main pipeline
-from .pipeline import run_processing_pipeline
+# Checkpointing
+from .checkpoint import CheckpointManager
 
-# Transcription
-from .transcription import (
-    compile_transcript,
-    compile_transcript_legacy,
-    WhisperConfig,
+# Chunking
+from .chunking import (
+    Chunk,
+    chunk_action_items,
+    chunk_document,
+    chunk_notes,
+    chunk_summary,
+    chunk_transcript,
 )
 
 # Diarization
 from .diarization import diarize_audio
 
-# Chunking
-from .chunking import (
-    Chunk,
-    chunk_transcript,
-    chunk_document,
-    chunk_notes,
-    chunk_summary,
-    chunk_action_items,
-)
-
-# Transcript formatting
-from .transcript_formatter import (
-    format_transcript_grouped,
-    convert_old_transcript_format,
-    update_speaker_name_in_transcript,
-)
-
 # Document processing
 from .document_processor import extract_text
+from .pipeline import run_processing_pipeline
 
 # Progress tracking
 from .timing import (
@@ -53,8 +41,19 @@ from .timing import (
     estimate_diarization_time,
 )
 
-# Checkpointing
-from .checkpoint import CheckpointManager
+# Transcript formatting
+from .transcript_formatter import (
+    convert_old_transcript_format,
+    format_transcript_grouped,
+    update_speaker_name_in_transcript,
+)
+
+# Transcription
+from .transcription import (
+    WhisperConfig,
+    compile_transcript,
+    compile_transcript_legacy,
+)
 
 __all__ = [
     # Pipeline

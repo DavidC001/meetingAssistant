@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
-from ...modules.meetings import models
 from ..llm import chat
 from .embeddings import get_embedding_provider
 from .vector_store import DEFAULT_VECTOR_STORE, RetrievedChunk
@@ -16,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
-    parts: List[str] = []
+    parts: list[str] = []
     for result in chunks:
         chunk = result.chunk
         metadata = chunk.chunk_metadata or {}
@@ -31,7 +30,7 @@ def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
-def _chunk_to_source(chunk: RetrievedChunk) -> Dict:
+def _chunk_to_source(chunk: RetrievedChunk) -> dict:
     metadata = chunk.chunk.chunk_metadata or {}
     meeting = chunk.chunk.meeting
     meeting_name = getattr(meeting, "filename", f"Meeting {chunk.chunk.meeting_id}") if meeting else None
@@ -53,17 +52,17 @@ async def generate_rag_response(
     db: Session,
     *,
     query: str,
-    meeting_id: Optional[int] = None,
-    meeting_ids: Optional[List[int]] = None,
-    chat_history: Optional[List[Dict[str, str]]] = None,
+    meeting_id: int | None = None,
+    meeting_ids: list[int] | None = None,
+    chat_history: list[dict[str, str]] | None = None,
     top_k: int = 5,
     llm_config=None,
     use_full_transcript: bool = False,
-    full_transcript: Optional[str] = None,
+    full_transcript: str | None = None,
     enable_tools: bool = True,
-) -> Tuple[str, List[Dict]]:
+) -> tuple[str, list[dict]]:
     """Generate a response using retrieval-augmented generation.
-    
+
     Args:
         db: Database session
         query: User's question
@@ -75,7 +74,7 @@ async def generate_rag_response(
         use_full_transcript: If True, use full transcript instead of RAG
         full_transcript: The full transcript text (required when use_full_transcript=True)
         enable_tools: Whether to enable tool calling capabilities
-    
+
     Returns:
         Tuple of (response_text, sources)
     """
@@ -88,7 +87,7 @@ async def generate_rag_response(
     # If full transcript mode is enabled, bypass RAG and use the full transcript
     if use_full_transcript and full_transcript:
         LOGGER.info("Using full transcript mode (bypassing RAG)")
-        
+
         # Use chat_with_meeting which has tool support
         response_text = await chat.chat_with_meeting(
             query=query,
@@ -97,7 +96,7 @@ async def generate_rag_response(
             config=llm_config,
             db=db,
             meeting_id=meeting_id,
-            enable_tools=enable_tools
+            enable_tools=enable_tools,
         )
         # Return empty sources list when using full transcript
         return response_text, []
@@ -108,13 +107,13 @@ async def generate_rag_response(
     except Exception as e:
         LOGGER.error(f"Failed to get embedding provider: {e}", exc_info=True)
         return f"Error: Could not initialize embedding provider. {str(e)}", []
-    
+
     try:
         query_embedding = provider.embed_query(query)
     except Exception as e:
         LOGGER.error(f"Failed to generate query embedding: {e}", exc_info=True)
         return f"Error: Could not generate embeddings for your query. {str(e)}", []
-        
+
     if not query_embedding:
         return "I'm sorry, I could not generate embeddings for that query.", []
 
@@ -137,7 +136,7 @@ async def generate_rag_response(
         )
     else:
         transcript_context = "No relevant meeting context was retrieved for this query."
-    
+
     response_text = await chat.chat_with_meeting(
         query=query,
         transcript=transcript_context,
@@ -145,9 +144,9 @@ async def generate_rag_response(
         config=llm_config,
         db=db,
         meeting_id=meeting_id,
-        enable_tools=enable_tools
+        enable_tools=enable_tools,
     )
-    
+
     sources = [_chunk_to_source(chunk) for chunk in retrieved]
     return response_text, sources
 
@@ -156,10 +155,10 @@ def retrieve_relevant_chunks(
     db: Session,
     *,
     query: str,
-    meeting_id: Optional[int] = None,
-    meeting_ids: Optional[List[int]] = None,
+    meeting_id: int | None = None,
+    meeting_ids: list[int] | None = None,
     top_k: int = 5,
-) -> List[RetrievedChunk]:
+) -> list[RetrievedChunk]:
     try:
         provider, _ = get_embedding_provider(db)
         query_embedding = provider.embed_query(query)
@@ -176,4 +175,3 @@ def retrieve_relevant_chunks(
     except Exception as e:
         LOGGER.error(f"Failed to retrieve relevant chunks: {e}", exc_info=True)
         return []
-

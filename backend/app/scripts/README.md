@@ -28,7 +28,7 @@ python -m backend.app.scripts.migrate_transcript_format --dry-run
 python -m backend.app.scripts.migrate_transcript_format
 ```
 
-**Important**: 
+**Important**:
 - Always backup database first!
 - Run dry-run mode first to preview changes
 - See `docs/TRANSCRIPT_MIGRATION_QUICKSTART.md` for detailed instructions
@@ -41,7 +41,7 @@ When adding a new script to this directory:
    ```python
    """
    Brief description of what the script does.
-   
+
    Usage:
        python -m backend.app.scripts.your_script_name
    """
@@ -51,11 +51,11 @@ When adding a new script to this directory:
    ```python
    import sys
    from pathlib import Path
-   
+
    # Add project root to path
    project_root = Path(__file__).parent.parent.parent.parent
    sys.path.insert(0, str(project_root))
-   
+
    from backend.app.database import SessionLocal
    # ... other imports
    ```

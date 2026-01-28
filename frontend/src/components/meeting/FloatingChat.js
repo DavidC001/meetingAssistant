@@ -1,6 +1,6 @@
 /**
  * FloatingChat Component
- * 
+ *
  * Floating chat panel that slides in from the right for meeting-specific chat.
  * Persists across tab switches and can be minimized.
  */
@@ -74,7 +74,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       // Get chat history for this specific meeting
       const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history?limit=50`);
       if (response.data && response.data.history) {
-        const formattedMessages = response.data.history.map(m => ({
+        const formattedMessages = response.data.history.map((m) => ({
           role: m.role,
           content: m.content,
           timestamp: m.created_at,
@@ -105,7 +105,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
 
     try {
       // Build chat history for context (last 6 messages)
-      const chatHistory = newMessages.slice(-6).map(msg => ({
+      const chatHistory = newMessages.slice(-6).map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
@@ -125,7 +125,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
         timestamp: new Date().toISOString(),
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
       console.error('Error sending message:', err);
       const errorMessage = {
@@ -134,7 +134,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
         timestamp: new Date().toISOString(),
         isError: true,
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -158,9 +158,9 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
   };
 
   const toggleSourcesExpanded = (index) => {
-    setExpandedSources(prev => ({
+    setExpandedSources((prev) => ({
       ...prev,
-      [index]: !prev[index]
+      [index]: !prev[index],
     }));
   };
 
@@ -190,7 +190,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
               <Paper
                 key={index}
                 variant="outlined"
-                sx={{ 
+                sx={{
                   p: 1,
                   bgcolor: 'background.default',
                 }}
@@ -202,13 +202,14 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                   similarity: {(source.similarity || 0).toFixed(2)}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
-                  {source.snippet?.substring(0, 200)}{source.snippet?.length > 200 ? '...' : ''}
+                  {source.snippet?.substring(0, 200)}
+                  {source.snippet?.length > 200 ? '...' : ''}
                 </Typography>
                 {source.metadata?.attachment_name && (
-                  <Chip 
-                    size="small" 
-                    label={`📎 ${source.metadata.attachment_name}`} 
-                    sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }} 
+                  <Chip
+                    size="small"
+                    label={`📎 ${source.metadata.attachment_name}`}
+                    sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }}
                   />
                 )}
               </Paper>
@@ -286,7 +287,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
             <ClearIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title={fullscreen ? "Exit fullscreen" : "Fullscreen"}>
+        <Tooltip title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
           <IconButton
             size="small"
             onClick={() => setFullscreen(!fullscreen)}
@@ -303,11 +304,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
         >
           <MinimizeIcon />
         </IconButton>
-        <IconButton
-          size="small"
-          onClick={() => setOpen(false)}
-          sx={{ color: 'inherit' }}
-        >
+        <IconButton size="small" onClick={() => setOpen(false)} sx={{ color: 'inherit' }}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -322,9 +319,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
-            height: fullscreen 
-              ? 'calc(100vh - 180px)' 
-              : { xs: 'calc(100vh - 220px)', sm: 400 },
+            height: fullscreen ? 'calc(100vh - 180px)' : { xs: 'calc(100vh - 220px)', sm: 400 },
           }}
         >
           {messages.length === 0 ? (
@@ -334,15 +329,17 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                 Ask me anything about this meeting!
               </Typography>
               <Stack spacing={1} sx={{ mt: 2 }}>
-                {['Summarize key points', 'What are the action items?', 'Who attended?'].map((suggestion, i) => (
-                  <Chip
-                    key={i}
-                    label={suggestion}
-                    size="small"
-                    onClick={() => setInput(suggestion)}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
+                {['Summarize key points', 'What are the action items?', 'Who attended?'].map(
+                  (suggestion, i) => (
+                    <Chip
+                      key={i}
+                      label={suggestion}
+                      size="small"
+                      onClick={() => setInput(suggestion)}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  )
+                )}
               </Stack>
             </Box>
           ) : (
@@ -369,33 +366,36 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                   sx={{
                     p: fullscreen ? 2 : 1.5,
                     maxWidth: fullscreen ? '800px' : '75%',
-                    bgcolor: message.role === 'user' 
-                      ? 'primary.main' 
-                      : message.isError 
-                      ? 'error.light'
-                      : 'background.paper',
+                    bgcolor:
+                      message.role === 'user'
+                        ? 'primary.main'
+                        : message.isError
+                          ? 'error.light'
+                          : 'background.paper',
                     color: message.role === 'user' ? 'primary.contrastText' : 'text.primary',
                   }}
                   elevation={1}
                 >
                   {message.role === 'assistant' ? (
-                    <Box sx={{ 
-                      '& p': { my: 0.5 },
-                      '& ul, & ol': { my: 0.5, pl: 2 },
-                      '& code': { 
-                        bgcolor: 'action.hover', 
-                        px: 0.5, 
-                        py: 0.25, 
-                        borderRadius: 0.5,
-                        fontSize: '0.875em',
-                      },
-                      '& pre': {
-                        bgcolor: 'action.hover',
-                        p: 1,
-                        borderRadius: 1,
-                        overflow: 'auto',
-                      },
-                    }}>
+                    <Box
+                      sx={{
+                        '& p': { my: 0.5 },
+                        '& ul, & ol': { my: 0.5, pl: 2 },
+                        '& code': {
+                          bgcolor: 'action.hover',
+                          px: 0.5,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          fontSize: '0.875em',
+                        },
+                        '& pre': {
+                          bgcolor: 'action.hover',
+                          p: 1,
+                          borderRadius: 1,
+                          overflow: 'auto',
+                        },
+                      }}
+                    >
                       <ReactMarkdown>{message.content}</ReactMarkdown>
                       {renderSources(message.sources, index)}
                     </Box>
@@ -408,7 +408,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
               </Box>
             ))
           )}
-          
+
           {isLoading && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
@@ -419,7 +419,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
               </Paper>
             </Box>
           )}
-          
+
           <div ref={messagesEndRef} />
         </Box>
 
@@ -433,11 +433,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
                 size="small"
               />
             }
-            label={
-              <Typography variant="caption">
-                Use full transcript
-              </Typography>
-            }
+            label={<Typography variant="caption">Use full transcript</Typography>}
             sx={{ mb: 1 }}
           />
           <Stack direction="row" spacing={1}>

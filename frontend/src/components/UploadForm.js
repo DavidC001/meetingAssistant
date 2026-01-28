@@ -19,7 +19,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip
+  Chip,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -30,7 +30,7 @@ import {
   Language as LanguageIcon,
   People as PeopleIcon,
   Refresh as RefreshIcon,
-  Article as TemplateIcon
+  Article as TemplateIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -69,18 +69,18 @@ const UploadForm = ({ onUploadSuccess }) => {
   const [messageType, setMessageType] = useState('info');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  
+
   // Template state
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [folderName, setFolderName] = useState('');
   const [tags, setTags] = useState('');
-  
+
   // Meeting configuration parameters (defaults for all files)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [numberOfSpeakers, setNumberOfSpeakers] = useState('auto');
   const [maxFileSize, setMaxFileSize] = useState(3000); // Default 3GB, will be updated from settings
-  
+
   const languages = [
     { code: 'en-US', name: 'English (US)' },
     { code: 'en-GB', name: 'English (UK)' },
@@ -119,19 +119,19 @@ const UploadForm = ({ onUploadSuccess }) => {
         // Keep default value of 3000MB if fetch fails
       }
     };
-    
+
     const fetchTemplates = async () => {
       try {
         const response = await api.get('/api/v1/templates/');
         setTemplates(response.data);
-        
+
         // Check if a template was selected from the templates page
         const storedTemplate = sessionStorage.getItem('selectedTemplate');
         if (storedTemplate) {
           try {
             const template = JSON.parse(storedTemplate);
             // Find the template in the fetched list to ensure it's still valid
-            const validTemplate = response.data.find(t => t.id === template.id);
+            const validTemplate = response.data.find((t) => t.id === template.id);
             if (validTemplate) {
               // Apply template settings directly
               setSelectedTemplate(validTemplate);
@@ -147,9 +147,9 @@ const UploadForm = ({ onUploadSuccess }) => {
               if (validTemplate.default_tags) {
                 setTags(validTemplate.default_tags);
               }
-              
+
               // Record template usage
-              api.post(`/api/v1/templates/${validTemplate.id}/use`).catch(err => {
+              api.post(`/api/v1/templates/${validTemplate.id}/use`).catch((err) => {
                 console.error('Failed to record template usage:', err);
               });
             }
@@ -163,7 +163,7 @@ const UploadForm = ({ onUploadSuccess }) => {
         console.error('Failed to fetch templates:', error);
       }
     };
-    
+
     fetchMaxFileSize();
     fetchTemplates();
   }, []);
@@ -174,11 +174,11 @@ const UploadForm = ({ onUploadSuccess }) => {
       setSelectedTemplate(null);
       return;
     }
-    
-    const template = templates.find(t => t.id === templateId);
+
+    const template = templates.find((t) => t.id === templateId);
     if (template) {
       setSelectedTemplate(template);
-      
+
       // Apply template defaults
       if (template.default_language) {
         setTranscriptionLanguage(template.default_language);
@@ -192,9 +192,9 @@ const UploadForm = ({ onUploadSuccess }) => {
       if (template.default_tags) {
         setTags(template.default_tags);
       }
-      
+
       // Record template usage
-      api.post(`/api/v1/templates/${templateId}/use`).catch(err => {
+      api.post(`/api/v1/templates/${templateId}/use`).catch((err) => {
         console.error('Failed to record template usage:', err);
       });
     }
@@ -202,38 +202,38 @@ const UploadForm = ({ onUploadSuccess }) => {
 
   const handleFileSelect = (files) => {
     const maxSizeBytes = maxFileSize * 1024 * 1024; // Convert MB to bytes
-    
+
     if (!files || files.length === 0) return;
-    
+
     const validFiles = [];
     const errors = [];
-    
-    Array.from(files).forEach(file => {
+
+    Array.from(files).forEach((file) => {
       if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
         errors.push(`${file.name}: Invalid file type. Please select audio or video files.`);
         return;
       }
-      
+
       if (file.size > maxSizeBytes) {
         errors.push(`${file.name}: File size exceeds ${maxFileSize}MB limit.`);
         return;
       }
-      
+
       // Add file with individual settings
       validFiles.push({
         file: file,
         transcriptionLanguage: transcriptionLanguage,
         numberOfSpeakers: numberOfSpeakers,
-        meetingDate: ''
+        meetingDate: '',
       });
     });
-    
+
     if (errors.length > 0) {
       setMessage(errors.join('\n'));
       setMessageType('error');
       setSnackbarOpen(true);
     }
-    
+
     if (validFiles.length > 0) {
       setSelectedFiles([...selectedFiles, ...validFiles]);
       setMessage('');
@@ -273,10 +273,10 @@ const UploadForm = ({ onUploadSuccess }) => {
   };
 
   const applyDefaultsToAll = () => {
-    const updatedFiles = selectedFiles.map(fileConfig => ({
+    const updatedFiles = selectedFiles.map((fileConfig) => ({
       ...fileConfig,
       transcriptionLanguage: transcriptionLanguage,
-      numberOfSpeakers: numberOfSpeakers
+      numberOfSpeakers: numberOfSpeakers,
     }));
     setSelectedFiles(updatedFiles);
     setMessage('Default settings applied to all files');
@@ -314,26 +314,24 @@ const UploadForm = ({ onUploadSuccess }) => {
             'Content-Type': 'multipart/form-data',
           },
           onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percentCompleted);
           },
         });
       } else {
         // For multiple files, use the batch endpoint
         const formData = new FormData();
-        
+
         // Append all files
-        selectedFiles.forEach(fileConfig => {
+        selectedFiles.forEach((fileConfig) => {
           formData.append('files', fileConfig.file);
         });
-        
+
         // Prepare comma-separated parameters
-        const languages = selectedFiles.map(f => f.transcriptionLanguage).join(',');
-        const speakers = selectedFiles.map(f => f.numberOfSpeakers).join(',');
-        const dates = selectedFiles.map(f => f.meetingDate || '').join(',');
-        
+        const languages = selectedFiles.map((f) => f.transcriptionLanguage).join(',');
+        const speakers = selectedFiles.map((f) => f.numberOfSpeakers).join(',');
+        const dates = selectedFiles.map((f) => f.meetingDate || '').join(',');
+
         formData.append('transcription_languages', languages);
         formData.append('number_of_speakers_list', speakers);
         formData.append('meeting_dates', dates);
@@ -343,25 +341,25 @@ const UploadForm = ({ onUploadSuccess }) => {
             'Content-Type': 'multipart/form-data',
           },
           onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percentCompleted);
           },
         });
       }
 
       setUploadProgress(100);
-      setMessage(`Successfully uploaded ${selectedFiles.length} file(s)! Processing will begin shortly.`);
+      setMessage(
+        `Successfully uploaded ${selectedFiles.length} file(s)! Processing will begin shortly.`
+      );
       setMessageType('success');
       setSnackbarOpen(true);
-      
+
       // Apply folder and tags if template was used
       if (selectedTemplate && (folderName || tags)) {
         try {
           const meetingsResponse = await api.get('/api/v1/meetings/');
           const recentMeetings = meetingsResponse.data.slice(0, selectedFiles.length);
-          
+
           for (const meeting of recentMeetings) {
             await api.updateMeetingTagsFolder(meeting.id, tags, folderName);
           }
@@ -369,9 +367,9 @@ const UploadForm = ({ onUploadSuccess }) => {
           console.error('Failed to apply template settings:', error);
         }
       }
-      
+
       setSelectedFiles([]);
-      
+
       if (onUploadSuccess) {
         onUploadSuccess();
       }
@@ -400,7 +398,7 @@ const UploadForm = ({ onUploadSuccess }) => {
         <Typography variant="h5" component="h2" gutterBottom>
           Upload Meeting Recording
         </Typography>
-        
+
         <form onSubmit={handleSubmit}>
           <DropZone
             isDragOver={isDragOver}
@@ -435,10 +433,15 @@ const UploadForm = ({ onUploadSuccess }) => {
 
           {selectedFiles.length > 0 && (
             <Box sx={{ mt: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">
-                  Selected Files ({selectedFiles.length})
-                </Typography>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mb: 2,
+                }}
+              >
+                <Typography variant="h6">Selected Files ({selectedFiles.length})</Typography>
                 {selectedFiles.length > 1 && (
                   <Button
                     variant="outlined"
@@ -452,15 +455,15 @@ const UploadForm = ({ onUploadSuccess }) => {
                 )}
               </Box>
               {selectedFiles.map((fileConfig, index) => (
-                <Box 
-                  key={index} 
-                  sx={{ 
-                    mb: 2, 
-                    p: 2, 
-                    bgcolor: 'action.hover', 
+                <Box
+                  key={index}
+                  sx={{
+                    mb: 2,
+                    p: 2,
+                    bgcolor: 'action.hover',
                     borderRadius: 1,
                     border: '1px solid',
-                    borderColor: 'divider'
+                    borderColor: 'divider',
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -481,14 +484,16 @@ const UploadForm = ({ onUploadSuccess }) => {
                       <CloseIcon />
                     </IconButton>
                   </Box>
-                  
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6} md={4}>
                       <FormControl fullWidth size="small">
                         <InputLabel>Language</InputLabel>
                         <Select
                           value={fileConfig.transcriptionLanguage}
-                          onChange={(e) => updateFileConfig(index, 'transcriptionLanguage', e.target.value)}
+                          onChange={(e) =>
+                            updateFileConfig(index, 'transcriptionLanguage', e.target.value)
+                          }
                           label="Language"
                           disabled={isUploading}
                         >
@@ -500,13 +505,15 @@ const UploadForm = ({ onUploadSuccess }) => {
                         </Select>
                       </FormControl>
                     </Grid>
-                    
+
                     <Grid item xs={12} sm={6} md={4}>
                       <FormControl fullWidth size="small">
                         <InputLabel>Speakers</InputLabel>
                         <Select
                           value={fileConfig.numberOfSpeakers}
-                          onChange={(e) => updateFileConfig(index, 'numberOfSpeakers', e.target.value)}
+                          onChange={(e) =>
+                            updateFileConfig(index, 'numberOfSpeakers', e.target.value)
+                          }
                           label="Speakers"
                           disabled={isUploading}
                         >
@@ -518,7 +525,7 @@ const UploadForm = ({ onUploadSuccess }) => {
                         </Select>
                       </FormControl>
                     </Grid>
-                    
+
                     <Grid item xs={12} sm={12} md={4}>
                       <TextField
                         fullWidth
@@ -527,7 +534,7 @@ const UploadForm = ({ onUploadSuccess }) => {
                         type="datetime-local"
                         value={
                           // Convert ISO string back to datetime-local format for display
-                          fileConfig.meetingDate 
+                          fileConfig.meetingDate
                             ? (() => {
                                 try {
                                   // If it's already an ISO string, convert to local datetime format
@@ -597,10 +604,10 @@ const UploadForm = ({ onUploadSuccess }) => {
                 <TemplateIcon sx={{ color: 'primary.main' }} />
                 <Typography variant="h6">Use Meeting Template</Typography>
                 {selectedTemplate && (
-                  <Chip 
-                    label={`${selectedTemplate.icon} ${selectedTemplate.name}`} 
-                    size="small" 
-                    color="primary" 
+                  <Chip
+                    label={`${selectedTemplate.icon} ${selectedTemplate.name}`}
+                    size="small"
+                    color="primary"
                     sx={{ ml: 1 }}
                   />
                 )}
@@ -633,7 +640,7 @@ const UploadForm = ({ onUploadSuccess }) => {
                   ))}
                 </Select>
               </FormControl>
-              
+
               {selectedTemplate && (
                 <Alert severity="info" sx={{ mt: 2 }}>
                   <Typography variant="body2" fontWeight="bold" gutterBottom>
@@ -641,10 +648,19 @@ const UploadForm = ({ onUploadSuccess }) => {
                   </Typography>
                   <Typography variant="body2" component="div">
                     {selectedTemplate.default_language && (
-                      <div>• Language: {languages.find(l => l.code === selectedTemplate.default_language)?.name}</div>
+                      <div>
+                        • Language:{' '}
+                        {languages.find((l) => l.code === selectedTemplate.default_language)?.name}
+                      </div>
                     )}
                     {selectedTemplate.default_speakers && (
-                      <div>• Speakers: {speakerOptions.find(s => s.value === selectedTemplate.default_speakers)?.label}</div>
+                      <div>
+                        • Speakers:{' '}
+                        {
+                          speakerOptions.find((s) => s.value === selectedTemplate.default_speakers)
+                            ?.label
+                        }
+                      </div>
                     )}
                     {selectedTemplate.default_folder && (
                       <div>• Folder: {selectedTemplate.default_folder}</div>
@@ -694,7 +710,7 @@ const UploadForm = ({ onUploadSuccess }) => {
                     </Select>
                   </FormControl>
                 </Grid>
-                
+
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth>
                     <InputLabel id="speakers-select-label">
@@ -718,23 +734,26 @@ const UploadForm = ({ onUploadSuccess }) => {
                   </FormControl>
                 </Grid>
               </Grid>
-              
+
               <Alert severity="info" sx={{ mt: 2 }}>
                 <Typography variant="body2">
-                  <strong>Default Settings:</strong> These settings will be applied to newly added files. 
-                  You can customize settings for each file individually after selecting them.<br />
-                  <strong>Language:</strong> Choose the primary language spoken in your meeting. 
-                  This helps improve transcription accuracy.<br />
-                  <strong>Speakers:</strong> Specify the number of speakers or use auto-detect 
-                  for speaker identification and diarization.<br />
-                  <strong>Meeting Date:</strong> Optionally specify when each meeting took place. 
-                  If not set, the upload time will be used.
+                  <strong>Default Settings:</strong> These settings will be applied to newly added
+                  files. You can customize settings for each file individually after selecting them.
+                  <br />
+                  <strong>Language:</strong> Choose the primary language spoken in your meeting.
+                  This helps improve transcription accuracy.
+                  <br />
+                  <strong>Speakers:</strong> Specify the number of speakers or use auto-detect for
+                  speaker identification and diarization.
+                  <br />
+                  <strong>Meeting Date:</strong> Optionally specify when each meeting took place. If
+                  not set, the upload time will be used.
                 </Typography>
               </Alert>
-              
+
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                Maximum file size: {maxFileSize}MB | 
-                Supported formats: MP3, WAV, MP4, MKV, MOV, AVI, FLAC, M4A, and more
+                Maximum file size: {maxFileSize}MB | Supported formats: MP3, WAV, MP4, MKV, MOV,
+                AVI, FLAC, M4A, and more
               </Typography>
             </AccordionDetails>
           </Accordion>
@@ -749,10 +768,13 @@ const UploadForm = ({ onUploadSuccess }) => {
             size="large"
             startIcon={<CloudUploadIcon />}
           >
-            {isUploading 
-              ? 'Uploading...' 
-              : `Upload and Process ${selectedFiles.length > 0 ? `(${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''})` : ''}`
-            }
+            {isUploading
+              ? 'Uploading...'
+              : `Upload and Process ${
+                  selectedFiles.length > 0
+                    ? `(${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''})`
+                    : ''
+                }`}
           </Button>
         </form>
 

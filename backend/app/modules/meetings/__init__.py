@@ -9,30 +9,28 @@ This module provides:
 
 Usage (Repository pattern - recommended):
     from app.modules.meetings import MeetingRepository, ActionItemRepository
-    
+
     meeting_repo = MeetingRepository(db)
     meeting = meeting_repo.get_by_id(1)
 
 Usage (Function-based - legacy):
     from app.modules.meetings import crud
-    
+
     meeting = crud.get_meeting(db, 1)
 """
 
-from . import models
-from . import schemas
-from . import crud
+from . import crud, models, schemas
 from .repository import (
-    MeetingRepository,
-    ActionItemRepository,
-    AttachmentRepository,
-    TranscriptionRepository,
-    DocumentChunkRepository,
-    DiarizationTimingRepository,
-    SpeakerRepository,
-    MeetingNotFoundError,
-    AttachmentNotFoundError,
     ActionItemNotFoundError,
+    ActionItemRepository,
+    AttachmentNotFoundError,
+    AttachmentRepository,
+    DiarizationTimingRepository,
+    DocumentChunkRepository,
+    MeetingNotFoundError,
+    MeetingRepository,
+    SpeakerRepository,
+    TranscriptionRepository,
 )
 
 __all__ = [

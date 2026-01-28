@@ -5,37 +5,43 @@ This module sets up the FastAPI application with proper configuration,
 database initialization, and route registration.
 """
 
-import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from .database import engine, Base
-from .middleware import RequestIDMiddleware, LoggingMiddleware
-from .modules.meetings import router as meetings_router
-from .modules.settings import router as settings_router
-from .modules.settings import router_drive as google_drive_router
-from .modules.settings import router_backup as backup_router
+from .core.base.exceptions import MeetingAssistantError
+from .core.config import config
+from .core.logging import configure_logging, get_logger
+from .core.validation import validate_environment
+from .database import Base, engine
+from .middleware import LoggingMiddleware, RequestIDMiddleware
 from .modules.admin import router as admin_router
-from .modules.ollama import router as ollama_router
 from .modules.calendar import router as calendar_router
 from .modules.chat import router as chat_router
-from .modules.graph import router as graph_router
-from .modules.users import router as users_router
-from .modules.templates import router as templates_router
-from .modules.search import router as search_router
 from .modules.diary import router as diary_router
+from .modules.graph import router as graph_router
+from .modules.meetings import router as meetings_router
+from .modules.ollama import router as ollama_router
+from .modules.search import router as search_router
+from .modules.settings import router as settings_router
+from .modules.settings import router_backup as backup_router
+from .modules.settings import router_drive as google_drive_router
+from .modules.templates import router as templates_router
+from .modules.users import router as users_router
 from .startup import startup_recovery
-from .core.config import config
-from .core.base.exceptions import MeetingAssistantError
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging
+configure_logging(config)
+logger = get_logger(__name__)
+
+# Validate environment configuration at startup
+try:
+    validate_environment()
+    logger.info("environment_validation_success")
+except Exception as e:
+    logger.error("environment_validation_failed", error=str(e))
+    raise
 
 # Ensure pgvector extension is available before creating tables
 try:
@@ -52,7 +58,9 @@ Base.metadata.create_all(bind=engine)
 try:
     with engine.connect() as connection:
         # Make transcription_id nullable in action_items table if needed
-        connection.execute(text("""
+        connection.execute(
+            text(
+                """
             DO $$
             BEGIN
                 -- Check if the column exists and is NOT NULL
@@ -68,11 +76,15 @@ try:
                     RAISE NOTICE 'Made transcription_id nullable in action_items table';
                 END IF;
             END $$;
-        """))
-        
+        """
+            )
+        )
+
         # Fix action_items_worked_on and action_items_completed columns in diary_entries
         # They should be JSON, not integer
-        connection.execute(text("""
+        connection.execute(
+            text(
+                """
             DO $$
             BEGIN
                 -- Check if action_items_worked_on exists and is not JSON type
@@ -87,7 +99,7 @@ try:
                     ALTER TABLE diary_entries ADD COLUMN action_items_worked_on JSON;
                     RAISE NOTICE 'Fixed action_items_worked_on column type to JSON';
                 END IF;
-                
+
                 -- Check if action_items_completed exists and is not JSON type
                 IF EXISTS (
                     SELECT 1
@@ -101,8 +113,10 @@ try:
                     RAISE NOTICE 'Fixed action_items_completed column type to JSON';
                 END IF;
             END $$;
-        """))
-        
+        """
+            )
+        )
+
         connection.commit()
         logger.info("Database migrations completed successfully")
 except Exception as exc:
@@ -122,65 +136,26 @@ app = FastAPI(
     openapi_tags=[
         {
             "name": "meetings",
-            "description": "Operations for managing meetings, including upload, transcription, analysis, and export"
+            "description": "Operations for managing meetings, including upload, transcription, analysis, and export",
         },
         {
             "name": "chat",
-            "description": "AI-powered chat interface for querying meeting content and global knowledge base"
+            "description": "AI-powered chat interface for querying meeting content and global knowledge base",
         },
-        {
-            "name": "settings",
-            "description": "Configuration management for API keys, model settings, and embeddings"
-        },
-        {
-            "name": "calendar",
-            "description": "Google Calendar integration for scheduled meetings and action item sync"
-        },
-        {
-            "name": "templates",
-            "description": "Meeting templates for standardized processing and analysis"
-        },
-        {
-            "name": "search",
-            "description": "Semantic and keyword search across all meetings and transcripts"
-        },
-        {
-            "name": "users",
-            "description": "User mapping for email addresses and task assignment"
-        },
-        {
-            "name": "admin",
-            "description": "Administrative operations including worker management and system cleanup"
-        },
-        {
-            "name": "ollama",
-            "description": "Local LLM management via Ollama integration"
-        },
-        {
-            "name": "graph",
-            "description": "Meeting relationship visualization and network analysis"
-        },
-        {
-            "name": "backup",
-            "description": "Data backup and restore operations"
-        },
-        {
-            "name": "drive",
-            "description": "Google Drive integration for file synchronization"
-        },
-        {
-            "name": "diary",
-            "description": "Daily work diary with action items integration"
-        }
+        {"name": "settings", "description": "Configuration management for API keys, model settings, and embeddings"},
+        {"name": "calendar", "description": "Google Calendar integration for scheduled meetings and action item sync"},
+        {"name": "templates", "description": "Meeting templates for standardized processing and analysis"},
+        {"name": "search", "description": "Semantic and keyword search across all meetings and transcripts"},
+        {"name": "users", "description": "User mapping for email addresses and task assignment"},
+        {"name": "admin", "description": "Administrative operations including worker management and system cleanup"},
+        {"name": "ollama", "description": "Local LLM management via Ollama integration"},
+        {"name": "graph", "description": "Meeting relationship visualization and network analysis"},
+        {"name": "backup", "description": "Data backup and restore operations"},
+        {"name": "drive", "description": "Google Drive integration for file synchronization"},
+        {"name": "diary", "description": "Daily work diary with action items integration"},
     ],
-    contact={
-        "name": "Meeting Assistant Support",
-        "url": "https://github.com/yourusername/meetingAssistant"
-    },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT"
-    }
+    contact={"name": "Meeting Assistant Support", "url": "https://github.com/yourusername/meetingAssistant"},
+    license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
 )
 
 # Add CORS middleware
@@ -202,11 +177,12 @@ app.add_middleware(LoggingMiddleware, excluded_paths={"/health", "/api/v1/health
 # Global exception handler for better error responses
 from .middleware.request_id import get_request_id
 
+
 @app.exception_handler(MeetingAssistantError)
 async def meeting_assistant_exception_handler(request: Request, exc: MeetingAssistantError):
     """
     Handle custom application exceptions with proper error formatting.
-    
+
     Includes request ID for error tracing and detailed error information
     when debug mode is enabled.
     """
@@ -218,9 +194,9 @@ async def meeting_assistant_exception_handler(request: Request, exc: MeetingAssi
             "error_type": exc.__class__.__name__,
             "http_status": exc.http_status,
         },
-        exc_info=exc.original_error
+        exc_info=exc.original_error,
     )
-    
+
     return JSONResponse(
         status_code=exc.http_status,
         content={
@@ -228,16 +204,17 @@ async def meeting_assistant_exception_handler(request: Request, exc: MeetingAssi
                 "code": exc.__class__.__name__,
                 "message": exc.message,
                 "details": exc.details,
-                "request_id": request_id
+                "request_id": request_id,
             }
-        }
+        },
     )
+
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """
     Handle unexpected exceptions with proper logging and error formatting.
-    
+
     In production mode, hides internal error details for security.
     In debug mode, exposes full error information for troubleshooting.
     """
@@ -249,9 +226,9 @@ async def general_exception_handler(request: Request, exc: Exception):
             "error_type": type(exc).__name__,
             "path": request.url.path,
         },
-        exc_info=True
+        exc_info=True,
     )
-    
+
     return JSONResponse(
         status_code=500,
         content={
@@ -259,9 +236,9 @@ async def general_exception_handler(request: Request, exc: Exception):
                 "code": "InternalServerError",
                 "message": "An unexpected error occurred. Please try again later.",
                 "details": {"error": str(exc), "type": type(exc).__name__} if config.debug else {},
-                "request_id": request_id
+                "request_id": request_id,
             }
-        }
+        },
     )
 
 
@@ -283,6 +260,7 @@ app.include_router(templates_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 app.include_router(diary_router.router)
 
+
 @app.on_event("startup")
 async def startup_event():
     """Run startup recovery procedures."""
@@ -298,10 +276,10 @@ async def startup_event():
 def read_root():
     """
     Root endpoint with API information.
-    
+
     Returns general information about the API including version, features,
     and upload limits.
-    
+
     Returns:
         dict: API information including:
             - message: Welcome message
@@ -315,24 +293,20 @@ def read_root():
         "version": config.version,
         "features": [
             "Audio/Video transcription with Whisper",
-            "Speaker diarization with Pyannote", 
+            "Speaker diarization with Pyannote",
             "AI-powered meeting analysis",
             "Export to multiple formats (JSON, TXT, DOCX, PDF, SRT)",
             "Calendar generation for action items",
             "Advanced caching and retry system",
             "GPU acceleration support",
             "Vector-based semantic search",
-            "Multi-LLM support (OpenAI, Ollama, Azure)"
+            "Multi-LLM support (OpenAI, Ollama, Azure)",
         ],
         "upload_limits": {
             "max_file_size_mb": config.upload.max_file_size_mb,
-            "allowed_extensions": list(config.upload.allowed_extensions)
+            "allowed_extensions": list(config.upload.allowed_extensions),
         },
-        "docs": {
-            "swagger": "/api/docs",
-            "redoc": "/api/redoc",
-            "openapi_spec": "/api/openapi.json"
-        }
+        "docs": {"swagger": "/api/docs", "redoc": "/api/redoc", "openapi_spec": "/api/openapi.json"},
     }
 
 
@@ -340,9 +314,9 @@ def read_root():
 def health_check():
     """
     Health check endpoint.
-    
+
     Provides basic health status for load balancers and monitoring systems.
-    
+
     Returns:
         dict: Health status with:
             - status: Always "healthy" if endpoint responds
@@ -350,22 +324,18 @@ def health_check():
             - timestamp: Current UTC timestamp in ISO format
     """
     from datetime import datetime, timezone
-    
-    return {
-        "status": "healthy",
-        "version": config.version,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+
+    return {"status": "healthy", "version": config.version, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/health/detailed")
 def detailed_health_check():
     """
     Detailed health check endpoint.
-    
+
     Comprehensive system health check including database connectivity,
     Celery worker status, and Redis availability.
-    
+
     Returns:
         dict: Detailed health status with:
             - status: Overall system health ("healthy", "degraded", or "unhealthy")
@@ -377,51 +347,46 @@ def detailed_health_check():
                 - cache: Redis connection status
     """
     from datetime import datetime, timezone
-    from .worker import celery_app
+
     from .database import SessionLocal
-    
+    from .worker import celery_app
+
     health_status = {
         "status": "healthy",
         "version": config.version,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "components": {}
+        "components": {},
     }
-    
+
     # Check database
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-        health_status["components"]["database"] = {
-            "status": "healthy",
-            "type": "postgresql"
-        }
+        health_status["components"]["database"] = {"status": "healthy", "type": "postgresql"}
     except Exception as e:
         health_status["status"] = "degraded"
-        health_status["components"]["database"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
-    
+        health_status["components"]["database"] = {"status": "unhealthy", "error": str(e)}
+
     # Check Celery workers
     try:
         inspect = celery_app.control.inspect(timeout=2.0)
-        
+
         # Get active workers
         active = inspect.active()
         stats = inspect.stats()
-        
+
         if active is None or stats is None:
             health_status["status"] = "degraded"
             health_status["components"]["celery"] = {
                 "status": "unhealthy",
                 "message": "No workers responding",
-                "workers": []
+                "workers": [],
             }
         else:
             worker_count = len(stats.keys())
             active_tasks = sum(len(tasks) for tasks in active.values()) if active else 0
-            
+
             health_status["components"]["celery"] = {
                 "status": "healthy",
                 "workers": worker_count,
@@ -430,30 +395,23 @@ def detailed_health_check():
                     {
                         "name": name,
                         "active_tasks": len(active.get(name, [])),
-                        "pool": info.get("pool", {}).get("implementation") if isinstance(info.get("pool"), dict) else "unknown"
+                        "pool": info.get("pool", {}).get("implementation")
+                        if isinstance(info.get("pool"), dict)
+                        else "unknown",
                     }
                     for name, info in stats.items()
-                ]
+                ],
             }
     except Exception as e:
         health_status["status"] = "degraded"
-        health_status["components"]["celery"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
-    
+        health_status["components"]["celery"] = {"status": "unhealthy", "error": str(e)}
+
     # Check Redis (via Celery connection)
     try:
         celery_app.backend.client.ping()
-        health_status["components"]["redis"] = {
-            "status": "healthy",
-            "type": "redis"
-        }
+        health_status["components"]["redis"] = {"status": "healthy", "type": "redis"}
     except Exception as e:
         health_status["status"] = "degraded"
-        health_status["components"]["redis"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
-    
+        health_status["components"]["redis"] = {"status": "unhealthy", "error": str(e)}
+
     return health_status

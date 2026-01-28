@@ -2,29 +2,32 @@ import { useEffect, useCallback } from 'react';
 
 /**
  * useKeyboardNavigation Hook
- * 
+ *
  * Provides keyboard shortcuts for common actions.
  * Returns handlers that can be attached to elements.
  */
 const useKeyboardNavigation = (shortcuts = {}) => {
-  const handleKeyDown = useCallback((event) => {
-    const { key, ctrlKey, metaKey, shiftKey, altKey } = event;
-    const modKey = ctrlKey || metaKey; // Support both Ctrl and Cmd
+  const handleKeyDown = useCallback(
+    (event) => {
+      const { key, ctrlKey, metaKey, shiftKey, altKey } = event;
+      const modKey = ctrlKey || metaKey; // Support both Ctrl and Cmd
 
-    // Build shortcut key (e.g., "ctrl+k", "shift+n")
-    const parts = [];
-    if (modKey) parts.push('ctrl');
-    if (shiftKey) parts.push('shift');
-    if (altKey) parts.push('alt');
-    parts.push(key.toLowerCase());
-    const shortcutKey = parts.join('+');
+      // Build shortcut key (e.g., "ctrl+k", "shift+n")
+      const parts = [];
+      if (modKey) parts.push('ctrl');
+      if (shiftKey) parts.push('shift');
+      if (altKey) parts.push('alt');
+      parts.push(key.toLowerCase());
+      const shortcutKey = parts.join('+');
 
-    // Check if this shortcut has a handler
-    if (shortcuts[shortcutKey]) {
-      event.preventDefault();
-      shortcuts[shortcutKey]();
-    }
-  }, [shortcuts]);
+      // Check if this shortcut has a handler
+      if (shortcuts[shortcutKey]) {
+        event.preventDefault();
+        shortcuts[shortcutKey]();
+      }
+    },
+    [shortcuts]
+  );
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -42,11 +45,11 @@ const useKeyboardNavigation = (shortcuts = {}) => {
       );
       if (firstFocusable) firstFocusable.focus();
     },
-    
+
     // Helper to trap focus within container (for modals)
     trapFocus: (container) => {
       if (!container) return () => {};
-      
+
       const focusableElements = container.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       );

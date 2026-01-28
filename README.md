@@ -99,7 +99,7 @@ The system is built on a modern microservices architecture:
    ```
 
 3. **Run with Docker**
-   
+
    For **GPU** support (recommended):
    ```bash
    docker compose up --build -d

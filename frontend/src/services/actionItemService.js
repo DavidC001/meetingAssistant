@@ -20,7 +20,7 @@ const ActionItemService = {
     if (status) params.append('status', status);
     params.append('skip', skip);
     params.append('limit', limit);
-    
+
     const response = await apiClient.get(`${BASE_URL}/action-items?${params.toString()}`);
     return response.data;
   },

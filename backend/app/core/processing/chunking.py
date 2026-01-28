@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 DEFAULT_MAX_TOKENS = 400
 DEFAULT_OVERLAP = 40
@@ -20,7 +21,7 @@ class Chunk:
 
     content: str
     content_type: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     chunk_index: int
 
 
@@ -45,13 +46,13 @@ def _split_text(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     overlap: int = DEFAULT_OVERLAP,
     encoding=None,
-) -> List[str]:
+) -> list[str]:
     if not text.strip():
         return []
 
     tokens_per_char = max(len(text) / max(_count_tokens(text, encoding), 1), 1)
     step_size = max_tokens - overlap
-    segments: List[str] = []
+    segments: list[str] = []
     start = 0
 
     while start < len(text):
@@ -71,10 +72,10 @@ def _split_text(
 def chunk_transcript(
     transcript_text: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     overlap: int = DEFAULT_OVERLAP,
-) -> List[Chunk]:
+) -> list[Chunk]:
     encoding = _get_tokenizer()
     segments = _split_text(
         transcript_text,
@@ -82,7 +83,7 @@ def chunk_transcript(
         overlap=overlap,
         encoding=encoding,
     )
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     for idx, segment in enumerate(segments):
         chunk_metadata = {"source": "transcript"}
         if metadata:
@@ -101,10 +102,10 @@ def chunk_transcript(
 def chunk_document(
     text: str,
     *,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     overlap: int = DEFAULT_OVERLAP,
-) -> List[Chunk]:
+) -> list[Chunk]:
     encoding = _get_tokenizer()
     segments = _split_text(
         text,
@@ -112,7 +113,7 @@ def chunk_document(
         overlap=overlap,
         encoding=encoding,
     )
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     for idx, segment in enumerate(segments):
         chunk_metadata = {"source": "document"}
         if metadata:
@@ -128,7 +129,7 @@ def chunk_document(
     return chunks
 
 
-def chunk_notes(text: str, *, metadata: Optional[Dict[str, Any]] = None) -> List[Chunk]:
+def chunk_notes(text: str, *, metadata: dict[str, Any] | None = None) -> list[Chunk]:
     if not text:
         return []
     chunk_metadata = {"source": "notes"}
@@ -144,7 +145,7 @@ def chunk_notes(text: str, *, metadata: Optional[Dict[str, Any]] = None) -> List
     ]
 
 
-def chunk_summary(text: str, *, metadata: Optional[Dict[str, Any]] = None) -> List[Chunk]:
+def chunk_summary(text: str, *, metadata: dict[str, Any] | None = None) -> list[Chunk]:
     if not text:
         return []
     chunk_metadata = {"source": "summary"}
@@ -160,8 +161,8 @@ def chunk_summary(text: str, *, metadata: Optional[Dict[str, Any]] = None) -> Li
     ]
 
 
-def chunk_action_items(action_items: Iterable[Dict[str, Any]]) -> List[Chunk]:
-    chunks: List[Chunk] = []
+def chunk_action_items(action_items: Iterable[dict[str, Any]]) -> list[Chunk]:
+    chunks: list[Chunk] = []
     for idx, item in enumerate(action_items):
         description_parts = [item.get("task") or ""]
         if owner := item.get("owner"):
@@ -183,4 +184,3 @@ def chunk_action_items(action_items: Iterable[Dict[str, Any]]) -> List[Chunk]:
             )
         )
     return chunks
-

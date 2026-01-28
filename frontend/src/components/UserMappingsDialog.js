@@ -18,7 +18,7 @@ import {
   Typography,
   Chip,
   Alert,
-  Snackbar
+  Snackbar,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -76,7 +76,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
 
     try {
       const response = await fetch(`http://localhost:8000/api/v1/user-mappings/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
 
       if (response.ok) {
@@ -106,8 +106,8 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         body: JSON.stringify({
           name: editName,
           email: editEmail,
-          is_active: true
-        })
+          is_active: true,
+        }),
       });
 
       if (response.ok) {
@@ -142,8 +142,8 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         body: JSON.stringify({
           name: newName,
           email: newEmail,
-          is_active: true
-        })
+          is_active: true,
+        }),
       });
 
       if (response.ok) {
@@ -196,7 +196,8 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
 
         <DialogContent>
           <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-            Map person names (as they appear in action items) to email addresses for proper task filtering.
+            Map person names (as they appear in action items) to email addresses for proper task
+            filtering.
           </Typography>
 
           {/* Add Form */}
@@ -273,9 +274,15 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell><strong>Person Name</strong></TableCell>
-                  <TableCell><strong>Email Address</strong></TableCell>
-                  <TableCell align="right"><strong>Actions</strong></TableCell>
+                  <TableCell>
+                    <strong>Person Name</strong>
+                  </TableCell>
+                  <TableCell>
+                    <strong>Email Address</strong>
+                  </TableCell>
+                  <TableCell align="right">
+                    <strong>Actions</strong>
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

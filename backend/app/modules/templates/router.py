@@ -1,10 +1,10 @@
 """Router for meeting templates API."""
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from . import crud, schemas
 from ...database import get_db
+from . import crud, schemas
 
 router = APIRouter(
     prefix="/templates",
@@ -12,13 +12,8 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=List[schemas.MeetingTemplate])
-def get_templates(
-    skip: int = 0,
-    limit: int = 100,
-    active_only: bool = True,
-    db: Session = Depends(get_db)
-):
+@router.get("/", response_model=list[schemas.MeetingTemplate])
+def get_templates(skip: int = 0, limit: int = 100, active_only: bool = True, db: Session = Depends(get_db)):
     """Get all meeting templates."""
     return crud.get_templates(db, skip=skip, limit=limit, active_only=active_only)
 

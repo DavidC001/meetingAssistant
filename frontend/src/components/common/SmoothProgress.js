@@ -3,12 +3,12 @@ import { Box, LinearProgress, CircularProgress, Typography } from '@mui/material
 
 /**
  * SmoothProgress Component
- * 
+ *
  * Shows a smooth progress indicator for async actions.
  * Automatically handles minimum display time to avoid flickering.
  */
-const SmoothProgress = ({ 
-  visible = false, 
+const SmoothProgress = ({
+  visible = false,
   variant = 'linear', // 'linear', 'circular'
   message,
   minDisplayTime = 500, // Minimum ms to show before hiding
