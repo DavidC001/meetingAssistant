@@ -203,7 +203,7 @@ class GlobalChatSessionRepository(
         Raises:
             GlobalChatSessionNotFoundError: If session not found
         """
-        session = self.get_by_id(session_id)
+        session = self.get(session_id)
         if not session:
             raise GlobalChatSessionNotFoundError(session_id)
 
@@ -231,7 +231,7 @@ class GlobalChatSessionRepository(
         Raises:
             GlobalChatSessionNotFoundError: If session not found
         """
-        session = self.get_by_id(session_id)
+        session = self.get(session_id)
         if not session:
             raise GlobalChatSessionNotFoundError(session_id)
 

@@ -144,7 +144,7 @@ class GlobalChatService:
         Returns:
             Chat session if found, None otherwise
         """
-        return self.session_repo.get_by_id(session_id)
+        return self.session_repo.get(session_id)
 
     def update_session(
         self,
