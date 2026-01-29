@@ -35,7 +35,7 @@ import {
 import axios from 'axios';
 import ForceGraph2D from 'react-force-graph-2d';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
 const MeetingsGraph = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });

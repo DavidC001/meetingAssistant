@@ -46,7 +46,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
 
   const fetchMappings = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/user-mappings/');
+      const response = await fetch('/api/v1/user-mappings/');
       if (response.ok) {
         const data = await response.json();
         setMappings(data);
@@ -59,7 +59,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
 
   const fetchSuggestions = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/user-mappings/suggest');
+      const response = await fetch('/api/v1/user-mappings/suggest');
       if (response.ok) {
         const data = await response.json();
         setUnmappedNames(data.unmapped_names || []);
@@ -75,7 +75,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/user-mappings/${id}`, {
+      const response = await fetch(`/api/v1/user-mappings/${id}`, {
         method: 'DELETE',
       });
 
@@ -100,7 +100,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
 
   const handleSaveEdit = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/user-mappings/${editingId}`, {
+      const response = await fetch(`/api/v1/user-mappings/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,7 +136,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/user-mappings/', {
+      const response = await fetch('/api/v1/user-mappings/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
