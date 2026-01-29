@@ -1,29 +1,4 @@
-# Docker Compose override for CPU-only deployment
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.cpu.yml up --build
-#
-# This file overrides the default GPU configuration for systems without NVIDIA GPUs
+# Deprecated: CPU is now the default configuration in docker-compose.yml.
+# This file is intentionally empty and can be deleted safely.
 
-services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.cpu
-
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.cpu
-    environment:
-      - DATABASE_URL=postgresql://user:password@db/mydatabase
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    # Remove GPU reservations for CPU-only deployment
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-
-  beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.cpu
+services: {}

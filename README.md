@@ -100,14 +100,14 @@ The system is built on a modern microservices architecture:
 
 3. **Run with Docker**
 
-   For **GPU** support (recommended):
+   For **CPU** (default):
    ```bash
    docker compose up --build -d
    ```
 
-   For **CPU** only:
+   For **GPU** support:
    ```bash
-   docker compose -f docker-compose.cpu.yml up --build -d
+   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
    ```
 
 4. **Access the Application**
