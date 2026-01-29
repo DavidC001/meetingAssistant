@@ -184,7 +184,8 @@ class GlobalChatService:
         Returns:
             True if deleted, False if not found
         """
-        return self.session_repo.delete(session_id)
+        deleted = self.session_repo.delete(id=session_id)
+        return deleted is not None
 
     def add_message(
         self, session_id: int, role: str, content: str, sources: list | None = None
