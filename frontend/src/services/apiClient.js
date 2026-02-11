@@ -12,15 +12,18 @@ import axios from 'axios';
 
 /**
  * Base axios client with default configuration.
- * Uses relative URLs since Nginx reverse proxy handles routing.
+ * Uses empty baseURL so axios uses the current origin automatically.
  */
 const apiClient = axios.create({
-  baseURL: '/',
+  baseURL: '',
   timeout: 120000, // 2 minutes for large file uploads
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Debug logging
+console.log('API Client initialized with baseURL:', apiClient.defaults.baseURL);
 
 /**
  * Request interceptor for adding auth headers and logging.

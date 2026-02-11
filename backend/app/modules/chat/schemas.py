@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     sources: list[dict[str, Any]] = []
+    follow_up_suggestions: list[str] = []
 
 
 class GlobalChatSession(BaseModel):
@@ -50,6 +51,7 @@ class GlobalChatMessage(BaseModel):
     role: str
     content: str
     sources: list[dict[str, Any]] | None = None
+    follow_up_suggestions: list[str] | None = None
     created_at: datetime
 
     class Config:

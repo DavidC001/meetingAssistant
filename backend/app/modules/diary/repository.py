@@ -16,12 +16,13 @@ def extract_action_item_ids_from_content(content: str):
         return [], []
 
     # Pattern: - [ ] **task** _(Action Item #123)_ or - [x] **task** _(Action Item #123)_
+    # Using DOTALL to match across newlines in case task description spans multiple lines
     pattern = r"-\s*\[([ xX])\].*?\(Action Item #(\d+)\)"
 
     worked_on_ids = []
     completed_ids = []
 
-    for match in re.finditer(pattern, content, re.IGNORECASE):
+    for match in re.finditer(pattern, content, re.IGNORECASE | re.DOTALL):
         checkbox_state = match.group(1).strip()
         item_id = int(match.group(2))
 

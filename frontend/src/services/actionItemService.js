@@ -68,6 +68,29 @@ const ActionItemService = {
     const response = await apiClient.post(`${BASE_URL}/action-items/${itemId}/sync-calendar`);
     return response.data;
   },
+
+  /**
+   * Link an action item to a project.
+   * @param {number} projectId - Project ID
+   * @param {number} actionItemId - Action item ID
+   * @returns {Promise<Object>} Link result
+   */
+  async linkToProject(projectId, actionItemId) {
+    const response = await apiClient.post(
+      `/api/v1/projects/${projectId}/action-items/${actionItemId}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Unlink an action item from a project.
+   * @param {number} projectId - Project ID
+   * @param {number} actionItemId - Action item ID
+   * @returns {Promise<void>}
+   */
+  async unlinkFromProject(projectId, actionItemId) {
+    await apiClient.delete(`/api/v1/projects/${projectId}/action-items/${actionItemId}`);
+  },
 };
 
 export default ActionItemService;

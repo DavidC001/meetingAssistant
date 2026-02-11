@@ -7,15 +7,25 @@ import {
   MeetingsDashboard,
   MeetingsBrowser,
   MeetingDetails,
-  ScheduledMeetings,
   MeetingsGraph,
-  MeetingTemplates,
 } from './components/features/meetings';
 import { Settings } from './components/features/settings';
 import { Calendar } from './components/features/calendar';
 import { GlobalChat } from './components/features/chat';
 import { KanbanBoard } from './components/features/kanban';
 import { Diary, DiaryReminder, DiaryStatistics } from './components/features/diary';
+import {
+  ProjectsManager,
+  ProjectDashboard,
+  ProjectMeetings,
+  ProjectActionItems,
+  ProjectTeam,
+  ProjectAnalytics,
+  ProjectChat,
+  ProjectNotes,
+  ProjectMilestones,
+  ProjectSettings,
+} from './components/features/projects';
 import Sidebar from './components/layout/Sidebar';
 import AppHeader from './components/layout/AppHeader';
 import PageTransition from './components/common/PageTransition';
@@ -113,14 +123,6 @@ function AppContent() {
               }
             />
             <Route
-              path="/scheduled-meetings"
-              element={
-                <PageTransition>
-                  <ScheduledMeetings />
-                </PageTransition>
-              }
-            />
-            <Route
               path="/graph"
               element={
                 <PageTransition>
@@ -140,7 +142,7 @@ function AppContent() {
               path="/kanban"
               element={
                 <PageTransition>
-                  <KanbanBoard />
+                  <KanbanBoard allowEdit allowDelete />
                 </PageTransition>
               }
             />
@@ -161,18 +163,90 @@ function AppContent() {
               }
             />
             <Route
-              path="/settings"
+              path="/projects"
               element={
                 <PageTransition>
-                  <Settings />
+                  <ProjectsManager />
                 </PageTransition>
               }
             />
             <Route
-              path="/templates"
+              path="/projects/:projectId"
               element={
                 <PageTransition>
-                  <MeetingTemplates />
+                  <ProjectDashboard />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/meetings"
+              element={
+                <PageTransition>
+                  <ProjectMeetings />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/action-items"
+              element={
+                <PageTransition>
+                  <ProjectActionItems />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/team"
+              element={
+                <PageTransition>
+                  <ProjectTeam />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/chat"
+              element={
+                <PageTransition>
+                  <ProjectChat />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/analytics"
+              element={
+                <PageTransition>
+                  <ProjectAnalytics />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/settings"
+              element={
+                <PageTransition>
+                  <ProjectSettings />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/notes"
+              element={
+                <PageTransition>
+                  <ProjectNotes />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/projects/:projectId/milestones"
+              element={
+                <PageTransition>
+                  <ProjectMilestones />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <PageTransition>
+                  <Settings />
                 </PageTransition>
               }
             />

@@ -44,6 +44,7 @@ import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import api from '../../../api';
+import QuickActions from '../../QuickActions';
 import './GlobalChat.css';
 
 const GlobalChat = () => {
@@ -288,7 +289,7 @@ const GlobalChat = () => {
   }, [sessions, allTags]);
 
   const handleSend = async () => {
-    if (!input.trim() || !activeSessionId) {
+    if (!input.trim()) {
       return;
     }
     setLoading(true);
@@ -296,26 +297,37 @@ const GlobalChat = () => {
     setMessages(newMessages);
     const question = input;
     setInput('');
+    let sessionId = activeSessionId;
+    let activeSession = sessions.find((session) => session.id === sessionId);
+    const shouldAutoCreate = !sessionId;
+    let shouldRefreshSessions = !activeSession || activeSession.title === 'New chat';
 
     try {
       const chatHistory = newMessages.slice(-6).map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
-      const response = await api.globalChat.sendMessage(
-        activeSessionId,
-        question,
-        chatHistory,
-        topK
-      );
+      if (shouldAutoCreate) {
+        const created = await api.globalChat.createSession('New chat');
+        sessionId = created.data.id;
+        setActiveSessionId(sessionId);
+        activeSession = created.data;
+        shouldRefreshSessions = true;
+      }
+
+      const response = await api.globalChat.sendMessage(sessionId, question, chatHistory, topK);
       setMessages([
         ...newMessages,
         {
           role: 'assistant',
           content: response.data.content,
           sources: response.data.sources || [],
+          follow_up_suggestions: response.data.follow_up_suggestions || [],
         },
       ]);
+      if (shouldRefreshSessions) {
+        await loadSessions();
+      }
     } catch (error) {
       console.error('Failed to send message', error);
       setMessages([
@@ -329,6 +341,30 @@ const GlobalChat = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderFollowUpSuggestions = (suggestions, isLastAssistantMessage) => {
+    if (!suggestions || suggestions.length === 0 || !isLastAssistantMessage || loading) return null;
+
+    return (
+      <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        {suggestions.map((suggestion, idx) => (
+          <Chip
+            key={idx}
+            label={suggestion}
+            size="small"
+            variant="outlined"
+            color="primary"
+            onClick={() => setInput(suggestion)}
+            sx={{
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              '&:hover': { backgroundColor: 'primary.main', color: 'primary.contrastText' },
+            }}
+          />
+        ))}
+      </Box>
+    );
   };
 
   const renderSources = (sources, messageIndex) => {
@@ -350,37 +386,61 @@ const GlobalChat = () => {
         </Button>
         <Collapse in={isExpanded}>
           <Stack spacing={1} className="global-source-stack">
-            {sources.map((source, index) => (
-              <Paper
-                key={index}
-                variant="outlined"
-                className="global-source-card"
-                onClick={() => navigate(`/meetings/${source.meeting_id}`)}
-                sx={{
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: 'action.hover' },
-                  p: 1.5,
-                }}
-              >
-                <Typography variant="subtitle2" color="primary">
-                  {source.meeting_name || `Meeting ${source.meeting_id}`}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {source.content_type.replace('_', ' ')} • similarity{' '}
-                  {(source.similarity || 0).toFixed(2)}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {source.snippet}
-                </Typography>
-                {source.metadata && source.metadata.attachment_name && (
-                  <Chip
-                    size="small"
-                    label={`Attachment: ${source.metadata.attachment_name}`}
-                    sx={{ mt: 1 }}
-                  />
-                )}
-              </Paper>
-            ))}
+            {sources.map((source, index) => {
+              const isToolResult =
+                source.content_type === 'tool_result' || source.content_type === 'tool_search';
+              const toolLabel =
+                source.metadata?.tool_label || source.metadata?.tool?.replace('_', ' ');
+              const title =
+                source.meeting_name ||
+                (source.note_title && `Note: ${source.note_title}`) ||
+                (source.attachment_name && `Attachment: ${source.attachment_name}`) ||
+                (isToolResult ? toolLabel : null) ||
+                (source.meeting_id ? `Meeting ${source.meeting_id}` : null) ||
+                'Source';
+              const isClickable = !!source.meeting_id;
+              return (
+                <Paper
+                  key={index}
+                  variant="outlined"
+                  className="global-source-card"
+                  onClick={
+                    isClickable ? () => navigate(`/meetings/${source.meeting_id}`) : undefined
+                  }
+                  sx={{
+                    cursor: isClickable ? 'pointer' : 'default',
+                    '&:hover': isClickable ? { bgcolor: 'action.hover' } : {},
+                    p: 1.5,
+                  }}
+                >
+                  <Typography variant="subtitle2" color="primary">
+                    {title}
+                  </Typography>
+                  {!isToolResult && source.similarity != null && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {(source.content_type || 'transcript').replace('_', ' ')} • similarity{' '}
+                      {source.similarity.toFixed(2)}
+                    </Typography>
+                  )}
+                  {isToolResult && toolLabel && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {toolLabel}
+                      {source.metadata?.query ? ` — "${source.metadata.query}"` : ''}
+                    </Typography>
+                  )}
+                  <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>
+                    {source.snippet}
+                  </Typography>
+                  {source.metadata && source.metadata.attachment_name && (
+                    <Chip
+                      size="small"
+                      label={`Attachment: ${source.metadata.attachment_name}`}
+                      sx={{ mt: 1 }}
+                    />
+                  )}
+                </Paper>
+              );
+            })}
           </Stack>
         </Collapse>
       </Box>
@@ -554,6 +614,29 @@ const GlobalChat = () => {
             </Box>
           </Box>
           <Box className="global-chat-messages">
+            {messages.length === 0 && !loading && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  py: 6,
+                }}
+              >
+                <AssistantIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Ask anything across all your meetings
+                </Typography>
+                <Typography variant="body2" color="text.disabled" sx={{ mb: 3 }}>
+                  Search transcripts, manage tasks, and get insights.
+                </Typography>
+                <Box sx={{ maxWidth: 500 }}>
+                  <QuickActions onSelectPrompt={(prompt) => setInput(prompt)} isGlobal />
+                </Box>
+              </Box>
+            )}
             {messages.map((message, index) => (
               <Box key={index} className={`global-chat-message ${message.role}`}>
                 <Box className="global-chat-avatar">
@@ -598,6 +681,10 @@ const GlobalChat = () => {
                         {message.content}
                       </ReactMarkdown>
                       {renderSources(message.sources, index)}
+                      {renderFollowUpSuggestions(
+                        message.follow_up_suggestions,
+                        index === messages.length - 1 && message.role === 'assistant'
+                      )}
                     </>
                   ) : (
                     <Typography>{message.content}</Typography>

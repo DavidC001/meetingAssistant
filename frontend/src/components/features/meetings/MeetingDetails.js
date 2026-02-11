@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -39,6 +39,7 @@ import {
   Popper,
   ClickAwayListener,
   Stack,
+  alpha,
   useTheme,
 } from '@mui/material';
 import {
@@ -70,9 +71,14 @@ import {
   AccessTime as AccessTimeIcon,
   Info as InfoIcon,
   Note as NoteIcon,
+  Add as AddIcon,
+  MoreVert as MoreVertIcon,
+  Flag as FlagIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import api from '../../../api';
+import { ActionItemService, projectService } from '../../../services';
 import Chat from '../chat/Chat';
 import AudioPlayer from '../../AudioPlayer';
 import FloatingChat from '../../meeting/FloatingChat';
@@ -126,9 +132,13 @@ const MeetingDetails = () => {
     task: '',
     owner: '',
     due_date: '',
+    status: 'pending',
     isAdding: false,
   });
   const [editingActionItem, setEditingActionItem] = useState(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [selectedActionItem, setSelectedActionItem] = useState(null);
 
   // Meta
   const [tags, setTags] = useState([]);
@@ -140,6 +150,14 @@ const MeetingDetails = () => {
   const [notes, setNotes] = useState('');
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [showMeetingSuggestions, setShowMeetingSuggestions] = useState(false);
+
+  // Project linking for action items
+  const [projects, setProjects] = useState([]);
+  const [actionItemProjects, setActionItemProjects] = useState(new Map()); // actionItemId -> Set(projectIds)
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [projectMenuAnchor, setProjectMenuAnchor] = useState(null);
+  const [projectMenuItemId, setProjectMenuItemId] = useState(null);
+  const [newActionItemProjectIds, setNewActionItemProjectIds] = useState([]);
   const [meetingSuggestions, setMeetingSuggestions] = useState([]);
   const [allMeetings, setAllMeetings] = useState([]);
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -242,6 +260,62 @@ const MeetingDetails = () => {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      setLoadingProjects(true);
+      const response = await projectService.listProjects('active');
+      const items = response?.data || response || [];
+      setProjects(items);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const fetchActionItemProjectLinks = async (actionItems) => {
+    if (!actionItems || actionItems.length === 0) {
+      setActionItemProjects(new Map());
+      return;
+    }
+
+    if (!projects || projects.length === 0) {
+      return;
+    }
+
+    try {
+      const projectActionItems = await Promise.all(
+        projects.map(async (project) => {
+          try {
+            const res = await projectService.getActionItems(project.id);
+            const items = res?.data || [];
+            return { projectId: project.id, actionItems: items };
+          } catch {
+            return { projectId: project.id, actionItems: [] };
+          }
+        })
+      );
+
+      const map = new Map();
+      actionItems.forEach((item) => {
+        map.set(item.id, new Set());
+      });
+
+      projectActionItems.forEach(({ projectId, actionItems: items }) => {
+        items.forEach((item) => {
+          if (!map.has(item.id)) {
+            map.set(item.id, new Set());
+          }
+          map.get(item.id).add(projectId);
+        });
+      });
+
+      setActionItemProjects(map);
+    } catch (err) {
+      console.error('Error fetching action item project links:', err);
+    }
+  };
+
   useEffect(() => {
     fetchMeetingDetails(true).then((initialMeeting) => {
       if (initialMeeting) {
@@ -250,6 +324,8 @@ const MeetingDetails = () => {
         fetchAttachments();
         fetchAvailableFolders();
         fetchAvailableTags();
+        fetchProjects();
+        fetchActionItemProjectLinks(initialMeeting.transcription?.action_items || []);
 
         // Smart polling if processing
         if (initialMeeting.status === 'pending' || initialMeeting.status === 'processing') {
@@ -301,6 +377,12 @@ const MeetingDetails = () => {
       if (pollTimeout) clearTimeout(pollTimeout);
     };
   }, []);
+
+  useEffect(() => {
+    if (projects.length > 0 && meeting?.transcription?.action_items) {
+      fetchActionItemProjectLinks(meeting.transcription.action_items);
+    }
+  }, [projects, meeting?.transcription?.action_items]);
 
   // --- Handlers ---
 
@@ -381,7 +463,25 @@ const MeetingDetails = () => {
           action_items: [...prev.transcription.action_items, res.data],
         },
       }));
-      setNewActionItem({ task: '', owner: '', due_date: '', isAdding: false });
+      // Link to selected projects
+      if (res.data?.id && newActionItemProjectIds.length > 0) {
+        await Promise.all(
+          newActionItemProjectIds.map((pid) => ActionItemService.linkToProject(pid, res.data.id))
+        );
+        setActionItemProjects((prev) => {
+          const next = new Map(prev);
+          next.set(res.data.id, new Set(newActionItemProjectIds));
+          return next;
+        });
+      } else {
+        setActionItemProjects((prev) => {
+          const next = new Map(prev);
+          next.set(res.data.id, new Set());
+          return next;
+        });
+      }
+      setNewActionItemProjectIds([]);
+      setNewActionItem({ task: '', owner: '', due_date: '', status: 'pending', isAdding: false });
     } catch (err) {
       setError('Failed to add action item');
     }
@@ -390,7 +490,12 @@ const MeetingDetails = () => {
   const handleUpdateActionItem = async () => {
     if (!editingActionItem) return;
     try {
-      const res = await api.updateActionItem(editingActionItem.id, editingActionItem);
+      const res = await api.updateActionItem(editingActionItem.id, {
+        task: editingActionItem.task,
+        owner: editingActionItem.owner,
+        due_date: editingActionItem.due_date,
+        priority: editingActionItem.priority,
+      });
       setMeeting((prev) => ({
         ...prev,
         transcription: {
@@ -401,9 +506,39 @@ const MeetingDetails = () => {
         },
       }));
       setEditingActionItem(null);
+      setEditDialogOpen(false);
     } catch (err) {
       setError('Failed to update action item');
     }
+  };
+
+  const handleMenuOpen = (event, item) => {
+    event.stopPropagation();
+    setMenuAnchorEl(event.currentTarget);
+    setSelectedActionItem(item);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+    setSelectedActionItem(null);
+  };
+
+  const handleEditOpen = () => {
+    if (!selectedActionItem) return;
+    setEditingActionItem({
+      id: selectedActionItem.id,
+      task: selectedActionItem.task || '',
+      owner: selectedActionItem.owner || '',
+      due_date: selectedActionItem.due_date || '',
+      priority: selectedActionItem.priority || 'medium',
+    });
+    setEditDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleAddOpen = (status = 'pending') => {
+    setNewActionItemProjectIds([]);
+    setNewActionItem({ task: '', owner: '', due_date: '', status, isAdding: true });
   };
 
   const handleDeleteActionItem = async (id) => {
@@ -416,8 +551,141 @@ const MeetingDetails = () => {
           action_items: prev.transcription.action_items.filter((a) => a.id !== id),
         },
       }));
+      setActionItemProjects((prev) => {
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
     } catch (err) {
       setError('Failed to delete action item');
+    }
+  };
+
+  // Kanban column config
+  const isDarkMode = theme.palette.mode === 'dark';
+  const kanbanColumnConfig = {
+    pending: {
+      label: 'Pending',
+      icon: ScheduleIcon,
+      gradient: isDarkMode
+        ? 'linear-gradient(135deg, #5c6bc0 0%, #7e57c2 100%)'
+        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    },
+    'in-progress': {
+      label: 'In Progress',
+      icon: PlayCircleIcon,
+      gradient: isDarkMode
+        ? 'linear-gradient(135deg, #ec407a 0%, #f44336 100%)'
+        : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    },
+    completed: {
+      label: 'Completed',
+      icon: CheckCircleIcon,
+      gradient: isDarkMode
+        ? 'linear-gradient(135deg, #26c6da 0%, #00acc1 100%)'
+        : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    },
+  };
+
+  const actionItemColumns = useMemo(() => {
+    const items = meeting?.transcription?.action_items || [];
+    const cols = { pending: [], 'in-progress': [], completed: [] };
+    items.forEach((item) => {
+      const status = (item.status || 'pending').replace('_', '-');
+      if (cols[status]) {
+        cols[status].push(item);
+      } else {
+        cols['pending'].push(item);
+      }
+    });
+    return cols;
+  }, [meeting?.transcription?.action_items]);
+
+  const handleActionItemDragEnd = async (result) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index)
+      return;
+
+    const itemId = parseInt(draggableId);
+    const newStatus = destination.droppableId.replace('-', '_');
+
+    // Optimistic update
+    setMeeting((prev) => ({
+      ...prev,
+      transcription: {
+        ...prev.transcription,
+        action_items: prev.transcription.action_items.map((item) =>
+          item.id === itemId ? { ...item, status: newStatus } : item
+        ),
+      },
+    }));
+
+    try {
+      await api.updateActionItem(itemId, { status: newStatus });
+    } catch (err) {
+      fetchMeetingDetails(false);
+      setError('Failed to update action item status');
+    }
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'high':
+        return isDarkMode ? '#ff8a80' : '#d32f2f';
+      case 'medium':
+        return isDarkMode ? '#ffb74d' : '#ed6c02';
+      case 'low':
+        return isDarkMode ? '#81c784' : '#2e7d32';
+      default:
+        return isDarkMode ? '#b0b0b0' : '#757575';
+    }
+  };
+
+  const openProjectMenu = (event, actionItemId) => {
+    setProjectMenuAnchor(event.currentTarget);
+    setProjectMenuItemId(actionItemId);
+  };
+
+  const closeProjectMenu = () => {
+    setProjectMenuAnchor(null);
+    setProjectMenuItemId(null);
+  };
+
+  const handleLinkProject = async (projectId) => {
+    const itemId = editingActionItem?.id || projectMenuItemId;
+    if (!itemId) return;
+    try {
+      await ActionItemService.linkToProject(projectId, itemId);
+      setActionItemProjects((prev) => {
+        const next = new Map(prev);
+        if (!next.has(itemId)) {
+          next.set(itemId, new Set());
+        }
+        next.get(itemId).add(projectId);
+        return next;
+      });
+    } catch (err) {
+      setError('Failed to link action item to project');
+    } finally {
+      closeProjectMenu();
+    }
+  };
+
+  const handleUnlinkProject = async (actionItemId, projectId) => {
+    try {
+      await ActionItemService.unlinkFromProject(projectId, actionItemId);
+      setActionItemProjects((prev) => {
+        const next = new Map(prev);
+        if (next.has(actionItemId)) {
+          const updated = new Set(next.get(actionItemId));
+          updated.delete(projectId);
+          next.set(actionItemId, updated);
+        }
+        return next;
+      });
+    } catch (err) {
+      setError('Failed to unlink action item from project');
     }
   };
 
@@ -638,6 +906,28 @@ const MeetingDetails = () => {
           </Box>
         </Box>
       </Box>
+
+      <Menu
+        anchorEl={projectMenuAnchor}
+        open={Boolean(projectMenuAnchor)}
+        onClose={closeProjectMenu}
+      >
+        {projects.length === 0 && <MenuItem disabled>No projects available</MenuItem>}
+        {projects.length > 0 &&
+          projects
+            .filter(
+              (project) => !(actionItemProjects.get(projectMenuItemId) || new Set()).has(project.id)
+            )
+            .map((project) => (
+              <MenuItem key={project.id} onClick={() => handleLinkProject(project.id)}>
+                {project.name}
+              </MenuItem>
+            ))}
+        {projects.length > 0 &&
+          projects.every((project) =>
+            (actionItemProjects.get(projectMenuItemId) || new Set()).has(project.id)
+          ) && <MenuItem disabled>All projects linked</MenuItem>}
+      </Menu>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -1047,14 +1337,17 @@ const MeetingDetails = () => {
           </Box>
         </TabPanel>
 
-        {/* Action Items Tab */}
+        {/* Action Items Tab - Kanban Board */}
         <TabPanel value={activeTab} index={2}>
           <Box sx={{ px: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
               <Button
                 variant="contained"
                 startIcon={<AssignmentIcon />}
-                onClick={() => setNewActionItem({ ...newActionItem, isAdding: true })}
+                onClick={() => {
+                  setNewActionItemProjectIds([]);
+                  setNewActionItem({ ...newActionItem, isAdding: true });
+                }}
               >
                 Add Action Item
               </Button>
@@ -1100,6 +1393,42 @@ const MeetingDetails = () => {
                       }
                     />
                   </Grid>
+                  {projects.length > 0 && (
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Projects
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {projects.map((project) => (
+                          <Chip
+                            key={project.id}
+                            label={project.name}
+                            clickable
+                            variant={
+                              newActionItemProjectIds.includes(project.id) ? 'filled' : 'outlined'
+                            }
+                            color={
+                              newActionItemProjectIds.includes(project.id) ? 'primary' : 'default'
+                            }
+                            onClick={() =>
+                              setNewActionItemProjectIds((prev) =>
+                                prev.includes(project.id)
+                                  ? prev.filter((id) => id !== project.id)
+                                  : [...prev, project.id]
+                              )
+                            }
+                          />
+                        ))}
+                      </Box>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 0.5, display: 'block' }}
+                      >
+                        Select projects to link after creation
+                      </Typography>
+                    </Grid>
+                  )}
                   <Grid item xs={12}>
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <Button
@@ -1116,104 +1445,400 @@ const MeetingDetails = () => {
               </Paper>
             )}
 
-            <Stack spacing={2}>
-              {meeting.transcription?.action_items.map((item) => (
-                <Paper
-                  key={item.id}
-                  elevation={1}
-                  sx={{ p: 2, borderLeft: 6, borderColor: 'primary.main' }}
-                >
-                  {editingActionItem?.id === item.id ? (
-                    <Grid container spacing={2}>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Task"
-                          value={editingActionItem.task}
-                          onChange={(e) =>
-                            setEditingActionItem({ ...editingActionItem, task: e.target.value })
-                          }
-                        />
-                      </Grid>
-                      <Grid item xs={6}>
-                        <TextField
-                          fullWidth
-                          label="Owner"
-                          value={editingActionItem.owner}
-                          onChange={(e) =>
-                            setEditingActionItem({ ...editingActionItem, owner: e.target.value })
-                          }
-                        />
-                      </Grid>
-                      <Grid item xs={6}>
-                        <TextField
-                          fullWidth
-                          type="date"
-                          label="Due Date"
-                          InputLabelProps={{ shrink: true }}
-                          value={editingActionItem.due_date}
-                          onChange={(e) =>
-                            setEditingActionItem({ ...editingActionItem, due_date: e.target.value })
-                          }
-                        />
-                      </Grid>
-                      <Grid item xs={12}>
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <Button onClick={() => setEditingActionItem(null)}>Cancel</Button>
-                          <Button variant="contained" onClick={handleUpdateActionItem}>
-                            Save
-                          </Button>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                  ) : (
-                    <Box
+            {/* Kanban Board */}
+            <DragDropContext onDragEnd={handleActionItemDragEnd}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 2,
+                  overflowX: 'auto',
+                  pb: 2,
+                  '&::-webkit-scrollbar': { height: 8 },
+                  '&::-webkit-scrollbar-track': {
+                    bgcolor: isDarkMode ? 'grey.800' : 'grey.100',
+                    borderRadius: 4,
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    bgcolor: isDarkMode ? 'grey.600' : 'grey.300',
+                    borderRadius: 4,
+                  },
+                }}
+              >
+                {Object.entries(actionItemColumns).map(([columnId, colItems]) => {
+                  const config = kanbanColumnConfig[columnId];
+                  const ColIcon = config.icon;
+                  return (
+                    <Paper
+                      key={columnId}
+                      elevation={0}
                       sx={{
+                        minWidth: 280,
+                        flex: '1 1 280px',
+                        bgcolor: 'background.paper',
+                        borderRadius: 3,
+                        border: '1px solid',
+                        borderColor: 'divider',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
                       }}
                     >
-                      <Box>
-                        <Typography variant="h6" gutterBottom>
-                          {item.task}
-                        </Typography>
-                        <Stack direction="row" spacing={1}>
-                          <Chip
-                            icon={<PersonIcon />}
-                            label={item.owner || 'Unassigned'}
-                            size="small"
-                            variant="outlined"
-                          />
-                          <Chip
-                            icon={<CalendarIcon />}
-                            label={item.due_date || 'No Date'}
-                            size="small"
-                            variant="outlined"
-                          />
-                        </Stack>
-                      </Box>
-                      <Box>
-                        <IconButton size="small" onClick={() => setEditingActionItem(item)}>
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteActionItem(item.id)}
+                      {/* Column Header */}
+                      <Box sx={{ p: 2, background: config.gradient, color: 'white' }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ColIcon />
+                            <Typography variant="h6" fontWeight={700}>
+                              {config.label}
+                            </Typography>
+                          </Box>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAddOpen(columnId)}
+                            sx={{
+                              color: 'white',
+                              opacity: 0.8,
+                              '&:hover': { opacity: 1, bgcolor: 'rgba(255,255,255,0.2)' },
+                            }}
+                          >
+                            <AddIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                        <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                          {colItems.length} {colItems.length === 1 ? 'item' : 'items'}
+                        </Typography>
                       </Box>
-                    </Box>
-                  )}
-                </Paper>
-              ))}
-              {meeting.transcription?.action_items.length === 0 && (
-                <Alert severity="info">No action items found.</Alert>
-              )}
-            </Stack>
+
+                      {/* Droppable Area */}
+                      <Droppable droppableId={columnId}>
+                        {(provided, snapshot) => (
+                          <Box
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            sx={{
+                              p: 1.5,
+                              flex: 1,
+                              minHeight: 200,
+                              bgcolor: snapshot.isDraggingOver
+                                ? alpha(theme.palette.primary.main, 0.08)
+                                : 'transparent',
+                              transition: 'background-color 0.2s ease',
+                            }}
+                          >
+                            {colItems.length === 0 && !snapshot.isDraggingOver && (
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  py: 4,
+                                  opacity: 0.5,
+                                }}
+                              >
+                                <ColIcon sx={{ fontSize: 40, mb: 1 }} />
+                                <Typography variant="body2" color="text.secondary">
+                                  No items
+                                </Typography>
+                              </Box>
+                            )}
+                            {colItems.map((item, index) => (
+                              <Draggable
+                                key={item.id.toString()}
+                                draggableId={item.id.toString()}
+                                index={index}
+                              >
+                                {(dragProvided, dragSnapshot) => (
+                                  <Card
+                                    ref={dragProvided.innerRef}
+                                    {...dragProvided.draggableProps}
+                                    {...dragProvided.dragHandleProps}
+                                    elevation={dragSnapshot.isDragging ? 8 : 1}
+                                    sx={{
+                                      mb: 1.5,
+                                      cursor: 'grab',
+                                      borderRadius: 2,
+                                      border: '1px solid',
+                                      borderColor: dragSnapshot.isDragging
+                                        ? 'primary.main'
+                                        : 'transparent',
+                                      transform: dragSnapshot.isDragging
+                                        ? 'rotate(2deg) scale(1.02)'
+                                        : 'none',
+                                      transition: dragSnapshot.isDragging
+                                        ? 'none'
+                                        : 'all 0.2s ease',
+                                      '&:hover': {
+                                        boxShadow: 4,
+                                        borderColor: 'primary.light',
+                                        transform: 'translateY(-1px)',
+                                      },
+                                      '&:active': { cursor: 'grabbing' },
+                                    }}
+                                  >
+                                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                      <Box
+                                        sx={{
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'flex-start',
+                                          mb: 1,
+                                        }}
+                                      >
+                                        {item.priority && (
+                                          <Chip
+                                            icon={<FlagIcon sx={{ fontSize: '14px !important' }} />}
+                                            label={
+                                              item.priority.charAt(0).toUpperCase() +
+                                              item.priority.slice(1)
+                                            }
+                                            size="small"
+                                            sx={{
+                                              bgcolor: alpha(getPriorityColor(item.priority), 0.15),
+                                              color: getPriorityColor(item.priority),
+                                              fontWeight: 600,
+                                              fontSize: '0.7rem',
+                                              height: 24,
+                                              '& .MuiChip-icon': {
+                                                color: getPriorityColor(item.priority),
+                                              },
+                                            }}
+                                          />
+                                        )}
+                                        <IconButton
+                                          size="small"
+                                          onClick={(e) => handleMenuOpen(e, item)}
+                                          sx={{
+                                            mt: -0.5,
+                                            mr: -0.5,
+                                            ml: 'auto',
+                                            opacity: 0.6,
+                                            '&:hover': { opacity: 1 },
+                                          }}
+                                        >
+                                          <MoreVertIcon fontSize="small" />
+                                        </IconButton>
+                                      </Box>
+                                      <Typography
+                                        variant="body2"
+                                        sx={{
+                                          mb: 1.5,
+                                          fontWeight: 500,
+                                          lineHeight: 1.5,
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 3,
+                                          WebkitBoxOrient: 'vertical',
+                                          overflow: 'hidden',
+                                        }}
+                                      >
+                                        {item.task}
+                                      </Typography>
+                                      <Stack
+                                        direction="row"
+                                        spacing={0.5}
+                                        flexWrap="wrap"
+                                        useFlexGap
+                                      >
+                                        {item.owner && (
+                                          <Chip
+                                            icon={<PersonIcon />}
+                                            label={item.owner}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{
+                                              height: 26,
+                                              '& .MuiChip-label': { fontSize: '0.75rem' },
+                                            }}
+                                          />
+                                        )}
+                                        {item.due_date && (
+                                          <Chip
+                                            icon={<CalendarIcon />}
+                                            label={item.due_date}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{
+                                              height: 26,
+                                              '& .MuiChip-label': { fontSize: '0.75rem' },
+                                            }}
+                                          />
+                                        )}
+                                      </Stack>
+                                    </CardContent>
+                                  </Card>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </Box>
+                        )}
+                      </Droppable>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            </DragDropContext>
+
+            {meeting.transcription?.action_items?.length === 0 && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                No action items found for this meeting.
+              </Alert>
+            )}
           </Box>
+
+          {/* Action Item Menu */}
+          <Menu
+            anchorEl={menuAnchorEl}
+            open={Boolean(menuAnchorEl)}
+            onClose={handleMenuClose}
+            PaperProps={{
+              elevation: 3,
+              sx: {
+                borderRadius: 2,
+                minWidth: 140,
+                '& .MuiMenuItem-root': {
+                  borderRadius: 1,
+                  mx: 0.5,
+                  '&:hover': { bgcolor: 'action.hover' },
+                },
+              },
+            }}
+          >
+            <MenuItem onClick={handleEditOpen}>
+              <ListItemIcon>
+                <EditIcon fontSize="small" color="primary" />
+              </ListItemIcon>
+              <ListItemText>Edit</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                handleDeleteActionItem(selectedActionItem?.id);
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                <DeleteIcon fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText sx={{ color: 'error.main' }}>Delete</ListItemText>
+            </MenuItem>
+          </Menu>
+
+          {/* Edit Dialog */}
+          <Dialog
+            open={editDialogOpen}
+            onClose={() => setEditDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+            PaperProps={{ sx: { borderRadius: 3 } }}
+          >
+            <DialogTitle sx={{ pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <EditIcon color="primary" />
+                <Typography variant="h6" fontWeight={600}>
+                  Edit Action Item
+                </Typography>
+              </Box>
+            </DialogTitle>
+            <DialogContent sx={{ pt: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1 }}>
+                <TextField
+                  label="Task Description"
+                  value={editingActionItem?.task || ''}
+                  onChange={(e) =>
+                    setEditingActionItem({ ...editingActionItem, task: e.target.value })
+                  }
+                  multiline
+                  rows={3}
+                  fullWidth
+                />
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    label="Assigned To"
+                    value={editingActionItem?.owner || ''}
+                    onChange={(e) =>
+                      setEditingActionItem({ ...editingActionItem, owner: e.target.value })
+                    }
+                    fullWidth
+                  />
+                  <TextField
+                    label="Due Date"
+                    type="date"
+                    value={editingActionItem?.due_date || ''}
+                    onChange={(e) =>
+                      setEditingActionItem({ ...editingActionItem, due_date: e.target.value })
+                    }
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                  />
+                </Box>
+                {projects.length > 0 && (
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Projects
+                    </Typography>
+                    {loadingProjects ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {projects.map((project) => {
+                          const isLinked = actionItemProjects
+                            .get(editingActionItem?.id)
+                            ?.has(project.id);
+                          return (
+                            <Chip
+                              key={project.id}
+                              label={project.name}
+                              clickable
+                              variant={isLinked ? 'filled' : 'outlined'}
+                              color={isLinked ? 'primary' : 'default'}
+                              onClick={() => {
+                                if (isLinked) {
+                                  handleUnlinkProject(editingActionItem.id, project.id);
+                                } else {
+                                  handleLinkProject(project.id);
+                                }
+                              }}
+                            />
+                          );
+                        })}
+                      </Box>
+                    )}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ mt: 1, display: 'block' }}
+                    >
+                      Click project chips to link/unlink this action item
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </DialogContent>
+            <DialogActions sx={{ p: 2.5, pt: 1 }}>
+              <Button
+                onClick={() => setEditDialogOpen(false)}
+                startIcon={<CloseIcon />}
+                sx={{ borderRadius: 2 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpdateActionItem}
+                variant="contained"
+                startIcon={<SaveIcon />}
+                sx={{ borderRadius: 2 }}
+                disabled={!editingActionItem?.task?.trim()}
+              >
+                Save Changes
+              </Button>
+            </DialogActions>
+          </Dialog>
         </TabPanel>
 
         {/* Notes Tab */}

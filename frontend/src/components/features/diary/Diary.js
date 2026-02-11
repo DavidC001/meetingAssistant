@@ -308,7 +308,9 @@ const Diary = () => {
     const itemData = e.dataTransfer.getData('application/json');
     if (itemData) {
       const item = JSON.parse(itemData);
-      const reference = `- [ ] **${item.task}** _(Action Item #${item.id})_`;
+      // Use [x] for completed items, [ ] for others
+      const checkbox = item.status === 'completed' ? 'x' : ' ';
+      const reference = `- [${checkbox}] **${item.task}** _(Action Item #${item.id})_`;
 
       // Find the "Worked on:" section and insert the reference there
       const workedOnPattern = /## Worked on:/i;
@@ -759,7 +761,7 @@ const Diary = () => {
                             <Box display="flex" alignItems="center" gap={1} mb={1}>
                               <CheckCircleIcon color="success" fontSize="small" />
                               <Typography variant="subtitle2" color="success.main">
-                                Completed Today (
+                                Completed (
                                 {filterActionItems(actionItemsSummary.completed_items || []).length}
                                 )
                               </Typography>

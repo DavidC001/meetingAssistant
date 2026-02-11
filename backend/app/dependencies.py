@@ -22,8 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import AppConfig, config
 from app.database import get_db
-from app.modules.calendar.repository import GoogleCalendarCredentialsRepository, ScheduledMeetingRepository
-from app.modules.calendar.service import CalendarCredentialsService, CalendarService, ScheduledMeetingService
+from app.modules.calendar.repository import GoogleCalendarCredentialsRepository
+from app.modules.calendar.service import CalendarCredentialsService
 from app.modules.chat.repository import ChatMessageRepository, GlobalChatMessageRepository, GlobalChatSessionRepository
 from app.modules.chat.service import ChatService, GlobalChatService
 from app.modules.diary.repository import DiaryRepository
@@ -260,19 +260,6 @@ def get_calendar_credentials_repository(db: Session = Depends(get_db)) -> Google
     return GoogleCalendarCredentialsRepository(db)
 
 
-def get_scheduled_meeting_repository(db: Session = Depends(get_db)) -> ScheduledMeetingRepository:
-    """
-    Get scheduled meeting repository instance.
-
-    Args:
-        db: Database session (injected)
-
-    Returns:
-        ScheduledMeetingRepository instance
-    """
-    return ScheduledMeetingRepository(db)
-
-
 def get_calendar_credentials_service(db: Session = Depends(get_db)) -> CalendarCredentialsService:
     """
     Get calendar credentials service instance.
@@ -284,29 +271,3 @@ def get_calendar_credentials_service(db: Session = Depends(get_db)) -> CalendarC
         CalendarCredentialsService instance
     """
     return CalendarCredentialsService(db)
-
-
-def get_scheduled_meeting_service(db: Session = Depends(get_db)) -> ScheduledMeetingService:
-    """
-    Get scheduled meeting service instance.
-
-    Args:
-        db: Database session (injected)
-
-    Returns:
-        ScheduledMeetingService instance
-    """
-    return ScheduledMeetingService(db)
-
-
-def get_calendar_service(db: Session = Depends(get_db)) -> CalendarService:
-    """
-    Get calendar service instance (combined).
-
-    Args:
-        db: Database session (injected)
-
-    Returns:
-        CalendarService instance
-    """
-    return CalendarService(db)

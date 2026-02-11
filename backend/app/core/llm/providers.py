@@ -313,7 +313,29 @@ class OllamaProvider(LLMProvider):
             formatted_messages = []
             if system_prompt:
                 formatted_messages.append({"role": "system", "content": system_prompt})
-            formatted_messages.extend(messages)
+
+            # Transform messages for Ollama compatibility
+            # Ollama only supports roles: system, user, assistant (not "tool")
+            # Strip unsupported fields (e.g., tool_calls) to keep payload valid.
+            for msg in messages:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role == "tool":
+                    tool_name = msg.get("name", "unknown")
+                    tool_content = msg.get("content", "")
+                    formatted_messages.append(
+                        {
+                            "role": "user",
+                            "content": f"Tool '{tool_name}' returned: {tool_content}",
+                        }
+                    )
+                else:
+                    formatted_messages.append(
+                        {
+                            "role": role or "user",
+                            "content": content,
+                        }
+                    )
 
             payload = {
                 "model": self.config.model,
@@ -330,12 +352,26 @@ class OllamaProvider(LLMProvider):
                 payload["tools"] = tools
 
             # Use asyncio to run the synchronous request
-            def make_request():
-                response = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.config.timeout)
-                response.raise_for_status()
+            def make_request(request_payload: dict):
+                response = requests.post(f"{self.base_url}/api/chat", json=request_payload, timeout=self.config.timeout)
+                if not response.ok:
+                    if response.status_code == 400:
+                        self.logger.error(
+                            "Ollama 400 response body: %s",
+                            response.text,
+                        )
+                    response.raise_for_status()
                 return response.json()
 
-            result = await asyncio.get_event_loop().run_in_executor(None, make_request)
+            try:
+                result = await asyncio.get_event_loop().run_in_executor(None, make_request, payload)
+            except requests.exceptions.HTTPError as exc:
+                if tools and getattr(exc.response, "status_code", None) == 400:
+                    self.logger.warning("Ollama returned 400 with tools enabled. Retrying without tools.")
+                    payload.pop("tools", None)
+                    result = await asyncio.get_event_loop().run_in_executor(None, make_request, payload)
+                else:
+                    raise
             message = result.get("message", {})
 
             # Check if the model wants to call tools (Ollama uses same format as OpenAI)

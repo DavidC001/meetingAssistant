@@ -7,7 +7,7 @@ from . import crud, models, schemas
 from .core.processing import chunking
 from .core.processing.document_processor import extract_text
 from .core.storage.embeddings import batched_embeddings, get_embedding_provider
-from .core.storage.vector_store import DEFAULT_VECTOR_STORE
+from .core.storage.vector_store import DEFAULT_PROJECT_VECTOR_STORE, DEFAULT_VECTOR_STORE
 from .database import SessionLocal
 from .worker import celery_app
 
@@ -680,6 +680,196 @@ def index_attachment(self, attachment_id: int):
 
     except Exception as e:
         logger.error(f"Error indexing attachment {attachment_id}: {e}", exc_info=True)
+        return {"status": "error", "attachment_id": attachment_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3,
+)
+def index_project_note(self, note_id: int):
+    """Index a project note for RAG."""
+    db = SessionLocal()
+    try:
+        note = db.query(models.ProjectNote).filter(models.ProjectNote.id == note_id).first()
+        if not note:
+            return {"status": "error", "reason": "note_not_found"}
+
+        provider, config = get_embedding_provider(db)
+
+        DEFAULT_PROJECT_VECTOR_STORE.delete_note_content_by_note_id(db, note_id)
+
+        if not note.content:
+            return {"status": "completed", "chunks": 0, "note_id": note_id}
+
+        note_chunks = chunking.chunk_notes(
+            note.content,
+            metadata={
+                "section": "project_note",
+                "note_id": note.id,
+                "note_title": note.title,
+            },
+        )
+
+        if not note_chunks:
+            return {"status": "completed", "chunks": 0, "note_id": note_id}
+
+        payloads = []
+        for i, chunk in enumerate(note_chunks):
+            metadata = dict(chunk.metadata or {})
+            payloads.append(
+                {
+                    "content": chunk.content,
+                    "content_type": chunk.content_type,
+                    "chunk_index": i,
+                    "metadata": metadata,
+                    "note_id": note.id,
+                }
+            )
+
+        embeddings = batched_embeddings(provider, [p["content"] for p in payloads])
+
+        DEFAULT_PROJECT_VECTOR_STORE.add_documents(
+            db,
+            project_id=note.project_id,
+            chunks=payloads,
+            embeddings=embeddings,
+            embedding_config_id=config.id,
+        )
+
+        return {"status": "completed", "chunks": len(payloads), "note_id": note_id}
+    except Exception as e:
+        logger.error(f"Error indexing project note {note_id}: {e}", exc_info=True)
+        return {"status": "error", "note_id": note_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    max_retries=3,
+)
+def index_project_note_attachment(self, attachment_id: int):
+    """Index a single project note attachment for RAG."""
+    db = SessionLocal()
+    try:
+        attachment = (
+            db.query(models.ProjectNoteAttachment).filter(models.ProjectNoteAttachment.id == attachment_id).first()
+        )
+        if not attachment:
+            return {"status": "error", "reason": "attachment_not_found"}
+
+        provider, config = get_embedding_provider(db)
+
+        DEFAULT_PROJECT_VECTOR_STORE.delete_by_attachment_id(db, attachment_id)
+
+        try:
+            text = extract_text(attachment.filepath, attachment.mime_type)
+        except Exception as e:
+            logger.warning(f"Failed to extract text from project attachment {attachment_id}: {e}")
+            return {"status": "error", "reason": "text_extraction_failed", "error": str(e)}
+
+        if not text or not text.strip():
+            return {"status": "completed", "chunks": 0, "attachment_id": attachment_id}
+
+        note_title = None
+        if attachment.note_id:
+            note = db.query(models.ProjectNote).filter(models.ProjectNote.id == attachment.note_id).first()
+            note_title = note.title if note else None
+
+        attachment_chunks = chunking.chunk_document(
+            text,
+            metadata={
+                "section": "project_note_attachment",
+                "note_id": attachment.note_id,
+                "note_title": note_title,
+                "attachment_id": attachment.id,
+                "attachment_name": attachment.filename,
+            },
+        )
+
+        if not attachment_chunks:
+            return {"status": "completed", "chunks": 0, "attachment_id": attachment_id}
+
+        payloads = []
+        for i, chunk in enumerate(attachment_chunks):
+            metadata = dict(chunk.metadata or {})
+            payloads.append(
+                {
+                    "content": chunk.content,
+                    "content_type": chunk.content_type,
+                    "chunk_index": i,
+                    "metadata": metadata,
+                    "note_id": attachment.note_id,
+                    "attachment_id": attachment.id,
+                }
+            )
+
+        embeddings = batched_embeddings(provider, [p["content"] for p in payloads])
+
+        DEFAULT_PROJECT_VECTOR_STORE.add_documents(
+            db,
+            project_id=attachment.project_id,
+            chunks=payloads,
+            embeddings=embeddings,
+            embedding_config_id=config.id,
+        )
+
+        return {"status": "completed", "chunks": len(payloads), "attachment_id": attachment_id}
+    except Exception as e:
+        logger.error(f"Error indexing project attachment {attachment_id}: {e}", exc_info=True)
+        return {"status": "error", "attachment_id": attachment_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3,
+)
+def remove_project_note_embeddings(self, note_id: int):
+    """Remove embeddings for a deleted project note."""
+    db = SessionLocal()
+    try:
+        DEFAULT_PROJECT_VECTOR_STORE.delete_by_note_id(db, note_id)
+        return {"status": "completed", "note_id": note_id}
+    except Exception as e:
+        logger.error(f"Error removing project note embeddings {note_id}: {e}", exc_info=True)
+        return {"status": "error", "note_id": note_id, "error": str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3,
+)
+def remove_project_attachment_embeddings(self, attachment_id: int):
+    """Remove embeddings for a deleted project note attachment."""
+    db = SessionLocal()
+    try:
+        DEFAULT_PROJECT_VECTOR_STORE.delete_by_attachment_id(db, attachment_id)
+        return {"status": "completed", "attachment_id": attachment_id}
+    except Exception as e:
+        logger.error(f"Error removing project attachment embeddings {attachment_id}: {e}", exc_info=True)
         return {"status": "error", "attachment_id": attachment_id, "error": str(e)}
     finally:
         db.close()

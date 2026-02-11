@@ -1,25 +1,57 @@
-from .modules.settings.schemas import (
-    APIKeyBase, APIKeyCreate, APIKeyUpdate, APIKey,
-    ModelConfigurationBase, ModelConfigurationCreate, ModelConfigurationUpdate, ModelConfiguration,
-    EmbeddingConfigurationBase, EmbeddingConfigurationCreate, EmbeddingConfigurationUpdate, EmbeddingConfiguration,
-    WorkerConfiguration, WorkerConfigurationUpdate
-)
-from .modules.meetings.schemas import (
-    SpeakerBase, SpeakerCreate, Speaker,
-    AttachmentBase, AttachmentCreate, Attachment,
-    ActionItemBase, ActionItemCreate, ActionItemUpdate, ActionItem, ActionItemWithMeeting,
-    TranscriptionBase, TranscriptionCreate, Transcription,
-    MeetingMetadata, MeetingBase, MeetingCreate, MeetingUpdate, Meeting,
-    DocumentChunk
+from .modules.calendar.schemas import (
+    CalendarEventSync,
+    GoogleCalendarAuthCode,
+    GoogleCalendarAuthUrl,
+    GoogleCalendarStatus,
 )
 from .modules.chat.schemas import (
-    ChatMessage, ChatHistoryResponse, ChatRequest, ChatResponse,
-    GlobalChatSession, GlobalChatMessage, GlobalChatSessionCreate, GlobalChatSessionUpdate, GlobalChatMessageCreate, GlobalChatSessionDetail
+    ChatHistoryResponse,
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    GlobalChatMessage,
+    GlobalChatMessageCreate,
+    GlobalChatSession,
+    GlobalChatSessionCreate,
+    GlobalChatSessionDetail,
+    GlobalChatSessionUpdate,
 )
-from .modules.calendar.schemas import (
-    GoogleCalendarAuthUrl, GoogleCalendarAuthCode, GoogleCalendarStatus, CalendarEventSync,
-    ScheduledMeetingBase, ScheduledMeetingCreate, ScheduledMeetingUpdate, ScheduledMeeting, ScheduledMeetingWithLinkedMeeting
+from .modules.meetings.schemas import (
+    ActionItem,
+    ActionItemBase,
+    ActionItemCreate,
+    ActionItemUpdate,
+    ActionItemWithMeeting,
+    Attachment,
+    AttachmentBase,
+    AttachmentCreate,
+    DocumentChunk,
+    Meeting,
+    MeetingBase,
+    MeetingCreate,
+    MeetingMetadata,
+    MeetingUpdate,
+    Speaker,
+    SpeakerBase,
+    SpeakerCreate,
+    Transcription,
+    TranscriptionBase,
+    TranscriptionCreate,
 )
-from .modules.users.schemas import (
-    UserMappingBase, UserMappingCreate, UserMappingUpdate, UserMapping
+from .modules.settings.schemas import (
+    APIKey,
+    APIKeyBase,
+    APIKeyCreate,
+    APIKeyUpdate,
+    EmbeddingConfiguration,
+    EmbeddingConfigurationBase,
+    EmbeddingConfigurationCreate,
+    EmbeddingConfigurationUpdate,
+    ModelConfiguration,
+    ModelConfigurationBase,
+    ModelConfigurationCreate,
+    ModelConfigurationUpdate,
+    WorkerConfiguration,
+    WorkerConfigurationUpdate,
 )
+from .modules.users.schemas import UserMapping, UserMappingBase, UserMappingCreate, UserMappingUpdate

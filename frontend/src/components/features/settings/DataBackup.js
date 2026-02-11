@@ -31,6 +31,7 @@ const DataBackup = () => {
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [mergeMode, setMergeMode] = useState(false);
+  const [includeAudio, setIncludeAudio] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
@@ -40,7 +41,7 @@ const DataBackup = () => {
     setResult(null);
 
     try {
-      const response = await fetch('/api/v1/backup/export');
+      const response = await fetch(`/api/v1/backup/export?include_audio=${includeAudio}`);
 
       if (!response.ok) {
         throw new Error(`Export failed: ${response.statusText}`);
@@ -50,7 +51,8 @@ const DataBackup = () => {
       const contentDisposition = response.headers.get('Content-Disposition');
       const filenameMatch = contentDisposition?.match(/filename="?([^"]+)"?/);
       const filename =
-        filenameMatch?.[1] || `backup_${new Date().toISOString().split('T')[0]}.json`;
+        filenameMatch?.[1] ||
+        `backup_${new Date().toISOString().split('T')[0]}.${includeAudio ? 'zip' : 'json'}`;
 
       // Download file
       const blob = await response.blob();
@@ -65,7 +67,7 @@ const DataBackup = () => {
 
       setResult({
         type: 'success',
-        message: 'Data exported successfully!',
+        message: `Data exported successfully${includeAudio ? ' (with audio files)' : ''}!`,
         filename: filename,
       });
     } catch (err) {
@@ -179,10 +181,30 @@ const DataBackup = () => {
               <ListItemIcon sx={{ minWidth: 30 }}>
                 <WarningIcon fontSize="small" color="warning" />
               </ListItemIcon>
-              <ListItemText primary="Note: Audio files and OAuth credentials are NOT included" />
+              <ListItemText primary="Note: OAuth credentials are NOT included" />
             </ListItem>
           </List>
         </Alert>
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={includeAudio}
+              onChange={(e) => setIncludeAudio(e.target.checked)}
+              disabled={exporting}
+            />
+          }
+          label={
+            includeAudio ? '📦 Include audio files (ZIP format)' : '📄 Export as JSON (no audio)'
+          }
+          sx={{ mb: 2 }}
+        />
+        {includeAudio && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Audio files will be included. This may create a large file size. Depending on the number
+            and size of your audio files, the export may take a few minutes.
+          </Alert>
+        )}
 
         <Button
           variant="contained"
@@ -235,7 +257,7 @@ const DataBackup = () => {
           <input
             id="backup-file-input"
             type="file"
-            accept=".json"
+            accept=".json,.zip"
             onChange={handleFileSelect}
             style={{ display: 'none' }}
             disabled={importing}

@@ -107,6 +107,7 @@ class ActionItem(Base):
     transcription_id = Column(Integer, ForeignKey("transcriptions.id"), nullable=True, index=True)
     task = Column(String)
     owner = Column(String, nullable=True)
+    start_date = Column(DateTime(timezone=True), nullable=True)
     due_date = Column(String, nullable=True)
     is_manual = Column(Boolean, default=False)
     google_calendar_event_id = Column(String, nullable=True)

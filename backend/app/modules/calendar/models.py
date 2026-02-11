@@ -16,17 +16,3 @@ class GoogleCalendarCredentials(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (Index("idx_calendar_user_active", "user_id", "is_active"),)
-
-
-class ScheduledMeeting(Base):
-    __tablename__ = "scheduled_meetings"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    scheduled_time = Column(DateTime(timezone=True), nullable=False, index=True)
-    duration_minutes = Column(Integer, default=60)
-    location = Column(String, nullable=True)
-    attendees = Column(Text, nullable=True)
-
-    __table_args__ = (Index("idx_scheduled_time_duration", "scheduled_time", "duration_minutes"),)

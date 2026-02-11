@@ -494,3 +494,448 @@ def export_meeting_data(data: dict[str, Any], base_filename: str, formats: list 
             results[fmt] = None
 
     return results
+
+
+def export_project_to_json(data: dict[str, Any], filename: str) -> Path:
+    """Export project data to a JSON file."""
+    return export_to_json(data, filename)
+
+
+def export_project_to_txt(data: dict[str, Any], filename: str) -> Path:
+    """Export project data to a text file."""
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    project = data.get("project", {})
+    metrics = data.get("metrics", {})
+    meetings = data.get("meetings", [])
+    milestones = data.get("milestones", [])
+    action_items = data.get("action_items", [])
+    members = data.get("members", [])
+    notes = data.get("notes", [])
+
+    def format_dt(value: Any) -> str:
+        if value is None:
+            return "N/A"
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("╔═══════════════════════════════════════════════════════════════════╗\n")
+        f.write("║                      PROJECT SUMMARY REPORT                       ║\n")
+        f.write("╚═══════════════════════════════════════════════════════════════════╝\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("PROJECT INFORMATION\n")
+        f.write("=" * 70 + "\n\n")
+
+        f.write(f"Name: {project.get('name', 'N/A')}\n")
+        f.write(f"Status: {project.get('status', 'N/A')}\n")
+        if project.get("folders"):
+            f.write(f"Folders: {', '.join(project.get('folders', []))}\n")
+        if project.get("description"):
+            f.write(f"Description: {project.get('description')}\n")
+        f.write(f"Start Date: {format_dt(project.get('start_date'))}\n")
+        f.write(f"Target End Date: {format_dt(project.get('target_end_date'))}\n")
+        f.write(f"Actual End Date: {format_dt(project.get('actual_end_date'))}\n")
+        f.write(f"Created At: {format_dt(project.get('created_at'))}\n")
+        f.write(f"Updated At: {format_dt(project.get('updated_at'))}\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("KEY METRICS\n")
+        f.write("=" * 70 + "\n\n")
+        f.write(f"Meetings: {metrics.get('meeting_count', 0)}\n")
+        f.write(
+            f"Action Items: {metrics.get('completed_action_items', 0)}/{metrics.get('action_item_count', 0)} completed\n"
+        )
+        f.write(f"Members: {metrics.get('member_count', 0)}\n")
+        f.write(f"Milestones: {metrics.get('milestone_count', 0)}\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("MILESTONES\n")
+        f.write("=" * 70 + "\n\n")
+        if milestones:
+            for idx, milestone in enumerate(milestones, 1):
+                f.write(f"{idx}. {milestone.get('name', 'Untitled')}\n")
+                f.write(f"   Status: {milestone.get('status', 'pending')}\n")
+                f.write(f"   Due Date: {format_dt(milestone.get('due_date'))}\n")
+                f.write(f"   Completed At: {format_dt(milestone.get('completed_at'))}\n")
+                if milestone.get("description"):
+                    f.write(f"   Description: {milestone.get('description')}\n")
+                f.write("\n")
+        else:
+            f.write("No milestones recorded.\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("TEAM MEMBERS\n")
+        f.write("=" * 70 + "\n\n")
+        if members:
+            for idx, member in enumerate(members, 1):
+                f.write(f"{idx}. {member.get('name', 'Unknown')}\n")
+                if member.get("email"):
+                    f.write(f"   Email: {member.get('email')}\n")
+                if member.get("role"):
+                    f.write(f"   Role: {member.get('role')}\n")
+                f.write("\n")
+        else:
+            f.write("No members recorded.\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("MEETINGS\n")
+        f.write("=" * 70 + "\n\n")
+        if meetings:
+            for idx, meeting in enumerate(meetings, 1):
+                f.write(f"{idx}. {meeting.get('title') or meeting.get('filename') or 'Untitled Meeting'}\n")
+                f.write(f"   Date: {format_dt(meeting.get('meeting_date') or meeting.get('created_at'))}\n")
+                f.write(f"   Status: {meeting.get('status', 'unknown')}\n")
+                f.write(f"   Action Items: {meeting.get('action_items_count', 0)}\n")
+                speakers = meeting.get("speakers") or []
+                if speakers:
+                    f.write(f"   Speakers: {', '.join(speakers)}\n")
+                f.write("\n")
+        else:
+            f.write("No meetings recorded.\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("ACTION ITEMS\n")
+        f.write("=" * 70 + "\n\n")
+        if action_items:
+            for idx, item in enumerate(action_items, 1):
+                f.write(f"{idx}. {item.get('task', 'Untitled Task')}\n")
+                if item.get("owner"):
+                    f.write(f"   Owner: {item.get('owner')}\n")
+                if item.get("due_date"):
+                    f.write(f"   Due Date: {item.get('due_date')}\n")
+                if item.get("status"):
+                    f.write(f"   Status: {item.get('status')}\n")
+                if item.get("priority"):
+                    f.write(f"   Priority: {item.get('priority')}\n")
+                meeting_title = item.get("meeting_title") or item.get("meeting_filename")
+                if meeting_title:
+                    f.write(f"   Meeting: {meeting_title}\n")
+                if item.get("notes"):
+                    f.write(f"   Notes: {item.get('notes')}\n")
+                f.write("\n")
+        else:
+            f.write("No action items recorded.\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write("PROJECT NOTES\n")
+        f.write("=" * 70 + "\n\n")
+        if notes:
+            for idx, note in enumerate(notes, 1):
+                f.write(f"{idx}. {note.get('title', 'Untitled Note')}\n")
+                f.write(f"   Pinned: {'Yes' if note.get('pinned') else 'No'}\n")
+                f.write(f"   Updated: {format_dt(note.get('updated_at'))}\n")
+                if note.get("content"):
+                    f.write(f"   Content:\n{note.get('content')}\n")
+                attachments = note.get("attachments", [])
+                if attachments:
+                    f.write("   Attachments:\n")
+                    for attachment in attachments:
+                        f.write(f"     - {attachment.get('filename', 'attachment')}\n")
+                f.write("\n")
+        else:
+            f.write("No project notes recorded.\n\n")
+
+        f.write("=" * 70 + "\n")
+        f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write("=" * 70 + "\n")
+
+    logger.info(f"Exported project data to TXT: {path}")
+    return path
+
+
+def export_project_to_docx(data: dict[str, Any], filename: str) -> Path | None:
+    """Export project data to a DOCX file."""
+    if Document is None:
+        logger.warning("python-docx not installed. Cannot export project to DOCX.")
+        return None
+
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    project = data.get("project", {})
+    metrics = data.get("metrics", {})
+    meetings = data.get("meetings", [])
+    milestones = data.get("milestones", [])
+    action_items = data.get("action_items", [])
+    members = data.get("members", [])
+    notes = data.get("notes", [])
+
+    def format_dt(value: Any) -> str:
+        if value is None:
+            return "N/A"
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
+
+    document = Document()
+    document.add_heading("Project Summary Report", 0)
+
+    document.add_heading("Project Information", level=1)
+    document.add_paragraph(f"Name: {project.get('name', 'N/A')}")
+    document.add_paragraph(f"Status: {project.get('status', 'N/A')}")
+    if project.get("folders"):
+        document.add_paragraph(f"Folders: {', '.join(project.get('folders', []))}")
+    if project.get("description"):
+        document.add_paragraph(f"Description: {project.get('description')}")
+    document.add_paragraph(f"Start Date: {format_dt(project.get('start_date'))}")
+    document.add_paragraph(f"Target End Date: {format_dt(project.get('target_end_date'))}")
+    document.add_paragraph(f"Actual End Date: {format_dt(project.get('actual_end_date'))}")
+    document.add_paragraph(f"Created At: {format_dt(project.get('created_at'))}")
+    document.add_paragraph(f"Updated At: {format_dt(project.get('updated_at'))}")
+
+    document.add_heading("Key Metrics", level=1)
+    document.add_paragraph(f"Meetings: {metrics.get('meeting_count', 0)}", style="List Bullet")
+    document.add_paragraph(
+        f"Action Items: {metrics.get('completed_action_items', 0)}/{metrics.get('action_item_count', 0)} completed",
+        style="List Bullet",
+    )
+    document.add_paragraph(f"Members: {metrics.get('member_count', 0)}", style="List Bullet")
+    document.add_paragraph(f"Milestones: {metrics.get('milestone_count', 0)}", style="List Bullet")
+
+    document.add_heading("Milestones", level=1)
+    if milestones:
+        for milestone in milestones:
+            milestone_title = milestone.get("name", "Untitled")
+            document.add_paragraph(milestone_title, style="List Number")
+            document.add_paragraph(f"Status: {milestone.get('status', 'pending')}", style="List Bullet 2")
+            document.add_paragraph(f"Due Date: {format_dt(milestone.get('due_date'))}", style="List Bullet 2")
+            document.add_paragraph(f"Completed At: {format_dt(milestone.get('completed_at'))}", style="List Bullet 2")
+            if milestone.get("description"):
+                document.add_paragraph(f"Description: {milestone.get('description')}", style="List Bullet 2")
+    else:
+        document.add_paragraph("No milestones recorded.")
+
+    document.add_heading("Team Members", level=1)
+    if members:
+        for member in members:
+            member_line = member.get("name", "Unknown")
+            document.add_paragraph(member_line, style="List Bullet")
+            if member.get("email"):
+                document.add_paragraph(f"Email: {member.get('email')}", style="List Bullet 2")
+            if member.get("role"):
+                document.add_paragraph(f"Role: {member.get('role')}", style="List Bullet 2")
+    else:
+        document.add_paragraph("No members recorded.")
+
+    document.add_heading("Meetings", level=1)
+    if meetings:
+        for meeting in meetings:
+            title = meeting.get("title") or meeting.get("filename") or "Untitled Meeting"
+            document.add_paragraph(title, style="List Number")
+            document.add_paragraph(
+                f"Date: {format_dt(meeting.get('meeting_date') or meeting.get('created_at'))}",
+                style="List Bullet 2",
+            )
+            document.add_paragraph(f"Status: {meeting.get('status', 'unknown')}", style="List Bullet 2")
+            document.add_paragraph(f"Action Items: {meeting.get('action_items_count', 0)}", style="List Bullet 2")
+            speakers = meeting.get("speakers") or []
+            if speakers:
+                document.add_paragraph(f"Speakers: {', '.join(speakers)}", style="List Bullet 2")
+    else:
+        document.add_paragraph("No meetings recorded.")
+
+    document.add_heading("Action Items", level=1)
+    if action_items:
+        for item in action_items:
+            document.add_paragraph(item.get("task", "Untitled Task"), style="List Number")
+            if item.get("owner"):
+                document.add_paragraph(f"Owner: {item.get('owner')}", style="List Bullet 2")
+            if item.get("due_date"):
+                document.add_paragraph(f"Due Date: {item.get('due_date')}", style="List Bullet 2")
+            if item.get("status"):
+                document.add_paragraph(f"Status: {item.get('status')}", style="List Bullet 2")
+            if item.get("priority"):
+                document.add_paragraph(f"Priority: {item.get('priority')}", style="List Bullet 2")
+            meeting_title = item.get("meeting_title") or item.get("meeting_filename")
+            if meeting_title:
+                document.add_paragraph(f"Meeting: {meeting_title}", style="List Bullet 2")
+            if item.get("notes"):
+                document.add_paragraph(f"Notes: {item.get('notes')}", style="List Bullet 2")
+    else:
+        document.add_paragraph("No action items recorded.")
+
+    document.add_heading("Project Notes", level=1)
+    if notes:
+        for note in notes:
+            document.add_paragraph(note.get("title", "Untitled Note"), style="List Number")
+            document.add_paragraph(f"Pinned: {'Yes' if note.get('pinned') else 'No'}", style="List Bullet 2")
+            document.add_paragraph(f"Updated: {format_dt(note.get('updated_at'))}", style="List Bullet 2")
+            if note.get("content"):
+                document.add_paragraph(note.get("content"))
+            attachments = note.get("attachments", [])
+            if attachments:
+                document.add_paragraph("Attachments:", style="List Bullet 2")
+                for attachment in attachments:
+                    document.add_paragraph(attachment.get("filename", "attachment"), style="List Bullet 3")
+    else:
+        document.add_paragraph("No project notes recorded.")
+
+    document.add_paragraph()
+    document.add_paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", style="Intense Quote")
+
+    document.save(str(path))
+    logger.info(f"Exported project data to DOCX: {path}")
+    return path
+
+
+def export_project_to_pdf(data: dict[str, Any], filename: str) -> Path | None:
+    """Export project data to a PDF file."""
+    if SimpleDocTemplate is None:
+        logger.warning("reportlab not installed. Cannot export project to PDF.")
+        return None
+
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    project = data.get("project", {})
+    metrics = data.get("metrics", {})
+    meetings = data.get("meetings", [])
+    milestones = data.get("milestones", [])
+    action_items = data.get("action_items", [])
+    members = data.get("members", [])
+    notes = data.get("notes", [])
+
+    def format_dt(value: Any) -> str:
+        if value is None:
+            return "N/A"
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
+
+    doc = SimpleDocTemplate(str(path), pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("Project Summary Report", styles["Title"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Project Information", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f"<b>Name:</b> {project.get('name', 'N/A')}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Status:</b> {project.get('status', 'N/A')}", styles["Normal"]))
+    if project.get("folders"):
+        story.append(Paragraph(f"<b>Folders:</b> {', '.join(project.get('folders', []))}", styles["Normal"]))
+    if project.get("description"):
+        story.append(Paragraph(f"<b>Description:</b> {project.get('description')}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Start Date:</b> {format_dt(project.get('start_date'))}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Target End Date:</b> {format_dt(project.get('target_end_date'))}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Actual End Date:</b> {format_dt(project.get('actual_end_date'))}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Created At:</b> {format_dt(project.get('created_at'))}", styles["Normal"]))
+    story.append(Paragraph(f"<b>Updated At:</b> {format_dt(project.get('updated_at'))}", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Key Metrics", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f"• Meetings: {metrics.get('meeting_count', 0)}", styles["Normal"]))
+    story.append(
+        Paragraph(
+            f"• Action Items: {metrics.get('completed_action_items', 0)}/{metrics.get('action_item_count', 0)} completed",
+            styles["Normal"],
+        )
+    )
+    story.append(Paragraph(f"• Members: {metrics.get('member_count', 0)}", styles["Normal"]))
+    story.append(Paragraph(f"• Milestones: {metrics.get('milestone_count', 0)}", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Milestones", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    if milestones:
+        for milestone in milestones:
+            story.append(Paragraph(f"• {milestone.get('name', 'Untitled')}", styles["Normal"]))
+            story.append(Paragraph(f"  Status: {milestone.get('status', 'pending')}", styles["Normal"]))
+            story.append(Paragraph(f"  Due Date: {format_dt(milestone.get('due_date'))}", styles["Normal"]))
+            story.append(Paragraph(f"  Completed At: {format_dt(milestone.get('completed_at'))}", styles["Normal"]))
+            if milestone.get("description"):
+                story.append(Paragraph(f"  Description: {milestone.get('description')}", styles["Normal"]))
+            story.append(Spacer(1, 8))
+    else:
+        story.append(Paragraph("No milestones recorded.", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Team Members", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    if members:
+        for member in members:
+            story.append(Paragraph(f"• {member.get('name', 'Unknown')}", styles["Normal"]))
+            if member.get("email"):
+                story.append(Paragraph(f"  Email: {member.get('email')}", styles["Normal"]))
+            if member.get("role"):
+                story.append(Paragraph(f"  Role: {member.get('role')}", styles["Normal"]))
+            story.append(Spacer(1, 6))
+    else:
+        story.append(Paragraph("No members recorded.", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Meetings", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    if meetings:
+        for meeting in meetings:
+            title = meeting.get("title") or meeting.get("filename") or "Untitled Meeting"
+            story.append(Paragraph(f"• {title}", styles["Normal"]))
+            story.append(
+                Paragraph(
+                    f"  Date: {format_dt(meeting.get('meeting_date') or meeting.get('created_at'))}",
+                    styles["Normal"],
+                )
+            )
+            story.append(Paragraph(f"  Status: {meeting.get('status', 'unknown')}", styles["Normal"]))
+            story.append(Paragraph(f"  Action Items: {meeting.get('action_items_count', 0)}", styles["Normal"]))
+            speakers = meeting.get("speakers") or []
+            if speakers:
+                story.append(Paragraph(f"  Speakers: {', '.join(speakers)}", styles["Normal"]))
+            story.append(Spacer(1, 8))
+    else:
+        story.append(Paragraph("No meetings recorded.", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Action Items", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    if action_items:
+        for item in action_items:
+            story.append(Paragraph(f"• {item.get('task', 'Untitled Task')}", styles["Normal"]))
+            if item.get("owner"):
+                story.append(Paragraph(f"  Owner: {item.get('owner')}", styles["Normal"]))
+            if item.get("due_date"):
+                story.append(Paragraph(f"  Due Date: {item.get('due_date')}", styles["Normal"]))
+            if item.get("status"):
+                story.append(Paragraph(f"  Status: {item.get('status')}", styles["Normal"]))
+            if item.get("priority"):
+                story.append(Paragraph(f"  Priority: {item.get('priority')}", styles["Normal"]))
+            meeting_title = item.get("meeting_title") or item.get("meeting_filename")
+            if meeting_title:
+                story.append(Paragraph(f"  Meeting: {meeting_title}", styles["Normal"]))
+            if item.get("notes"):
+                story.append(Paragraph(f"  Notes: {item.get('notes')}", styles["Normal"]))
+            story.append(Spacer(1, 8))
+    else:
+        story.append(Paragraph("No action items recorded.", styles["Normal"]))
+    story.append(Spacer(1, 20))
+
+    story.append(Paragraph("Project Notes", styles["Heading1"]))
+    story.append(Spacer(1, 6))
+    if notes:
+        for note in notes:
+            story.append(Paragraph(f"• {note.get('title', 'Untitled Note')}", styles["Normal"]))
+            story.append(Paragraph(f"  Pinned: {'Yes' if note.get('pinned') else 'No'}", styles["Normal"]))
+            story.append(Paragraph(f"  Updated: {format_dt(note.get('updated_at'))}", styles["Normal"]))
+            if note.get("content"):
+                story.append(Paragraph(note.get("content").replace("\n", "<br/>"), styles["Normal"]))
+            attachments = note.get("attachments", [])
+            if attachments:
+                story.append(Paragraph("  Attachments:", styles["Normal"]))
+                for attachment in attachments:
+                    story.append(Paragraph(f"   - {attachment.get('filename', 'attachment')}", styles["Normal"]))
+            story.append(Spacer(1, 8))
+    else:
+        story.append(Paragraph("No project notes recorded.", styles["Normal"]))
+
+    story.append(Spacer(1, 20))
+    story.append(Paragraph(f"<i>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>", styles["Normal"]))
+
+    doc.build(story)
+    logger.info(f"Exported project data to PDF: {path}")
+    return path

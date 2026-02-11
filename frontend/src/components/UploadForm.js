@@ -19,7 +19,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -30,7 +29,6 @@ import {
   Language as LanguageIcon,
   People as PeopleIcon,
   Refresh as RefreshIcon,
-  Article as TemplateIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import api from '../api';
@@ -70,12 +68,6 @@ const UploadForm = ({ onUploadSuccess }) => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Template state
-  const [templates, setTemplates] = useState([]);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [folderName, setFolderName] = useState('');
-  const [tags, setTags] = useState('');
-
   // Meeting configuration parameters (defaults for all files)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [numberOfSpeakers, setNumberOfSpeakers] = useState('auto');
@@ -108,7 +100,7 @@ const UploadForm = ({ onUploadSuccess }) => {
     { value: '10', label: '10+ Speakers' },
   ];
 
-  // Fetch max file size from settings and templates on component mount
+  // Fetch max file size from settings on component mount
   useEffect(() => {
     const fetchMaxFileSize = async () => {
       try {
@@ -120,85 +112,8 @@ const UploadForm = ({ onUploadSuccess }) => {
       }
     };
 
-    const fetchTemplates = async () => {
-      try {
-        const response = await api.get('/api/v1/templates/');
-        setTemplates(response.data);
-
-        // Check if a template was selected from the templates page
-        const storedTemplate = sessionStorage.getItem('selectedTemplate');
-        if (storedTemplate) {
-          try {
-            const template = JSON.parse(storedTemplate);
-            // Find the template in the fetched list to ensure it's still valid
-            const validTemplate = response.data.find((t) => t.id === template.id);
-            if (validTemplate) {
-              // Apply template settings directly
-              setSelectedTemplate(validTemplate);
-              if (validTemplate.default_language) {
-                setTranscriptionLanguage(validTemplate.default_language);
-              }
-              if (validTemplate.default_speakers) {
-                setNumberOfSpeakers(validTemplate.default_speakers);
-              }
-              if (validTemplate.default_folder) {
-                setFolderName(validTemplate.default_folder);
-              }
-              if (validTemplate.default_tags) {
-                setTags(validTemplate.default_tags);
-              }
-
-              // Record template usage
-              api.post(`/api/v1/templates/${validTemplate.id}/use`).catch((err) => {
-                console.error('Failed to record template usage:', err);
-              });
-            }
-            sessionStorage.removeItem('selectedTemplate');
-          } catch (err) {
-            console.error('Failed to parse stored template:', err);
-            sessionStorage.removeItem('selectedTemplate');
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch templates:', error);
-      }
-    };
-
     fetchMaxFileSize();
-    fetchTemplates();
   }, []);
-
-  // Apply template settings when a template is selected
-  const handleTemplateSelect = (templateId) => {
-    if (!templateId) {
-      setSelectedTemplate(null);
-      return;
-    }
-
-    const template = templates.find((t) => t.id === templateId);
-    if (template) {
-      setSelectedTemplate(template);
-
-      // Apply template defaults
-      if (template.default_language) {
-        setTranscriptionLanguage(template.default_language);
-      }
-      if (template.default_speakers) {
-        setNumberOfSpeakers(template.default_speakers);
-      }
-      if (template.default_folder) {
-        setFolderName(template.default_folder);
-      }
-      if (template.default_tags) {
-        setTags(template.default_tags);
-      }
-
-      // Record template usage
-      api.post(`/api/v1/templates/${templateId}/use`).catch((err) => {
-        console.error('Failed to record template usage:', err);
-      });
-    }
-  };
 
   const handleFileSelect = (files) => {
     const maxSizeBytes = maxFileSize * 1024 * 1024; // Convert MB to bytes
@@ -353,20 +268,6 @@ const UploadForm = ({ onUploadSuccess }) => {
       );
       setMessageType('success');
       setSnackbarOpen(true);
-
-      // Apply folder and tags if template was used
-      if (selectedTemplate && (folderName || tags)) {
-        try {
-          const meetingsResponse = await api.get('/api/v1/meetings/');
-          const recentMeetings = meetingsResponse.data.slice(0, selectedFiles.length);
-
-          for (const meeting of recentMeetings) {
-            await api.updateMeetingTagsFolder(meeting.id, tags, folderName);
-          }
-        } catch (error) {
-          console.error('Failed to apply template settings:', error);
-        }
-      }
 
       setSelectedFiles([]);
 
@@ -592,87 +493,6 @@ const UploadForm = ({ onUploadSuccess }) => {
               </Typography>
             </Box>
           )}
-
-          {/* Template Selection */}
-          <Accordion sx={{ mt: 2 }} defaultExpanded={false}>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="template-content"
-              id="template-header"
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TemplateIcon sx={{ color: 'primary.main' }} />
-                <Typography variant="h6">Use Meeting Template</Typography>
-                {selectedTemplate && (
-                  <Chip
-                    label={`${selectedTemplate.icon} ${selectedTemplate.name}`}
-                    size="small"
-                    color="primary"
-                    sx={{ ml: 1 }}
-                  />
-                )}
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails>
-              <FormControl fullWidth>
-                <InputLabel id="template-select-label">Select Template</InputLabel>
-                <Select
-                  labelId="template-select-label"
-                  value={selectedTemplate?.id || ''}
-                  onChange={(e) => handleTemplateSelect(e.target.value)}
-                  label="Select Template"
-                >
-                  <MenuItem value="">
-                    <em>None - Use Custom Settings</em>
-                  </MenuItem>
-                  {templates.map((template) => (
-                    <MenuItem key={template.id} value={template.id}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography>{template.icon}</Typography>
-                        <Box>
-                          <Typography>{template.name}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {template.description}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {selectedTemplate && (
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  <Typography variant="body2" fontWeight="bold" gutterBottom>
-                    Template Settings Applied:
-                  </Typography>
-                  <Typography variant="body2" component="div">
-                    {selectedTemplate.default_language && (
-                      <div>
-                        • Language:{' '}
-                        {languages.find((l) => l.code === selectedTemplate.default_language)?.name}
-                      </div>
-                    )}
-                    {selectedTemplate.default_speakers && (
-                      <div>
-                        • Speakers:{' '}
-                        {
-                          speakerOptions.find((s) => s.value === selectedTemplate.default_speakers)
-                            ?.label
-                        }
-                      </div>
-                    )}
-                    {selectedTemplate.default_folder && (
-                      <div>• Folder: {selectedTemplate.default_folder}</div>
-                    )}
-                    {selectedTemplate.default_tags && (
-                      <div>• Tags: {selectedTemplate.default_tags}</div>
-                    )}
-                  </Typography>
-                </Alert>
-              )}
-            </AccordionDetails>
-          </Accordion>
 
           {/* Processing Configuration */}
           <Accordion sx={{ mt: 2 }}>

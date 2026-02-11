@@ -23,12 +23,13 @@ def extract_action_item_ids_from_content(content: str) -> tuple[list[int], list[
         return [], []
 
     # Pattern: - [ ] **task** _(Action Item #123)_ or - [x] **task** _(Action Item #123)_
+    # Using DOTALL to match across newlines in case task description spans multiple lines
     pattern = r"-\s*\[([ xX])\].*?\(Action Item #(\d+)\)"
 
     worked_on_ids = []
     completed_ids = []
 
-    for match in re.finditer(pattern, content, re.IGNORECASE):
+    for match in re.finditer(pattern, content, re.IGNORECASE | re.DOTALL):
         checkbox_state = match.group(1).strip()
         item_id = int(match.group(2))
 
@@ -122,21 +123,46 @@ class DiaryService:
         """
         Get action items activity for a specific date.
 
-        Filters:
-        - In progress items (all)
-        - Items due today or overdue
+        Returns:
+        - In progress items: All items currently with "in-progress" status
+        - Completed items: Recently completed items (last 30 days) or items due near this date
+        - Created items: Items due today or overdue (pending status)
 
-        Note: Since ActionItem model doesn't have timestamp fields,
-        this returns current snapshot of action items.
-        For historical tracking, use DiaryActionItemSnapshot.
+        Note: "Completed" shows recently completed items so they can be dragged to diary.
+        Once saved in diary, they are tracked in action_items_completed field.
         """
+        from datetime import timedelta
+
         today_str = target_date.isoformat()
 
-        # Get items that are currently in progress
+        # Calculate date range for "recent" completed items (30 days before and 7 days after target date)
+        start_range = (target_date - timedelta(days=30)).isoformat()
+        end_range = (target_date + timedelta(days=7)).isoformat()
+
+        # Get ALL items that are currently in progress (global status)
         in_progress_items = db.query(ActionItem).filter(ActionItem.status == "in-progress").all()
 
-        # Get completed items (including those not yet due)
-        completed_items = db.query(ActionItem).filter(ActionItem.status == "completed").all()
+        # Get completed items that are either:
+        # 1. Due within the date range around target_date, OR
+        # 2. Already saved in this diary entry
+        diary_entry = DiaryRepository.get_entry_by_date(db, target_date)
+        saved_completed_ids = (
+            diary_entry.action_items_completed if diary_entry and diary_entry.action_items_completed else []
+        )
+
+        completed_items = (
+            db.query(ActionItem)
+            .filter(
+                ActionItem.status == "completed",
+                (ActionItem.due_date.between(start_range, end_range))
+                | (ActionItem.id.in_(saved_completed_ids) if saved_completed_ids else False),
+            )
+            .all()
+        )
+
+        # If no due_date filter matched, get items that were actually completed in this diary
+        if saved_completed_ids and not completed_items:
+            completed_items = db.query(ActionItem).filter(ActionItem.id.in_(saved_completed_ids)).all()
 
         # Get pending items that are due today or overdue
         pending_items = (

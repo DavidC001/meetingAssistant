@@ -23,11 +23,11 @@ from .modules.diary import router as diary_router
 from .modules.graph import router as graph_router
 from .modules.meetings import router as meetings_router
 from .modules.ollama import router as ollama_router
+from .modules.projects.router import router as projects_router
 from .modules.search import router as search_router
 from .modules.settings import router as settings_router
 from .modules.settings import router_backup as backup_router
 from .modules.settings import router_drive as google_drive_router
-from .modules.templates import router as templates_router
 from .modules.users import router as users_router
 from .startup import startup_recovery
 
@@ -143,8 +143,7 @@ app = FastAPI(
             "description": "AI-powered chat interface for querying meeting content and global knowledge base",
         },
         {"name": "settings", "description": "Configuration management for API keys, model settings, and embeddings"},
-        {"name": "calendar", "description": "Google Calendar integration for scheduled meetings and action item sync"},
-        {"name": "templates", "description": "Meeting templates for standardized processing and analysis"},
+        {"name": "calendar", "description": "Google Calendar integration for action item sync"},
         {"name": "search", "description": "Semantic and keyword search across all meetings and transcripts"},
         {"name": "users", "description": "User mapping for email addresses and task assignment"},
         {"name": "admin", "description": "Administrative operations including worker management and system cleanup"},
@@ -255,8 +254,8 @@ app.include_router(ollama_router.router, prefix="/api/v1")
 app.include_router(calendar_router.router, prefix="/api/v1")
 app.include_router(chat_router.router, prefix="/api/v1")
 app.include_router(graph_router.router, prefix="/api/v1")
+app.include_router(projects_router)
 app.include_router(users_router.router, prefix="/api/v1")
-app.include_router(templates_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 app.include_router(diary_router.router)
 

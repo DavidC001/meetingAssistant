@@ -1,38 +1,31 @@
+from .database import Base
+from .modules.calendar.models import GoogleCalendarCredentials
+from .modules.chat.models import ChatMessage, GlobalChatMessage, GlobalChatSession
+from .modules.diary.models import DiaryActionItemSnapshot, DiaryEntry
 from .modules.meetings.models import (
-    MeetingStatus,
-    ProcessingStage,
-    Meeting,
-    Attachment,
-    Transcription,
     ActionItem,
-    Speaker,
+    Attachment,
     DiarizationTiming,
     DocumentChunk,
-    MeetingLink
+    Meeting,
+    MeetingLink,
+    MeetingStatus,
+    ProcessingStage,
+    Speaker,
+    Transcription,
 )
-from .modules.chat.models import (
-    ChatMessage,
-    GlobalChatSession,
-    GlobalChatMessage
+from .modules.projects.models import (
+    Project,
+    ProjectActionItem,
+    ProjectChatMessage,
+    ProjectChatSession,
+    ProjectDocumentChunk,
+    ProjectMeeting,
+    ProjectMember,
+    ProjectMilestone,
+    ProjectNote,
+    ProjectNoteAttachment,
 )
-from .modules.settings.models import (
-    APIKey,
-    ModelConfiguration,
-    EmbeddingConfiguration,
-    WorkerConfiguration
-)
-from .modules.settings.models_drive import (
-    GoogleDriveCredentials,
-    GoogleDriveSyncConfig,
-    GoogleDriveProcessedFile
-)
-from .modules.calendar.models import (
-    GoogleCalendarCredentials,
-    ScheduledMeeting
-)
+from .modules.settings.models import APIKey, EmbeddingConfiguration, ModelConfiguration, WorkerConfiguration
+from .modules.settings.models_drive import GoogleDriveCredentials, GoogleDriveProcessedFile, GoogleDriveSyncConfig
 from .modules.users.models import UserMapping
-from .modules.diary.models import (
-    DiaryEntry,
-    DiaryActionItemSnapshot
-)
-from .database import Base

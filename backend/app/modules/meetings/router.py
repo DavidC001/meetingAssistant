@@ -676,6 +676,14 @@ def update_meeting_tags_folder(
         db_meeting.folder = folder
     db.commit()
     db.refresh(db_meeting)
+
+    if tags is not None:
+        try:
+            from app.modules.projects.service import ProjectService
+
+            ProjectService(db).sync_meeting_to_projects_by_tags(meeting_id)
+        except Exception as e:
+            print(f"Warning: Failed to auto-sync meeting {meeting_id} to projects: {e}")
     return db_meeting
 
 
@@ -800,7 +808,7 @@ async def chat_with_meeting_endpoint(meeting_id: int, request: chat_schemas.Chat
     # Check if tools should be enabled (default to True)
     enable_tools = getattr(request, "enable_tools", True)
 
-    response_text, sources = await rag.generate_rag_response(
+    response_text, sources, follow_ups = await rag.generate_rag_response(
         db,
         query=request.query,
         meeting_id=meeting_id,
@@ -810,11 +818,12 @@ async def chat_with_meeting_endpoint(meeting_id: int, request: chat_schemas.Chat
         use_full_transcript=request.use_full_transcript or False,
         full_transcript=db_meeting.transcription.full_text if request.use_full_transcript else None,
         enable_tools=enable_tools,
+        allow_iterative_research=True,
     )
 
     chat_crud.create_chat_message(db, meeting_id, "assistant", response_text)
 
-    return chat_schemas.ChatResponse(response=response_text, sources=sources)
+    return chat_schemas.ChatResponse(response=response_text, sources=sources, follow_up_suggestions=follow_ups)
 
 
 @router.get("/{meeting_id}/chat/history", response_model=chat_schemas.ChatHistoryResponse)

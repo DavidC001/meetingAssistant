@@ -186,34 +186,61 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
         </Button>
         <Collapse in={isExpanded}>
           <Stack spacing={1} sx={{ mt: 1 }}>
-            {sources.map((source, index) => (
-              <Paper
-                key={index}
-                variant="outlined"
-                sx={{
-                  p: 1,
-                  bgcolor: 'background.default',
-                }}
-              >
-                <Typography variant="caption" color="primary" fontWeight="medium">
-                  {source.content_type?.replace('_', ' ') || 'transcript'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  similarity: {(source.similarity || 0).toFixed(2)}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
-                  {source.snippet?.substring(0, 200)}
-                  {source.snippet?.length > 200 ? '...' : ''}
-                </Typography>
-                {source.metadata?.attachment_name && (
-                  <Chip
-                    size="small"
-                    label={`📎 ${source.metadata.attachment_name}`}
-                    sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }}
-                  />
-                )}
-              </Paper>
-            ))}
+            {sources.map((source, index) => {
+              const isToolResult =
+                source.content_type === 'tool_result' || source.content_type === 'tool_search';
+              const toolLabel =
+                source.metadata?.tool_label || source.metadata?.tool?.replace('_', ' ');
+              const title =
+                source.meeting_name ||
+                (source.note_title && `Note: ${source.note_title}`) ||
+                (source.attachment_name && `Attachment: ${source.attachment_name}`) ||
+                (isToolResult ? toolLabel : null) ||
+                (source.meeting_id ? `Meeting ${source.meeting_id}` : null) ||
+                'Source';
+              const snippetText = source.snippet || '';
+              const displaySnippet =
+                snippetText.length > 200 ? snippetText.substring(0, 200) + '...' : snippetText;
+              return (
+                <Paper
+                  key={index}
+                  variant="outlined"
+                  sx={{
+                    p: 1,
+                    bgcolor: 'background.default',
+                  }}
+                >
+                  <Typography variant="caption" color="primary" fontWeight="medium">
+                    {title}
+                  </Typography>
+                  {!isToolResult && source.similarity != null && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {(source.content_type || 'transcript').replace('_', ' ')} • similarity:{' '}
+                      {source.similarity.toFixed(2)}
+                    </Typography>
+                  )}
+                  {isToolResult && toolLabel && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {toolLabel}
+                      {source.metadata?.query ? ` — "${source.metadata.query}"` : ''}
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="body2"
+                    sx={{ mt: 0.5, fontSize: '0.75rem', whiteSpace: 'pre-line' }}
+                  >
+                    {displaySnippet}
+                  </Typography>
+                  {source.metadata?.attachment_name && (
+                    <Chip
+                      size="small"
+                      label={`📎 ${source.metadata.attachment_name}`}
+                      sx={{ mt: 0.5, height: 20, fontSize: '0.65rem' }}
+                    />
+                  )}
+                </Paper>
+              );
+            })}
           </Stack>
         </Collapse>
       </Box>

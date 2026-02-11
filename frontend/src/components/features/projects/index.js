@@ -1,0 +1,11 @@
+export { default as ProjectsManager } from './ProjectsManager';
+export { default as ProjectDashboard } from './ProjectDashboard';
+export { default as ProjectMeetings } from './ProjectMeetings';
+export { default as ProjectActionItems } from './ProjectActionItems';
+export { default as ProjectTeam } from './ProjectTeam';
+export { default as ProjectGantt } from './ProjectGantt';
+export { default as ProjectAnalytics } from './ProjectAnalytics';
+export { default as ProjectChat } from './ProjectChat';
+export { default as ProjectNotes } from './ProjectNotes';
+export { default as ProjectMilestones } from './ProjectMilestones';
+export { default as ProjectSettings } from './ProjectSettings';

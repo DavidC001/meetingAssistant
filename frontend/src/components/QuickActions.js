@@ -74,10 +74,65 @@ const GLOBAL_QUICK_PROMPTS = [
     icon: <SearchIcon fontSize="small" />,
     color: 'primary',
   },
+  {
+    label: 'Upcoming deadlines',
+    prompt: 'What action items are due in the next 2 weeks?',
+    icon: <TimelineIcon fontSize="small" />,
+    color: 'error',
+  },
+  {
+    label: 'List my meetings',
+    prompt: 'Show me my most recent meetings.',
+    icon: <SummarizeIcon fontSize="small" />,
+    color: 'secondary',
+  },
 ];
 
-const QuickActions = ({ onSelectPrompt, isGlobal = false }) => {
-  const prompts = isGlobal ? GLOBAL_QUICK_PROMPTS : QUICK_PROMPTS;
+const PROJECT_QUICK_PROMPTS = [
+  {
+    label: 'Project status',
+    prompt: 'Give me a status update on this project based on recent meetings and action items.',
+    icon: <TimelineIcon fontSize="small" />,
+    color: 'primary',
+  },
+  {
+    label: 'Pending tasks',
+    prompt: 'What are all the pending action items in this project?',
+    icon: <AssignmentIcon fontSize="small" />,
+    color: 'success',
+  },
+  {
+    label: 'Key decisions',
+    prompt: 'What were the most important decisions made across project meetings?',
+    icon: <LightbulbIcon fontSize="small" />,
+    color: 'warning',
+  },
+  {
+    label: 'Upcoming deadlines',
+    prompt: 'What deadlines are coming up in the next 2 weeks?',
+    icon: <TimelineIcon fontSize="small" />,
+    color: 'error',
+  },
+  {
+    label: 'Search discussions',
+    prompt: 'Search for discussions about ',
+    icon: <SearchIcon fontSize="small" />,
+    color: 'info',
+  },
+  {
+    label: 'Create a note',
+    prompt: 'Create a project note summarizing the key takeaways from recent meetings.',
+    icon: <SummarizeIcon fontSize="small" />,
+    color: 'secondary',
+  },
+];
+
+const QuickActions = ({ onSelectPrompt, isGlobal = false, isProject = false }) => {
+  const prompts = isProject
+    ? PROJECT_QUICK_PROMPTS
+    : isGlobal
+      ? GLOBAL_QUICK_PROMPTS
+      : QUICK_PROMPTS;
 
   return (
     <Box sx={{ mb: 2 }}>

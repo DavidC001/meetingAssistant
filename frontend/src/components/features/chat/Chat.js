@@ -121,6 +121,7 @@ const Chat = ({ meetingId }) => {
             role: 'assistant',
             content: response.data.response,
             sources: response.data.sources || [],
+            follow_up_suggestions: response.data.follow_up_suggestions || [],
           },
         ]);
       } catch (error) {
@@ -137,6 +138,33 @@ const Chat = ({ meetingId }) => {
         setIsLoading(false);
       }
     }
+  };
+
+  const renderFollowUpSuggestions = (suggestions, isLastAssistantMessage) => {
+    if (!suggestions || suggestions.length === 0 || !isLastAssistantMessage || isLoading)
+      return null;
+
+    return (
+      <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        {suggestions.map((suggestion, idx) => (
+          <Chip
+            key={idx}
+            label={suggestion}
+            size="small"
+            variant="outlined"
+            color="primary"
+            onClick={() => {
+              setInput(suggestion);
+            }}
+            sx={{
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+              '&:hover': { backgroundColor: 'primary.main', color: 'primary.contrastText' },
+            }}
+          />
+        ))}
+      </Box>
+    );
   };
 
   const renderSources = (sources, messageIndex) => {
@@ -158,27 +186,48 @@ const Chat = ({ meetingId }) => {
         </Button>
         <Collapse in={isExpanded}>
           <Stack spacing={1} className="source-stack">
-            {sources.map((source, index) => (
-              <Paper key={index} variant="outlined" className="source-card" sx={{ p: 1.5 }}>
-                <Typography variant="subtitle2" color="primary">
-                  {source.meeting_name || `Meeting ${source.meeting_id}`}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {source.content_type.replace('_', ' ')} • similarity{' '}
-                  {(source.similarity || 0).toFixed(2)}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {source.snippet}
-                </Typography>
-                {source.metadata && source.metadata.attachment_name && (
-                  <Chip
-                    size="small"
-                    label={`Attachment: ${source.metadata.attachment_name}`}
-                    sx={{ mt: 1 }}
-                  />
-                )}
-              </Paper>
-            ))}
+            {sources.map((source, index) => {
+              const isToolResult =
+                source.content_type === 'tool_result' || source.content_type === 'tool_search';
+              const toolLabel =
+                source.metadata?.tool_label || source.metadata?.tool?.replace('_', ' ');
+              const title =
+                source.meeting_name ||
+                (source.note_title && `Note: ${source.note_title}`) ||
+                (source.attachment_name && `Attachment: ${source.attachment_name}`) ||
+                (isToolResult ? toolLabel : null) ||
+                (source.meeting_id ? `Meeting ${source.meeting_id}` : null) ||
+                'Source';
+              return (
+                <Paper key={index} variant="outlined" className="source-card" sx={{ p: 1.5 }}>
+                  <Typography variant="subtitle2" color="primary">
+                    {title}
+                  </Typography>
+                  {!isToolResult && source.similarity != null && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {(source.content_type || 'transcript').replace('_', ' ')} • similarity{' '}
+                      {source.similarity.toFixed(2)}
+                    </Typography>
+                  )}
+                  {isToolResult && toolLabel && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {toolLabel}
+                      {source.metadata?.query ? ` — "${source.metadata.query}"` : ''}
+                    </Typography>
+                  )}
+                  <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>
+                    {source.snippet}
+                  </Typography>
+                  {source.metadata && source.metadata.attachment_name && (
+                    <Chip
+                      size="small"
+                      label={`Attachment: ${source.metadata.attachment_name}`}
+                      sx={{ mt: 1 }}
+                    />
+                  )}
+                </Paper>
+              );
+            })}
           </Stack>
         </Collapse>
       </Box>
@@ -310,6 +359,10 @@ const Chat = ({ meetingId }) => {
                         {msg.content}
                       </ReactMarkdown>
                       {renderSources(msg.sources, index)}
+                      {renderFollowUpSuggestions(
+                        msg.follow_up_suggestions,
+                        index === messages.length - 1 && msg.role === 'assistant'
+                      )}
                     </>
                   ) : (
                     msg.content

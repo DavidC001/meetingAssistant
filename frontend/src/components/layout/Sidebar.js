@@ -26,11 +26,10 @@ import {
 import {
   Dashboard as DashboardIcon,
   FolderOpen as FolderOpenIcon,
+  FolderSpecial as FolderSpecialIcon,
   ChatBubbleOutline as ChatIcon,
-  Event as EventIcon,
   AccountTree as GraphIcon,
   CalendarMonth as CalendarIcon,
-  Article as TemplatesIcon,
   Settings as SettingsIcon,
   ViewKanban as KanbanIcon,
   EditNote as DiaryIcon,
@@ -58,11 +57,13 @@ const navigationGroups = [
     label: 'Planning',
     items: [
       { path: '/calendar', label: 'Calendar', icon: CalendarIcon },
-      { path: '/scheduled-meetings', label: 'Scheduled', icon: EventIcon },
       { path: '/kanban', label: 'Action Items', icon: KanbanIcon },
       { path: '/diary', label: 'Daily Diary', icon: DiaryIcon },
-      { path: '/templates', label: 'Templates', icon: TemplatesIcon },
     ],
+  },
+  {
+    label: 'Projects',
+    items: [{ path: '/projects', label: 'All Projects', icon: FolderSpecialIcon }],
   },
   {
     label: 'System',

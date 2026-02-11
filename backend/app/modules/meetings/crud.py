@@ -68,6 +68,10 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
     """Update meeting fields."""
     db_meeting = get_meeting(db, meeting_id=meeting_id)
     if db_meeting:
+        tags_changed = False
+        if meeting.tags is not None and meeting.tags != db_meeting.tags:
+            db_meeting.tags = meeting.tags
+            tags_changed = True
         if meeting.filename is not None:
             db_meeting.filename = meeting.filename
         if meeting.transcription_language is not None:
@@ -76,8 +80,6 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
             db_meeting.number_of_speakers = meeting.number_of_speakers
         if meeting.model_configuration_id is not None:
             db_meeting.model_configuration_id = meeting.model_configuration_id
-        if meeting.tags is not None:
-            db_meeting.tags = meeting.tags
         if meeting.folder is not None:
             db_meeting.folder = meeting.folder
         if meeting.notes is not None:
@@ -87,6 +89,18 @@ def update_meeting(db: Session, meeting_id: int, meeting: schemas.MeetingUpdate)
 
         db.commit()
         db.refresh(db_meeting)
+
+        # Auto-sync to projects if tags changed
+        if tags_changed:
+            try:
+                from app.modules.projects.service import ProjectService
+
+                project_service = ProjectService(db)
+                project_service.sync_meeting_to_projects_by_tags(meeting_id)
+            except Exception as e:
+                # Log but don't fail the update
+                print(f"Warning: Failed to auto-sync meeting {meeting_id} to projects: {e}")
+
     return db_meeting
 
 

@@ -42,6 +42,8 @@ import {
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import './Calendar.css';
+import ActionItemService from '../../../services/actionItemService';
+import { projectService } from '../../../services';
 
 const locales = {
   'en-US': require('date-fns/locale/en-US'),
@@ -96,6 +98,12 @@ const Calendar = () => {
     notes: '',
   });
 
+  // Project state
+  const [projects, setProjects] = useState([]);
+  const [linkedProjects, setLinkedProjects] = useState(new Set());
+  const [newItemProjectIds, setNewItemProjectIds] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
   // Fetch Google Calendar status
   const fetchGoogleStatus = useCallback(async () => {
     try {
@@ -107,6 +115,75 @@ const Calendar = () => {
       console.error('Error fetching Google Calendar status:', error);
     }
   }, []);
+
+  // Fetch projects when dialog opens
+  const fetchProjects = useCallback(async () => {
+    try {
+      setLoadingProjects(true);
+      const response = await projectService.listProjects('active');
+      const items = response?.data || response || [];
+      setProjects(items);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      showSnackbar('Error loading projects', 'error');
+    } finally {
+      setLoadingProjects(false);
+    }
+  }, []);
+
+  // Check which projects an action item is linked to
+  const fetchLinkedProjects = useCallback(
+    async (actionItemId) => {
+      if (!actionItemId) {
+        setLinkedProjects(new Set());
+        return;
+      }
+
+      try {
+        // This is a bit hacky - we check each project to see if it has this action item
+        // In a real implementation, you'd want a dedicated endpoint for this
+        const projectChecks = await Promise.all(
+          projects.map(async (project) => {
+            try {
+              const response = await projectService.getActionItems(project.id);
+              const items = response?.data || response || [];
+              return items.some((item) => item.id === actionItemId) ? project.id : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+        const linked = new Set(projectChecks.filter(Boolean));
+        setLinkedProjects(linked);
+      } catch (error) {
+        console.error('Error checking linked projects:', error);
+      }
+    },
+    [projects]
+  );
+
+  const handleProjectLink = async (projectId) => {
+    if (!selectedEvent?.id) return;
+
+    try {
+      if (linkedProjects.has(projectId)) {
+        await ActionItemService.unlinkFromProject(projectId, selectedEvent.id);
+        setLinkedProjects((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(projectId);
+          return newSet;
+        });
+        showSnackbar('Action item removed from project', 'success');
+      } else {
+        await ActionItemService.linkToProject(projectId, selectedEvent.id);
+        setLinkedProjects((prev) => new Set([...prev, projectId]));
+        showSnackbar('Action item added to project', 'success');
+      }
+    } catch (error) {
+      console.error('Error linking/unlinking action item:', error);
+      showSnackbar('Error updating project link', 'error');
+    }
+  };
 
   // Fetch action items
   const fetchActionItems = useCallback(async () => {
@@ -204,6 +281,10 @@ const Calendar = () => {
     });
     setEditMode(true);
     setDialogOpen(true);
+    fetchProjects();
+    if (event.id) {
+      fetchLinkedProjects(event.id);
+    }
   };
 
   // Handle event drag and drop
@@ -238,6 +319,9 @@ const Calendar = () => {
       notes: '',
     });
     setEditMode(false);
+    setLinkedProjects(new Set());
+    setNewItemProjectIds([]);
+    fetchProjects();
     setDialogOpen(true);
   };
 
@@ -260,7 +344,13 @@ const Calendar = () => {
         showSnackbar('Action item updated', 'success');
       } else {
         // Create new standalone action item
-        await axios.post(`${API_BASE_URL}/calendar/action-items`, formData);
+        const response = await axios.post(`${API_BASE_URL}/calendar/action-items`, formData);
+        const created = response?.data;
+        if (created?.id && newItemProjectIds.length > 0) {
+          await Promise.all(
+            newItemProjectIds.map((pid) => ActionItemService.linkToProject(pid, created.id))
+          );
+        }
         showSnackbar('Action item created', 'success');
       }
 
@@ -691,6 +781,58 @@ const Calendar = () => {
               multiline
               rows={3}
             />
+            {projects.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Projects
+                </Typography>
+                {loadingProjects ? (
+                  <CircularProgress size={24} />
+                ) : (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {projects.map((project) => {
+                      const isLinked = editMode
+                        ? linkedProjects.has(project.id)
+                        : newItemProjectIds.includes(project.id);
+                      return (
+                        <Chip
+                          key={project.id}
+                          label={project.name}
+                          clickable
+                          variant={isLinked ? 'filled' : 'outlined'}
+                          color={isLinked ? 'primary' : 'default'}
+                          onClick={() => {
+                            if (editMode) {
+                              handleProjectLink(project.id);
+                            } else {
+                              setNewItemProjectIds((prev) =>
+                                prev.includes(project.id)
+                                  ? prev.filter((id) => id !== project.id)
+                                  : [...prev, project.id]
+                              );
+                            }
+                          }}
+                          sx={{
+                            '&:hover': {
+                              backgroundColor: isLinked ? 'primary.dark' : 'action.hover',
+                            },
+                          }}
+                        />
+                      );
+                    })}
+                  </Box>
+                )}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: 'block' }}
+                >
+                  {editMode
+                    ? 'Click project chips to link/unlink this action item'
+                    : 'Select projects to link after creation'}
+                </Typography>
+              </Box>
+            )}
             {editMode && googleConnected && (
               <FormControlLabel
                 control={
@@ -713,8 +855,12 @@ const Calendar = () => {
             </Button>
           )}
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained">
-            Save
+          <Button
+            onClick={handleSave}
+            variant="contained"
+            startIcon={editMode ? <EditIcon /> : <AddIcon />}
+          >
+            {editMode ? 'Save Changes' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>

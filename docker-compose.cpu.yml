@@ -1,4 +1,0 @@
-# Deprecated: CPU is now the default configuration in docker-compose.yml.
-# This file is intentionally empty and can be deleted safely.
-
-services: {}

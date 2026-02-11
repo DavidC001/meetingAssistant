@@ -282,39 +282,42 @@ const DiaryStatistics = () => {
                   <TrophyIcon color="warning" />
                   <Typography variant="h6">Most Productive Days</Typography>
                 </Box>
-                <List>
-                  {statistics.most_productive_days && statistics.most_productive_days.length > 0 ? (
-                    statistics.most_productive_days.map((day, index) => (
-                      <ListItem
-                        key={index}
-                        divider={index < statistics.most_productive_days.length - 1}
-                      >
+                <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  <List>
+                    {statistics.most_productive_days &&
+                    statistics.most_productive_days.length > 0 ? (
+                      statistics.most_productive_days.map((day, index) => (
+                        <ListItem
+                          key={index}
+                          divider={index < statistics.most_productive_days.length - 1}
+                        >
+                          <ListItemText
+                            primary={new Date(day.date).toLocaleDateString('en-US', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })}
+                            secondary={`${day.items_completed} action items completed`}
+                          />
+                          <Chip
+                            label={`#${index + 1}`}
+                            color="primary"
+                            size="small"
+                            variant={index === 0 ? 'filled' : 'outlined'}
+                          />
+                        </ListItem>
+                      ))
+                    ) : (
+                      <ListItem>
                         <ListItemText
-                          primary={new Date(day.date).toLocaleDateString('en-US', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                          })}
-                          secondary={`${day.items_completed} action items completed`}
-                        />
-                        <Chip
-                          label={`#${index + 1}`}
-                          color="primary"
-                          size="small"
-                          variant={index === 0 ? 'filled' : 'outlined'}
+                          primary="No productivity data available"
+                          secondary="Start completing action items to see your most productive days"
                         />
                       </ListItem>
-                    ))
-                  ) : (
-                    <ListItem>
-                      <ListItemText
-                        primary="No productivity data available"
-                        secondary="Start completing action items to see your most productive days"
-                      />
-                    </ListItem>
-                  )}
-                </List>
+                    )}
+                  </List>
+                </Box>
               </CardContent>
             </Card>
 

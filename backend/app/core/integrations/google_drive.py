@@ -56,20 +56,29 @@ class GoogleDriveService:
         """Load credentials from database."""
         db_creds = crud.get_google_drive_credentials(self.db, self.user_id)
         if db_creds:
-            creds_dict = json.loads(db_creds.credentials_json)
-            self.credentials = Credentials.from_authorized_user_info(creds_dict, self.SCOPES)
+            try:
+                creds_dict = json.loads(db_creds.credentials_json)
+                self.credentials = Credentials.from_authorized_user_info(creds_dict, self.SCOPES)
 
-            # Refresh token if expired
-            if self.credentials and self.credentials.expired and self.credentials.refresh_token:
-                try:
-                    self.credentials.refresh(Request())
-                    self._save_credentials()
-                except Exception as e:
-                    print(f"Error refreshing credentials: {e}")
-                    self.credentials = None
+                # Refresh token if expired
+                if self.credentials and self.credentials.expired and self.credentials.refresh_token:
+                    try:
+                        self.credentials.refresh(Request())
+                        self._save_credentials()
+                    except Exception as e:
+                        # Clear invalid credentials to prevent repeated errors
+                        error_str = str(e)
+                        if "invalid_grant" in error_str or "Token has been expired or revoked" in error_str:
+                            # Silently clear invalid credentials - user needs to re-authenticate
+                            crud.delete_google_drive_credentials(self.db, self.user_id)
+                        self.credentials = None
+                        return
 
-            if self.credentials and self.credentials.valid:
-                self.service = build("drive", "v3", credentials=self.credentials)
+                if self.credentials and self.credentials.valid:
+                    self.service = build("drive", "v3", credentials=self.credentials)
+            except Exception:
+                # Invalid credentials format, ignore
+                self.credentials = None
 
     def _save_credentials(self):
         """Save credentials to database."""

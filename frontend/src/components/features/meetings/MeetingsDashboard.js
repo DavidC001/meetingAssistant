@@ -19,7 +19,6 @@ import {
 import {
   Upload as UploadIcon,
   FolderOpen as FolderOpenIcon,
-  Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   TrendingUp as TrendingUpIcon,
@@ -235,17 +234,6 @@ const MeetingsDashboard = () => {
                     sx={{ py: 1.5 }}
                   >
                     Browse All Meetings
-                  </Button>
-                  <Button
-                    component={Link}
-                    to="/scheduled-meetings"
-                    variant="outlined"
-                    size="large"
-                    fullWidth
-                    startIcon={<ScheduleIcon />}
-                    sx={{ py: 1.5 }}
-                  >
-                    Scheduled Meetings
                   </Button>
                   <Button
                     component={Link}

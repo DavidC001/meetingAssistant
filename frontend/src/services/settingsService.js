@@ -269,6 +269,43 @@ export const AppSettingsService = {
   },
 };
 
+/**
+ * Backup and Restore management.
+ */
+export const BackupService = {
+  /**
+   * Export application data (with optional audio).
+   * @param {boolean} includeAudio - Whether to include audio files
+   * @returns {Promise<Blob>} Backup file
+   */
+  async export(includeAudio = false) {
+    const response = await apiClient.get(`${BASE_URL}/backup/export`, {
+      params: { include_audio: includeAudio },
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  /**
+   * Import application data from backup file.
+   * @param {File} file - Backup file (JSON or ZIP)
+   * @param {boolean} mergeMode - Whether to merge with existing data
+   * @returns {Promise<Object>} Import result
+   */
+  async import(file, mergeMode = false) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('merge_mode', mergeMode);
+
+    const response = await apiClient.post(`${BASE_URL}/backup/import`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+};
+
 // Export all services
 export default {
   apiKeys: APIKeyService,
@@ -276,4 +313,5 @@ export default {
   embeddingConfig: EmbeddingConfigService,
   workerConfig: WorkerConfigService,
   appSettings: AppSettingsService,
+  backup: BackupService,
 };
