@@ -19,7 +19,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Chip,
   CircularProgress,
   Alert,
   Divider,
@@ -51,6 +50,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import diaryService from '../../../services/diaryService';
 import './Diary.css';
 
+import logger from '../../../utils/logger';
 const PRODUCTIVITY_OPTIONS = [
   { value: '1', label: '1 - Very Low' },
   { value: '2', label: '2 - Low' },
@@ -113,6 +113,7 @@ const Diary = () => {
         clearInterval(scrollIntervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   const formatDateForApi = (date) => {
@@ -163,7 +164,7 @@ const Diary = () => {
         }
       }
     } catch (err) {
-      console.error('Error loading diary entry:', err);
+      logger.error('Error loading diary entry:', err);
       setError(err.message || 'Failed to load diary entry');
     } finally {
       setLoading(false);
@@ -202,7 +203,7 @@ const Diary = () => {
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error saving diary entry:', err);
+      logger.error('Error saving diary entry:', err);
       setError(err.message || 'Failed to save diary entry');
     } finally {
       setSaving(false);
@@ -230,7 +231,7 @@ const Diary = () => {
 
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      console.error('Error deleting diary entry:', err);
+      logger.error('Error deleting diary entry:', err);
       setError(err.message || 'Failed to delete diary entry');
     } finally {
       setSaving(false);

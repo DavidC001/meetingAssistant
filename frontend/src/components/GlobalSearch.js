@@ -13,14 +13,9 @@ import {
   Chip,
   CircularProgress,
   InputAdornment,
-  Paper,
-  Divider,
   IconButton,
   Tooltip,
-  FormControlLabel,
-  Checkbox,
   Stack,
-  Fade,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -33,7 +28,7 @@ import {
   Keyboard as KeyboardIcon,
   Folder as FolderIcon,
 } from '@mui/icons-material';
-import api from '../api';
+import { SearchService } from '../services';
 
 const CONTENT_TYPE_ICONS = {
   transcript: <DescriptionIcon color="primary" />,
@@ -86,17 +81,15 @@ const GlobalSearch = ({ open, onClose }) => {
 
       setLoading(true);
       try {
-        const response = await api.post('/api/v1/search/', {
-          query: searchQuery,
-          search_in: searchIn,
+        const response = await SearchService.search(searchQuery, {
+          searchIn,
           limit: 20,
         });
-        setResults(response.data.results || []);
-        setTotal(response.data.total || 0);
-        setSearchTime(response.data.search_time_ms || 0);
+        setResults(response.results || []);
+        setTotal(response.total || 0);
+        setSearchTime(response.search_time_ms || 0);
         setSelectedIndex(0);
       } catch (error) {
-        console.error('Search error:', error);
         setResults([]);
       } finally {
         setLoading(false);

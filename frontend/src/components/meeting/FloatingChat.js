@@ -38,8 +38,9 @@ import {
   FullscreenExit as FullscreenExitIcon,
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
-import api from '../../api';
+import { MeetingChatService } from '../../services';
 
+import logger from '../../utils/logger';
 const FloatingChat = ({ meetingId, meetingTitle }) => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -67,14 +68,15 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
     if (open && !historyLoaded && meetingId) {
       fetchChatHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, meetingId, historyLoaded]);
 
   const fetchChatHistory = async () => {
     try {
       // Get chat history for this specific meeting
-      const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history?limit=50`);
-      if (response.data && response.data.history) {
-        const formattedMessages = response.data.history.map((m) => ({
+      const response = await MeetingChatService.getHistory(meetingId, 50);
+      if (response && response.history) {
+        const formattedMessages = response.history.map((m) => ({
           role: m.role,
           content: m.content,
           timestamp: m.created_at,
@@ -83,7 +85,7 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       }
       setHistoryLoaded(true);
     } catch (err) {
-      console.error('Error fetching chat history:', err);
+      logger.error('Error fetching chat history:', err);
       setHistoryLoaded(true);
     }
   };
@@ -111,23 +113,22 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
       }));
 
       // Send message to meeting-specific chat endpoint
-      const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
-        query: messageText,
-        chat_history: chatHistory,
-        top_k: 5,
-        use_full_transcript: useFullTranscript,
+      const response = await MeetingChatService.sendMessage(meetingId, messageText, {
+        chatHistory,
+        topK: 5,
+        useFullTranscript,
       });
 
       const assistantMessage = {
         role: 'assistant',
-        content: response.data.response,
-        sources: response.data.sources || [],
+        content: response.response,
+        sources: response.sources || [],
         timestamp: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
-      console.error('Error sending message:', err);
+      logger.error('Error sending message:', err);
       const errorMessage = {
         role: 'assistant',
         content: 'Sorry, I encountered an error. Please try again.',
@@ -149,11 +150,11 @@ const FloatingChat = ({ meetingId, meetingTitle }) => {
 
   const handleClearHistory = async () => {
     try {
-      await api.delete(`/api/v1/meetings/${meetingId}/chat/history`);
+      await MeetingChatService.clearHistory(meetingId);
       setMessages([]);
       setExpandedSources({});
     } catch (err) {
-      console.error('Error clearing chat history:', err);
+      logger.error('Error clearing chat history:', err);
     }
   };
 

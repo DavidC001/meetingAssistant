@@ -21,8 +21,6 @@ import {
   Chip,
   Alert,
   Snackbar,
-  IconButton,
-  Tooltip,
   Switch,
   FormControlLabel,
   CircularProgress,
@@ -35,9 +33,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Sync as SyncIcon,
-  SyncDisabled as SyncDisabledIcon,
   Google as GoogleIcon,
-  Close as CloseIcon,
 } from '@mui/icons-material';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
@@ -45,6 +41,7 @@ import './Calendar.css';
 import ActionItemService from '../../../services/actionItemService';
 import { projectService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const locales = {
   'en-US': require('date-fns/locale/en-US'),
 };
@@ -64,7 +61,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api/v1';
 const Calendar = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
-  const [actionItems, setActionItems] = useState([]);
+  const [, setActionItems] = useState([]);
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -112,7 +109,7 @@ const Calendar = () => {
       const email = response.data.email || '';
       setGoogleEmail(email);
     } catch (error) {
-      console.error('Error fetching Google Calendar status:', error);
+      logger.error('Error fetching Google Calendar status:', error);
     }
   }, []);
 
@@ -124,7 +121,7 @@ const Calendar = () => {
       const items = response?.data || response || [];
       setProjects(items);
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      logger.error('Error fetching projects:', error);
       showSnackbar('Error loading projects', 'error');
     } finally {
       setLoadingProjects(false);
@@ -156,7 +153,7 @@ const Calendar = () => {
         const linked = new Set(projectChecks.filter(Boolean));
         setLinkedProjects(linked);
       } catch (error) {
-        console.error('Error checking linked projects:', error);
+        logger.error('Error checking linked projects:', error);
       }
     },
     [projects]
@@ -180,7 +177,7 @@ const Calendar = () => {
         showSnackbar('Action item added to project', 'success');
       }
     } catch (error) {
-      console.error('Error linking/unlinking action item:', error);
+      logger.error('Error linking/unlinking action item:', error);
       showSnackbar('Error updating project link', 'error');
     }
   };
@@ -217,7 +214,7 @@ const Calendar = () => {
               start = new Date(dateStr);
             }
           } catch (e) {
-            console.error('Error parsing date:', e);
+            logger.error('Error parsing date:', e);
             start = addDays(new Date(), 7); // Default to 7 days from now
           }
         } else {
@@ -236,7 +233,7 @@ const Calendar = () => {
       setEvents(calendarEvents);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching action items:', error);
+      logger.error('Error fetching action items:', error);
       showSnackbar('Error loading action items', 'error');
       setLoading(false);
     }
@@ -297,7 +294,7 @@ const Calendar = () => {
       showSnackbar('Action item date updated', 'success');
       fetchActionItems();
     } catch (error) {
-      console.error('Error updating action item:', error);
+      logger.error('Error updating action item:', error);
       showSnackbar('Error updating action item date', 'error');
     }
   };
@@ -357,7 +354,7 @@ const Calendar = () => {
       setDialogOpen(false);
       fetchActionItems();
     } catch (error) {
-      console.error('Error saving action item:', error);
+      logger.error('Error saving action item:', error);
       showSnackbar('Error saving action item', 'error');
     }
   };
@@ -379,7 +376,7 @@ const Calendar = () => {
       setDialogOpen(false);
       fetchActionItems();
     } catch (error) {
-      console.error('Error deleting action item:', error);
+      logger.error('Error deleting action item:', error);
       showSnackbar('Error deleting action item', 'error');
     }
   };
@@ -410,7 +407,7 @@ const Calendar = () => {
             fetchGoogleStatus();
             authWindow.close();
           } catch (error) {
-            console.error('Error authorizing:', error);
+            logger.error('Error authorizing:', error);
             showSnackbar('Error connecting to Google Calendar', 'error');
           }
           window.removeEventListener('message', handleMessage);
@@ -419,7 +416,7 @@ const Calendar = () => {
 
       window.addEventListener('message', handleMessage);
     } catch (error) {
-      console.error('Error getting auth URL:', error);
+      logger.error('Error getting auth URL:', error);
       showSnackbar('Error initiating Google Calendar connection', 'error');
     }
   };
@@ -432,7 +429,7 @@ const Calendar = () => {
       showSnackbar('Disconnected from Google Calendar', 'success');
       fetchActionItems();
     } catch (error) {
-      console.error('Error disconnecting:', error);
+      logger.error('Error disconnecting:', error);
       showSnackbar('Error disconnecting from Google Calendar', 'error');
     }
   };
@@ -449,7 +446,7 @@ const Calendar = () => {
       }
       fetchActionItems();
     } catch (error) {
-      console.error('Error syncing action item:', error);
+      logger.error('Error syncing action item:', error);
       showSnackbar('Error syncing action item', 'error');
     }
   };
@@ -471,7 +468,7 @@ const Calendar = () => {
       const response = await axios.post(`${API_BASE_URL}/calendar/sync-all?status=pending`);
 
       // Show detailed sync result
-      const { synced, skipped, failed, user_email } = response.data;
+      const { synced, skipped, failed } = response.data;
       let message = `Synced ${synced} item(s) to Google Calendar`;
 
       if (skipped > 0) {
@@ -485,7 +482,7 @@ const Calendar = () => {
       fetchActionItems();
       setSyncDialogOpen(false);
     } catch (error) {
-      console.error('Error syncing all items:', error);
+      logger.error('Error syncing all items:', error);
       const errorMsg = error.response?.data?.detail || 'Error syncing items to Google Calendar';
       showSnackbar(errorMsg, 'error');
     } finally {

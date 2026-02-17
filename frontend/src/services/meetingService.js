@@ -158,6 +158,16 @@ const MeetingService = {
   },
 
   /**
+   * Generate a missing audio file for a meeting.
+   * @param {number} meetingId - Meeting ID
+   * @returns {Promise<Object>} Task status
+   */
+  async regenerateAudio(meetingId) {
+    const response = await apiClient.post(`${BASE_URL}/${meetingId}/generate-audio`);
+    return response.data;
+  },
+
+  /**
    * Retry analysis for a failed meeting.
    * @param {number} meetingId - Meeting ID
    * @returns {Promise<Object>} Updated meeting

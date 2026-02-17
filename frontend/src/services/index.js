@@ -5,8 +5,12 @@
  *
  * Usage:
  *   import { MeetingService, ChatService } from './services';
- *   // or
- *   import MeetingService from './services/meetingService';
+ *   // Access specific chat services
+ *   import { MeetingChatService, ProjectChatService, GlobalChatService } from './services';
+ *   // Or use the unified ChatService
+ *   ChatService.meeting.sendMessage(123, 'What was discussed?');
+ *   ChatService.project.listSessions(456);
+ *   ChatService.global.getAvailableFolders();
  */
 
 export { default as apiClient } from './apiClient';
@@ -16,7 +20,7 @@ export { default as MeetingService } from './meetingService';
 export { default as SpeakerService } from './speakerService';
 export { default as ActionItemService } from './actionItemService';
 export { default as AttachmentService } from './attachmentService';
-export { MeetingChatService, GlobalChatService } from './chatService';
+export { MeetingChatService, ProjectChatService, GlobalChatService } from './chatService';
 export { default as ChatService } from './chatService';
 export {
   APIKeyService,
@@ -28,3 +32,6 @@ export {
 export { default as SettingsService } from './settingsService';
 export { default as DiaryService } from './diaryService';
 export { projectService } from './projectService';
+export { default as SearchService } from './searchService';
+export { default as OllamaService } from './ollamaService';
+export { default as GoogleDriveService } from './googleDriveService';

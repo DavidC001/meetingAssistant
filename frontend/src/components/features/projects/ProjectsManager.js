@@ -16,13 +16,6 @@ import {
   FormControl,
   Select,
   MenuItem,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
   Alert,
@@ -30,7 +23,6 @@ import {
   Autocomplete,
 } from '@mui/material';
 import {
-  Folder as FolderIcon,
   FolderSpecial as FolderSpecialIcon,
   Add as AddIcon,
   Dashboard as DashboardIcon,
@@ -39,9 +31,10 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { projectService } from '../../../services/projectService';
-import api from '../../../api';
+import { MeetingService } from '../../../services';
 import MeetingPicker from './MeetingPicker';
 
+import logger from '../../../utils/logger';
 const ProjectsManager = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
@@ -64,6 +57,7 @@ const ProjectsManager = () => {
 
   useEffect(() => {
     loadAvailableTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects]);
 
   const loadData = async () => {
@@ -81,8 +75,8 @@ const ProjectsManager = () => {
 
   const loadAvailableTags = async () => {
     try {
-      const response = await api.getAllTags();
-      const tagsSet = new Set(response.data || []);
+      const response = await MeetingService.getAllTags();
+      const tagsSet = new Set(response || []);
       projects.forEach((project) => {
         if (project.tags && Array.isArray(project.tags)) {
           project.tags.forEach((tag) => {
@@ -94,7 +88,7 @@ const ProjectsManager = () => {
       });
       setAvailableTags(Array.from(tagsSet).sort());
     } catch (err) {
-      console.warn('Failed to load tags', err);
+      logger.warn('Failed to load tags', err);
     }
   };
 
@@ -121,16 +115,6 @@ const ProjectsManager = () => {
   const handleOpenDeleteDialog = (project) => {
     setSelectedProject(project);
     setDeleteDialogOpen(true);
-  };
-
-  const handleToggleMeetingSelection = (meetingId) => {
-    setSelectedMeetings((prev) => {
-      if (prev.includes(meetingId)) {
-        return prev.filter((id) => id !== meetingId);
-      } else {
-        return [...prev, meetingId];
-      }
-    });
   };
 
   const handleCreateProject = async () => {

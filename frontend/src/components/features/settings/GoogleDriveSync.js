@@ -16,12 +16,6 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Paper,
   Radio,
   RadioGroup,
   FormControl,
@@ -38,8 +32,9 @@ import {
   LinkOff as LinkOffIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import api from '../../../api';
+import { GoogleDriveService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const GoogleDriveSync = () => {
   const [status, setStatus] = useState({
     authenticated: false,
@@ -67,7 +62,7 @@ const GoogleDriveSync = () => {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [showFilesDialog, setShowFilesDialog] = useState(false);
+  const [, setShowFilesDialog] = useState(false);
   const [authWindow, setAuthWindow] = useState(null);
 
   useEffect(() => {
@@ -82,36 +77,37 @@ const GoogleDriveSync = () => {
           setSuccess('Completing Google authorization...');
           const params = { code: event.data.code };
           if (event.data.state) params.state = event.data.state;
-          await api.get('/api/v1/google-drive/callback', { params });
+          await GoogleDriveService.completeAuthorization(params);
           setSuccess('Google Drive connected successfully.');
           fetchStatus();
           if (authWindow && !authWindow.closed) authWindow.close();
         } catch (err) {
-          console.error('OAuth callback failed', err);
+          logger.error('OAuth callback failed', err);
           setError(err.response?.data?.detail || 'Failed to complete Google Drive authorization');
         }
       }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/v1/google-drive/status');
-      setStatus(response.data);
+      const response = await GoogleDriveService.getStatus();
+      setStatus(response);
       setConfig({
-        sync_folder_id: response.data.sync_folder_id || '',
-        processed_folder_id: response.data.processed_folder_id || '',
-        enabled: response.data.sync_enabled || false,
+        sync_folder_id: response.sync_folder_id || '',
+        processed_folder_id: response.processed_folder_id || '',
+        enabled: response.sync_enabled || false,
         auto_process: true,
-        sync_mode: response.data.sync_mode || 'manual',
-        sync_time: response.data.sync_time || '04:00',
+        sync_mode: response.sync_mode || 'manual',
+        sync_time: response.sync_time || '04:00',
       });
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch Google Drive status:', err);
+      logger.error('Failed to fetch Google Drive status:', err);
       setError('Failed to load Google Drive status');
     } finally {
       setLoading(false);
@@ -120,22 +116,22 @@ const GoogleDriveSync = () => {
 
   const fetchProcessedFiles = async () => {
     try {
-      const response = await api.get('/api/v1/google-drive/processed-files?limit=10');
-      setProcessedFiles(response.data);
+      const response = await GoogleDriveService.getProcessedFiles(10);
+      setProcessedFiles(response);
     } catch (err) {
-      console.error('Failed to fetch processed files:', err);
+      logger.error('Failed to fetch processed files:', err);
     }
   };
 
   const handleConnect = async () => {
     try {
-      const response = await api.get('/api/v1/google-drive/auth');
+      const response = await GoogleDriveService.authorize();
       // Open Google OAuth in a new window
-      const w = window.open(response.data.auth_url, 'google-oauth', 'width=600,height=700');
+      const w = window.open(response.auth_url, 'google-oauth', 'width=600,height=700');
       setAuthWindow(w);
       setSuccess('Please complete authentication in the pop-up window.');
     } catch (err) {
-      console.error('Failed to get auth URL:', err);
+      logger.error('Failed to get auth URL:', err);
       setError('Failed to initiate Google Drive authentication');
     }
   };
@@ -146,11 +142,11 @@ const GoogleDriveSync = () => {
     }
 
     try {
-      await api.post('/api/v1/google-drive/disconnect');
+      await GoogleDriveService.disconnect();
       setSuccess('Successfully disconnected from Google Drive');
       fetchStatus();
     } catch (err) {
-      console.error('Failed to disconnect:', err);
+      logger.error('Failed to disconnect:', err);
       setError('Failed to disconnect from Google Drive');
     }
   };
@@ -161,11 +157,11 @@ const GoogleDriveSync = () => {
     setSuccess(null);
 
     try {
-      await api.post('/api/v1/google-drive/config', config);
+      await GoogleDriveService.updateConfig(config);
       setSuccess('Google Drive configuration saved successfully');
       fetchStatus();
     } catch (err) {
-      console.error('Failed to save config:', err);
+      logger.error('Failed to save config:', err);
       setError(err.response?.data?.detail || 'Failed to save Google Drive configuration');
     } finally {
       setSaving(false);
@@ -178,7 +174,7 @@ const GoogleDriveSync = () => {
     setSuccess(null);
 
     try {
-      await api.post('/api/v1/google-drive/sync');
+      await GoogleDriveService.syncNow();
       setSuccess('Google Drive sync started. Files will be processed in the background.');
 
       // Refresh processed files after a delay
@@ -187,7 +183,7 @@ const GoogleDriveSync = () => {
         fetchStatus();
       }, 5000);
     } catch (err) {
-      console.error('Failed to trigger sync:', err);
+      logger.error('Failed to trigger sync:', err);
       setError(err.response?.data?.detail || 'Failed to trigger Google Drive sync');
     } finally {
       setSyncing(false);

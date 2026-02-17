@@ -30,8 +30,9 @@ import {
   Info as InfoIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
-import api from '../../../api';
+import { OllamaService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const OllamaManager = () => {
   const [status, setStatus] = useState('unknown');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,11 +47,11 @@ const OllamaManager = () => {
   const checkOllamaStatus = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/api/v1/ollama/status');
-      setStatus(response.data.status);
+      const response = await OllamaService.getStatus();
+      setStatus(response.status);
       setError(null);
     } catch (err) {
-      console.error('Failed to check Ollama status:', err);
+      logger.error('Failed to check Ollama status:', err);
       setStatus('error');
       setError('Failed to check Ollama status');
     } finally {
@@ -63,11 +64,11 @@ const OllamaManager = () => {
       setIsLoading(true);
       setError(null);
       setSuccess(null);
-      const response = await api.post('/api/v1/ollama/start', ollamaConfig);
-      setSuccess(response.data.message || 'Ollama container started successfully!');
+      const response = await OllamaService.start(ollamaConfig);
+      setSuccess(response.message || 'Ollama container started successfully!');
       setTimeout(checkOllamaStatus, 3000); // Check status after 3 seconds
     } catch (err) {
-      console.error('Failed to start Ollama:', err);
+      logger.error('Failed to start Ollama:', err);
       setError(err.response?.data?.detail || 'Failed to start Ollama container');
     } finally {
       setIsLoading(false);
@@ -79,11 +80,11 @@ const OllamaManager = () => {
       setIsLoading(true);
       setError(null);
       setSuccess(null);
-      const response = await api.post('/api/v1/ollama/stop');
-      setSuccess(response.data.message || 'Ollama container stopped successfully!');
+      const response = await OllamaService.stop();
+      setSuccess(response.message || 'Ollama container stopped successfully!');
       setTimeout(checkOllamaStatus, 2000);
     } catch (err) {
-      console.error('Failed to stop Ollama:', err);
+      logger.error('Failed to stop Ollama:', err);
       setError(err.response?.data?.detail || 'Failed to stop Ollama container');
     } finally {
       setIsLoading(false);

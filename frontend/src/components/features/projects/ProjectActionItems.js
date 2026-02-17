@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Button, Container, Typography, CircularProgress, Alert } from '@mui/material';
+import { Box, Button, Container, CircularProgress, Alert } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import KanbanBoard from '../kanban/KanbanBoard';
 import { projectService } from '../../../services';

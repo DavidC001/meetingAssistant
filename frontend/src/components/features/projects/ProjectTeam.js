@@ -5,8 +5,6 @@ import {
   Paper,
   Typography,
   Grid,
-  Card,
-  CardContent,
   Avatar,
   Button,
   IconButton,
@@ -35,7 +33,6 @@ import {
   Sync as SyncIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Person as PersonIcon,
   Email as EmailIcon,
   Badge as BadgeIcon,
   AutoAwesome as AutoIcon,
@@ -43,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import { projectService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const ProjectTeam = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -67,6 +65,7 @@ const ProjectTeam = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const loadData = async () => {
@@ -82,7 +81,7 @@ const ProjectTeam = () => {
       setProject(projectResponse.data);
       setMembers(membersResponse.data);
     } catch (err) {
-      console.error('Failed to load team members:', err);
+      logger.error('Failed to load team members:', err);
       setError(err.response?.data?.detail || 'Failed to load team members');
     } finally {
       setLoading(false);
@@ -97,7 +96,7 @@ const ProjectTeam = () => {
       await projectService.syncMembers(projectId);
       await loadData(); // Reload to show updated members
     } catch (err) {
-      console.error('Failed to sync members:', err);
+      logger.error('Failed to sync members:', err);
       setError(err.response?.data?.detail || 'Failed to sync members');
     } finally {
       setSyncing(false);
@@ -114,7 +113,7 @@ const ProjectTeam = () => {
       setAddDialogOpen(false);
       setFormData({ name: '', email: '', role: 'member' });
     } catch (err) {
-      console.error('Failed to add member:', err);
+      logger.error('Failed to add member:', err);
       setError(err.response?.data?.detail || 'Failed to add member');
     }
   };
@@ -132,7 +131,7 @@ const ProjectTeam = () => {
       setSelectedMember(null);
       setFormData({ name: '', email: '', role: 'member' });
     } catch (err) {
-      console.error('Failed to update member:', err);
+      logger.error('Failed to update member:', err);
       setError(err.response?.data?.detail || 'Failed to update member');
     }
   };
@@ -147,7 +146,7 @@ const ProjectTeam = () => {
       await projectService.removeMember(projectId, memberId);
       await loadData();
     } catch (err) {
-      console.error('Failed to remove member:', err);
+      logger.error('Failed to remove member:', err);
       setError(err.response?.data?.detail || 'Failed to remove member');
     }
   };

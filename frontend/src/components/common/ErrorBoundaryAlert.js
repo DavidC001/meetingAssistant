@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, AlertTitle, Button, Box } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
+import logger from '../../utils/logger';
 /**
  * Lightweight Error Boundary for smaller components
  * Shows an inline alert instead of a full-page error
@@ -25,7 +26,7 @@ class ErrorBoundaryAlert extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundaryAlert caught:', error, errorInfo);
+    logger.error('ErrorBoundaryAlert caught:', error, errorInfo);
 
     if (this.props.onError) {
       this.props.onError(error, errorInfo);

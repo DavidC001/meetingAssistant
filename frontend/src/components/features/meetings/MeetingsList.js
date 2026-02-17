@@ -28,7 +28,6 @@ import {
   MoreVert as MoreVertIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  PlayArrow as PlayIcon,
   Schedule as ScheduleIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
@@ -38,7 +37,7 @@ import {
   Download as DownloadIcon,
   Visibility as ViewIcon,
 } from '@mui/icons-material';
-import api from '../../../api';
+import { MeetingService } from '../../../services';
 
 const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   const [meetings, setMeetings] = useState([]);
@@ -54,9 +53,9 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   const fetchMeetings = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/api/v1/meetings/');
+      const data = await MeetingService.getAll();
       setMeetings(
-        response.data.sort((a, b) => {
+        data.sort((a, b) => {
           const dateA = new Date(a.meeting_date || a.created_at);
           const dateB = new Date(b.meeting_date || b.created_at);
           return dateB - dateA;
@@ -65,7 +64,6 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
       setError(null);
     } catch (err) {
       setError('Failed to fetch meetings.');
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +84,8 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
         // Poll every 15 seconds for processing meetings (much less aggressive)
         pollTimeout = setTimeout(async () => {
           try {
-            const response = await api.get('/api/v1/meetings/');
-            const updatedMeetings = response.data.sort((a, b) => {
+            const response = await MeetingService.getAll();
+            const updatedMeetings = response.sort((a, b) => {
               const dateA = new Date(a.meeting_date || a.created_at);
               const dateB = new Date(b.meeting_date || b.created_at);
               return dateB - dateA;
@@ -95,9 +93,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
             setMeetings(updatedMeetings);
             currentMeetings = updatedMeetings; // Update reference
             scheduleNextPoll();
-          } catch (error) {
-            console.error('Error polling meetings:', error);
-          }
+          } catch (error) {}
         }, 15000);
       }
     };
@@ -111,7 +107,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
       }
       clearTimeout(initialPollTimer);
     };
-  }, [refreshKey]); // Only depend on refreshKey
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMenuOpen = (event, meeting) => {
     event.preventDefault();
@@ -145,8 +141,7 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
     }
 
     try {
-      const response = await api.renameMeeting(selectedMeeting.id, trimmedName);
-      console.log('Rename response:', response);
+      await MeetingService.rename(selectedMeeting.id, trimmedName);
       setError(null);
       setRenameDialogOpen(false);
       setNewName('');
@@ -154,7 +149,6 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
       await fetchMeetings();
       if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
-      console.error('Rename meeting error:', err);
       const errorMessage =
         err.response?.data?.detail || 'Failed to rename meeting. Please try again.';
       setError(errorMessage);
@@ -168,14 +162,13 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
 
   const handleDeleteConfirm = async () => {
     try {
-      await api.deleteMeeting(selectedMeeting.id);
+      await MeetingService.delete(selectedMeeting.id);
       setError(null);
       setDeleteDialogOpen(false);
       // Refresh the meetings list
       await fetchMeetings();
       if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
-      console.error('Delete meeting error:', err);
       const errorMessage =
         err.response?.data?.detail || 'Failed to delete meeting. Please try again.';
       setError(errorMessage);
@@ -186,12 +179,11 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   const handleRegenerateAudio = async () => {
     handleMenuClose();
     try {
-      await api.post(`/meetings/${selectedMeeting.id}/audio/regenerate`);
+      await MeetingService.regenerateAudio(selectedMeeting.id);
       setError(null);
       await fetchMeetings();
       if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
-      console.error('Regenerate audio error:', err);
       const errorMessage =
         err.response?.data?.detail || 'Failed to regenerate audio. Please try again.';
       setError(errorMessage);
@@ -201,12 +193,11 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   const handleRestartProcessing = async () => {
     handleMenuClose();
     try {
-      await api.post(`/meetings/${selectedMeeting.id}/restart-processing`);
+      await MeetingService.restartProcessing(selectedMeeting.id);
       setError(null);
       await fetchMeetings();
       if (onMeetingUpdate) onMeetingUpdate();
     } catch (err) {
-      console.error('Restart processing error:', err);
       const errorMessage =
         err.response?.data?.detail || 'Failed to restart processing. Please try again.';
       setError(errorMessage);
@@ -216,18 +207,12 @@ const MeetingsList = ({ refreshKey, onMeetingUpdate }) => {
   const handleDownloadTranscript = async (format = 'txt') => {
     handleMenuClose();
     try {
-      const response = await api.get(`/meetings/${selectedMeeting.id}/download/${format}`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${selectedMeeting.filename}.${format}`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      await MeetingService.download(
+        selectedMeeting.id,
+        format,
+        `${selectedMeeting.filename}.${format}`
+      );
     } catch (err) {
-      console.error('Download transcript error:', err);
       const errorMessage =
         err.response?.data?.detail || 'Failed to download transcript. Please try again.';
       setError(errorMessage);

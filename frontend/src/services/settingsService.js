@@ -83,6 +83,15 @@ export const ModelConfigService = {
   },
 
   /**
+   * Get available model providers.
+   * @returns {Promise<Object>} Providers response
+   */
+  async getProviders() {
+    const response = await apiClient.get(`${BASE_URL}/model-providers`);
+    return response.data;
+  },
+
+  /**
    * Get a specific configuration.
    * @param {number} configId - Configuration ID
    * @returns {Promise<Object>} Configuration details
@@ -139,6 +148,15 @@ export const ModelConfigService = {
  * Embedding Configuration management.
  */
 export const EmbeddingConfigService = {
+  /**
+   * Get embedding configuration list and active id.
+   * @returns {Promise<Object>} Configuration response
+   */
+  async getConfig() {
+    const response = await apiClient.get(`${BASE_URL}/embedding-config`);
+    return response.data;
+  },
+
   /**
    * Get active embedding configuration.
    * @returns {Promise<Object>} Active configuration
@@ -307,7 +325,7 @@ export const BackupService = {
 };
 
 // Export all services
-export default {
+const SettingsService = {
   apiKeys: APIKeyService,
   modelConfig: ModelConfigService,
   embeddingConfig: EmbeddingConfigService,
@@ -315,3 +333,5 @@ export default {
   appSettings: AppSettingsService,
   backup: BackupService,
 };
+
+export default SettingsService;

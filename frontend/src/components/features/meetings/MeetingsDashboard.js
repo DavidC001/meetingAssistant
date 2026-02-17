@@ -1,26 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Box, Typography, Fade, Grid, Card, CardContent, Button, Stack } from '@mui/material';
 import {
-  Box,
-  Typography,
-  Fade,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Paper,
-  Chip,
-  LinearProgress,
-  Stack,
-  Divider,
-  IconButton,
-  useTheme,
-} from '@mui/material';
-import {
-  Upload as UploadIcon,
   FolderOpen as FolderOpenIcon,
   CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
   TrendingUp as TrendingUpIcon,
   CalendarToday as CalendarIcon,
   Assessment as AssessmentIcon,
@@ -30,10 +13,9 @@ import MeetingCard from '../../common/MeetingCard';
 import LoadingSkeleton from '../../common/LoadingSkeleton';
 import EmptyState from '../../common/EmptyState';
 import UploadFAB from '../../upload/UploadFAB';
-import api from '../../../api';
+import { MeetingService } from '../../../services';
 
 const MeetingsDashboard = () => {
-  const theme = useTheme();
   const [refreshKey, setRefreshKey] = useState(0);
   const [recentMeetings, setRecentMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,8 +40,7 @@ const MeetingsDashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/v1/meetings/');
-      const meetings = response.data;
+      const meetings = await MeetingService.getAll();
 
       // Get recent meetings (last 5 completed)
       const recent = meetings
@@ -96,7 +77,6 @@ const MeetingsDashboard = () => {
         thisWeek: thisWeekCount,
       });
     } catch (err) {
-      console.error('Error fetching dashboard data:', err);
     } finally {
       setLoading(false);
     }

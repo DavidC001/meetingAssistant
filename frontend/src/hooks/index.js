@@ -4,8 +4,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { POLLING, MEETING_STATUS } from '../constants';
-import api from '../api';
+import { MeetingService } from '../services';
 
+import logger from '../utils/logger';
 /**
  * Hook for managing meetings list with automatic polling
  * @param {number} refreshKey - Key to trigger refresh
@@ -20,8 +21,8 @@ export const useMeetings = (refreshKey = 0) => {
   const fetchMeetings = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/api/v1/meetings/');
-      const sortedMeetings = response.data.sort((a, b) => {
+      const meetingsData = await MeetingService.getAll();
+      const sortedMeetings = meetingsData.sort((a, b) => {
         const dateA = new Date(a.meeting_date || a.created_at);
         const dateB = new Date(b.meeting_date || b.created_at);
         return dateB - dateA;
@@ -32,7 +33,7 @@ export const useMeetings = (refreshKey = 0) => {
     } catch (err) {
       const errorMessage = err.response?.data?.detail || 'Failed to fetch meetings.';
       setError(errorMessage);
-      console.error('Error fetching meetings:', err);
+      logger.error('Error fetching meetings:', err);
       return [];
     } finally {
       setIsLoading(false);
@@ -98,28 +99,16 @@ export const useFileUpload = () => {
       setUploadError(null);
       setUploadProgress(0);
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (options.transcriptionLanguage) {
-        formData.append('transcription_language', options.transcriptionLanguage);
-      }
-      if (options.numberOfSpeakers) {
-        formData.append('number_of_speakers', options.numberOfSpeakers);
-      }
-
-      const response = await api.post('/api/v1/meetings/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
+      const response = await MeetingService.upload(file, {
+        transcriptionLanguage: options.transcriptionLanguage,
+        numberOfSpeakers: options.numberOfSpeakers,
+        onProgress: (progress) => {
+          setUploadProgress(progress);
         },
       });
 
       setUploadProgress(100);
-      return response.data;
+      return response;
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Upload failed';
       setUploadError(errorMessage);
@@ -150,7 +139,7 @@ export const useLocalStorage = (key, defaultValue) => {
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : defaultValue;
     } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
+      logger.error(`Error reading localStorage key "${key}":`, error);
       return defaultValue;
     }
   });
@@ -161,7 +150,7 @@ export const useLocalStorage = (key, defaultValue) => {
         setValue(newValue);
         window.localStorage.setItem(key, JSON.stringify(newValue));
       } catch (error) {
-        console.error(`Error setting localStorage key "${key}":`, error);
+        logger.error(`Error setting localStorage key "${key}":`, error);
       }
     },
     [key]
@@ -415,7 +404,7 @@ export const useClipboard = () => {
 
       return true;
     } catch (error) {
-      console.error('Failed to copy:', error);
+      logger.error('Failed to copy:', error);
       setCopySuccess(false);
       return false;
     }

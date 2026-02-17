@@ -3,6 +3,7 @@ import { Box, Typography, Button, Paper, Alert } from '@mui/material';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
+import logger from '../../utils/logger';
 /**
  * Error Boundary component to catch JavaScript errors in React components
  * and display a fallback UI instead of crashing the entire application.
@@ -30,7 +31,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log error details for debugging
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    logger.error('ErrorBoundary caught an error:', error, errorInfo);
 
     // You can also log the error to an error reporting service here
     // e.g., Sentry, LogRocket, etc.

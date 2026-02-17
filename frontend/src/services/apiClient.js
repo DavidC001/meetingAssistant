@@ -10,6 +10,7 @@
 
 import axios from 'axios';
 
+import logger from '../utils/logger';
 /**
  * Base axios client with default configuration.
  * Uses empty baseURL so axios uses the current origin automatically.
@@ -23,7 +24,7 @@ const apiClient = axios.create({
 });
 
 // Debug logging
-console.log('API Client initialized with baseURL:', apiClient.defaults.baseURL);
+logger.log('API Client initialized with baseURL:', apiClient.defaults.baseURL);
 
 /**
  * Request interceptor for adding auth headers and logging.
@@ -36,7 +37,7 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('Request error:', error);
+    logger.error('Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -69,7 +70,7 @@ apiClient.interceptors.response.use(
 
     // Log for debugging
     if (process.env.NODE_ENV === 'development') {
-      console.error('API Error:', errorResponse);
+      logger.error('API Error:', errorResponse);
     }
 
     // Attach enriched error info

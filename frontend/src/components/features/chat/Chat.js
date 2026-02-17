@@ -14,7 +14,6 @@ import {
   Tooltip,
   Chip,
   Stack,
-  Divider,
   Collapse,
   FormControl,
   InputLabel,
@@ -33,10 +32,11 @@ import {
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import api from '../../../api';
+import { MeetingChatService } from '../../../services';
 import QuickActions from '../../QuickActions';
 import './Chat.css';
 
+import logger from '../../../utils/logger';
 const Chat = ({ meetingId }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -59,9 +59,9 @@ const Chat = ({ meetingId }) => {
       if (historyLoaded) return;
 
       try {
-        const response = await api.get(`/api/v1/meetings/${meetingId}/chat/history`);
-        if (response.data.history && response.data.history.length > 0) {
-          const hydratedHistory = response.data.history.map((msg) => ({
+        const response = await MeetingChatService.getHistory(meetingId);
+        if (response.history && response.history.length > 0) {
+          const hydratedHistory = response.history.map((msg) => ({
             ...msg,
             sources: msg.sources || [],
           }));
@@ -69,7 +69,7 @@ const Chat = ({ meetingId }) => {
         }
         setHistoryLoaded(true);
       } catch (error) {
-        console.error('Error loading chat history:', error);
+        logger.error('Error loading chat history:', error);
         setHistoryLoaded(true);
       }
     };
@@ -81,10 +81,10 @@ const Chat = ({ meetingId }) => {
 
   const clearChatHistory = async () => {
     try {
-      await api.delete(`/api/v1/meetings/${meetingId}/chat/history`);
+      await MeetingChatService.clearHistory(meetingId);
       setMessages([]);
     } catch (error) {
-      console.error('Error clearing chat history:', error);
+      logger.error('Error clearing chat history:', error);
     }
   };
 
@@ -108,24 +108,23 @@ const Chat = ({ meetingId }) => {
           content: msg.content,
         }));
 
-        const response = await api.post(`/api/v1/meetings/${meetingId}/chat`, {
-          query: input,
-          chat_history: chat_history,
-          top_k: topK,
-          use_full_transcript: useFullTranscript,
+        const response = await MeetingChatService.sendMessage(meetingId, input, {
+          chatHistory: chat_history,
+          topK,
+          useFullTranscript,
         });
 
         setMessages([
           ...newMessages,
           {
             role: 'assistant',
-            content: response.data.response,
-            sources: response.data.sources || [],
-            follow_up_suggestions: response.data.follow_up_suggestions || [],
+            content: response.response,
+            sources: response.sources || [],
+            follow_up_suggestions: response.follow_up_suggestions || [],
           },
         ]);
       } catch (error) {
-        console.error('Error sending message:', error);
+        logger.error('Error sending message:', error);
         setMessages([
           ...newMessages,
           {

@@ -25,10 +25,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 
+import logger from '../utils/logger';
 const UserMappingsDialog = ({ open, onClose, userEmail }) => {
   const [mappings, setMappings] = useState([]);
   const [unmappedNames, setUnmappedNames] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -42,6 +42,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
       fetchMappings();
       fetchSuggestions();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const fetchMappings = async () => {
@@ -52,7 +53,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         setMappings(data);
       }
     } catch (error) {
-      console.error('Error fetching mappings:', error);
+      logger.error('Error fetching mappings:', error);
       showSnackbar('Error loading mappings', 'error');
     }
   };
@@ -65,7 +66,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         setUnmappedNames(data.unmapped_names || []);
       }
     } catch (error) {
-      console.error('Error fetching suggestions:', error);
+      logger.error('Error fetching suggestions:', error);
     }
   };
 
@@ -87,7 +88,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         showSnackbar('Failed to delete mapping', 'error');
       }
     } catch (error) {
-      console.error('Error deleting mapping:', error);
+      logger.error('Error deleting mapping:', error);
       showSnackbar('Error deleting mapping', 'error');
     }
   };
@@ -118,7 +119,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         showSnackbar('Failed to update mapping', 'error');
       }
     } catch (error) {
-      console.error('Error updating mapping:', error);
+      logger.error('Error updating mapping:', error);
       showSnackbar('Error updating mapping', 'error');
     }
   };
@@ -158,7 +159,7 @@ const UserMappingsDialog = ({ open, onClose, userEmail }) => {
         showSnackbar(error.detail || 'Failed to create mapping', 'error');
       }
     } catch (error) {
-      console.error('Error creating mapping:', error);
+      logger.error('Error creating mapping:', error);
       showSnackbar('Error creating mapping', 'error');
     }
   };

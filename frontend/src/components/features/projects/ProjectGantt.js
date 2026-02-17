@@ -30,6 +30,7 @@ import '@svar-ui/react-gantt/all.css';
 import { projectService } from '../../../services';
 import './ProjectGanttTooltip.css';
 
+import logger from '../../../utils/logger';
 // Helper to format date for input fields
 const formatDateForInput = (date) => {
   const d = new Date(date);
@@ -117,7 +118,7 @@ const ProjectGantt = ({ projectId }) => {
 
   // Track a refresh key to force re-render when presets are clicked
   const [refreshKey, setRefreshKey] = useState(0);
-  const [priorityColors, setPriorityColors] = useState(() => {
+  const [priorityColors] = useState(() => {
     const stored = localStorage.getItem(`project-${projectId}-priority-colors`);
     return stored
       ? JSON.parse(stored)
@@ -136,12 +137,14 @@ const ProjectGantt = ({ projectId }) => {
 
   useEffect(() => {
     loadGanttData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   useEffect(() => {
     if (ganttData) {
       convertToGanttTasks();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ganttData, filterType, dateRangeStart, dateRangeEnd, refreshKey, priorityColors]);
 
   useEffect(() => {
@@ -159,7 +162,7 @@ const ProjectGantt = ({ projectId }) => {
       const response = await projectService.getGanttData(projectId);
       setGanttData(response.data);
     } catch (err) {
-      console.error('Failed to load Gantt data:', err);
+      logger.error('Failed to load Gantt data:', err);
       setError(err.response?.data?.detail || 'Failed to load Gantt chart data');
     } finally {
       setLoading(false);
@@ -177,7 +180,7 @@ const ProjectGantt = ({ projectId }) => {
         // We aren't updating the name via drag/drop, but the object has it
       });
     } catch (err) {
-      console.error('Failed to update task:', err);
+      logger.error('Failed to update task:', err);
       setError('Failed to update task date');
       loadGanttData(); // Revert on error
     }
@@ -318,7 +321,7 @@ const ProjectGantt = ({ projectId }) => {
       handleAddActionItemClose();
       loadGanttData();
     } catch (err) {
-      console.error('Failed to create action item:', err);
+      logger.error('Failed to create action item:', err);
       setError(err.response?.data?.detail || 'Failed to create action item');
     }
   };
@@ -342,7 +345,7 @@ const ProjectGantt = ({ projectId }) => {
         };
         setLinks((prev) => [...prev, saved]);
       } catch (err) {
-        console.error('Failed to add gantt link:', err);
+        logger.error('Failed to add gantt link:', err);
       }
     },
     [projectId]
@@ -357,7 +360,7 @@ const ProjectGantt = ({ projectId }) => {
         await projectService.deleteGanttLink(projectId, linkId);
         setLinks((prev) => prev.filter((l) => String(l.id) !== String(linkId)));
       } catch (err) {
-        console.error('Failed to delete gantt link:', err);
+        logger.error('Failed to delete gantt link:', err);
       }
     },
     [projectId]

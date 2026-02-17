@@ -35,6 +35,7 @@ import {
 } from '@mui/icons-material';
 import { projectService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const ProjectMeetings = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ const ProjectMeetings = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, statusFilter, sortBy, sortOrder]);
 
   const loadData = async () => {
@@ -72,7 +74,7 @@ const ProjectMeetings = () => {
       setProject(projectResponse.data);
       setMeetings(meetingsResponse.data);
     } catch (err) {
-      console.error('Failed to load project meetings:', err);
+      logger.error('Failed to load project meetings:', err);
       setError(err.response?.data?.detail || 'Failed to load meetings');
     } finally {
       setLoading(false);

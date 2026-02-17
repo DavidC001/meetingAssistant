@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 
 docs/
+.vscode/
+.ruff_cache/

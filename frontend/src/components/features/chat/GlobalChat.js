@@ -18,7 +18,6 @@ import {
   DialogContent,
   DialogActions,
   Collapse,
-  Slider,
   FormControl,
   InputLabel,
   Select,
@@ -43,7 +42,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import api from '../../../api';
+import { GlobalChatService, MeetingService } from '../../../services';
 import QuickActions from '../../QuickActions';
 import './GlobalChat.css';
 
@@ -75,8 +74,8 @@ const GlobalChat = () => {
   const loadSessions = async () => {
     setInitialising(true);
     try {
-      const response = await api.globalChat.listSessions();
-      const sessionList = response.data || [];
+      const response = await GlobalChatService.listSessions();
+      const sessionList = response || [];
       setSessions(sessionList);
       if (sessionList.length > 0) {
         const sessionId = sessionList[0].id;
@@ -84,7 +83,6 @@ const GlobalChat = () => {
         await loadSession(sessionId);
       }
     } catch (error) {
-      console.error('Failed to load chat sessions', error);
     } finally {
       setInitialising(false);
     }
@@ -92,24 +90,20 @@ const GlobalChat = () => {
 
   const loadAllTags = async () => {
     try {
-      const response = await api.getAllTags();
-      setAllTags(response.data || []);
-    } catch (error) {
-      console.error('Failed to load tags', error);
-    }
+      const response = await MeetingService.getAllTags();
+      setAllTags(response || []);
+    } catch (error) {}
   };
 
   const loadFilterOptions = async () => {
     try {
       const [foldersRes, tagsRes] = await Promise.all([
-        api.globalChat.getAvailableFolders(),
-        api.globalChat.getAvailableFilterTags(),
+        GlobalChatService.getAvailableFolders(),
+        GlobalChatService.getAvailableTags(),
       ]);
-      setAvailableFolders(foldersRes.data || []);
-      setAvailableFilterTags(tagsRes.data || []);
-    } catch (error) {
-      console.error('Failed to load filter options', error);
-    }
+      setAvailableFolders(foldersRes || []);
+      setAvailableFilterTags(tagsRes || []);
+    } catch (error) {}
   };
 
   const handleOpenFilterDialog = () => {
@@ -137,18 +131,15 @@ const GlobalChat = () => {
         ? tempFilterTags.filter((t) => t && t.trim()).join(', ')
         : '';
 
-      await api.globalChat.updateSession(
-        activeSessionId,
-        session?.title,
-        session?.tags,
-        tempFilterFolder || null,
-        filterTagsString || null
-      );
+      await GlobalChatService.updateSession(activeSessionId, {
+        title: session?.title,
+        tags: session?.tags,
+        filterFolder: tempFilterFolder || null,
+        filterTags: filterTagsString || null,
+      });
       await loadSessions();
       setFilterDialogOpen(false);
-    } catch (error) {
-      console.error('Failed to apply filters', error);
-    }
+    } catch (error) {}
   };
 
   const handleClearFilters = async () => {
@@ -156,34 +147,30 @@ const GlobalChat = () => {
 
     try {
       const session = sessions.find((s) => s.id === activeSessionId);
-      await api.globalChat.updateSession(
-        activeSessionId,
-        session?.title,
-        session?.tags,
-        null,
-        null
-      );
+      await GlobalChatService.updateSession(activeSessionId, {
+        title: session?.title,
+        tags: session?.tags,
+        filterFolder: null,
+        filterTags: null,
+      });
       setTempFilterFolder('');
       setTempFilterTags([]);
       await loadSessions();
       setFilterDialogOpen(false);
-    } catch (error) {
-      console.error('Failed to clear filters', error);
-    }
+    } catch (error) {}
   };
 
   const loadSession = async (sessionId) => {
     setLoading(true);
     try {
-      const response = await api.globalChat.getSession(sessionId);
+      const response = await GlobalChatService.getSession(sessionId);
       const history =
-        response.data.messages?.map((message) => ({
+        response.messages?.map((message) => ({
           ...message,
           sources: message.sources || [],
         })) || [];
       setMessages(history);
     } catch (error) {
-      console.error('Failed to load session', error);
       setMessages([]);
     } finally {
       setLoading(false);
@@ -193,30 +180,26 @@ const GlobalChat = () => {
   useEffect(() => {
     loadSessions();
     loadAllTags();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateSession = async () => {
     try {
-      const response = await api.globalChat.createSession('');
+      const response = await GlobalChatService.createSession({ title: '' });
       await loadSessions();
-      setActiveSessionId(response.data.id);
-      await loadSession(response.data.id);
-    } catch (error) {
-      console.error('Failed to create session', error);
-    }
+      setActiveSessionId(response.id);
+      await loadSession(response.id);
+    } catch (error) {}
   };
 
   const handleDeleteSession = async (sessionId) => {
     try {
-      await api.globalChat.deleteSession(sessionId);
+      await GlobalChatService.deleteSession(sessionId);
       if (sessionId === activeSessionId) {
         setMessages([]);
         setActiveSessionId(null);
       }
       await loadSessions();
-    } catch (error) {
-      console.error('Failed to delete session', error);
-    }
+    } catch (error) {}
   };
 
   const handleRenameSession = (sessionId) => {
@@ -243,18 +226,17 @@ const GlobalChat = () => {
         ? newSessionTags.filter((t) => t && t.trim()).join(', ')
         : '';
 
-      console.log('Saving tags:', { array: newSessionTags, string: tagsString });
-
-      await api.globalChat.updateSession(renameSessionId, newSessionName.trim(), tagsString);
+      await GlobalChatService.updateSession(renameSessionId, {
+        title: newSessionName.trim(),
+        tags: tagsString,
+      });
       await loadSessions();
       await loadAllTags(); // Refresh tags list
       setRenameDialogOpen(false);
       setRenameSessionId(null);
       setNewSessionName('');
       setNewSessionTags([]);
-    } catch (error) {
-      console.error('Failed to update session', error);
-    }
+    } catch (error) {}
   };
 
   const toggleSourcesExpanded = (index) => {
@@ -308,28 +290,30 @@ const GlobalChat = () => {
         content: msg.content,
       }));
       if (shouldAutoCreate) {
-        const created = await api.globalChat.createSession('New chat');
-        sessionId = created.data.id;
+        const created = await GlobalChatService.createSession({ title: 'New chat' });
+        sessionId = created.id;
         setActiveSessionId(sessionId);
-        activeSession = created.data;
+        activeSession = created;
         shouldRefreshSessions = true;
       }
 
-      const response = await api.globalChat.sendMessage(sessionId, question, chatHistory, topK);
+      const response = await GlobalChatService.sendMessage(sessionId, question, {
+        chatHistory,
+        topK,
+      });
       setMessages([
         ...newMessages,
         {
           role: 'assistant',
-          content: response.data.content,
-          sources: response.data.sources || [],
-          follow_up_suggestions: response.data.follow_up_suggestions || [],
+          content: response.content,
+          sources: response.sources || [],
+          follow_up_suggestions: response.follow_up_suggestions || [],
         },
       ]);
       if (shouldRefreshSessions) {
         await loadSessions();
       }
     } catch (error) {
-      console.error('Failed to send message', error);
       setMessages([
         ...newMessages,
         {
@@ -745,7 +729,6 @@ const GlobalChat = () => {
             options={availableTags}
             value={newSessionTags}
             onChange={(event, newValue) => {
-              console.log('Autocomplete onChange:', newValue);
               // newValue is an array of strings (both selected and newly typed)
               setNewSessionTags(newValue);
             }}

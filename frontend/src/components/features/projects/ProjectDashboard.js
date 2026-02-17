@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  Checkbox,
   Chip,
   Container,
   Dialog,
@@ -22,7 +21,6 @@ import {
   List,
   ListItem,
   ListItemAvatar,
-  ListItemIcon,
   ListItemSecondaryAction,
   ListItemText,
   Menu,
@@ -53,7 +51,6 @@ import {
   Badge as BadgeIcon,
   CalendarToday as CalendarIcon,
   Chat as ChatIcon,
-  CheckCircle as CheckCircleIcon,
   Clear as ClearIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
@@ -72,15 +69,15 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { projectService } from '../../../services/projectService';
-import { downloadBlob } from '../../../services';
+import { downloadBlob, MeetingService } from '../../../services';
 import { format } from 'date-fns';
 import KanbanBoard from '../kanban/KanbanBoard';
 import ProjectGantt from './ProjectGantt';
 import ProjectChat from './ProjectChat';
 import ProjectNotes from './ProjectNotes';
 import ProjectMilestones from './ProjectMilestones';
-import api from '../../../api';
 
+import logger from '../../../utils/logger';
 const ProjectDashboard = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -126,10 +123,12 @@ const ProjectDashboard = () => {
 
   useEffect(() => {
     loadProject();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   useEffect(() => {
     loadAvailableTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
   useEffect(() => {
@@ -137,6 +136,7 @@ const ProjectDashboard = () => {
       if (currentTab === 1) loadMeetings();
       if (currentTab === 3) loadMembers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab, project]);
 
   const loadProject = async () => {
@@ -154,8 +154,8 @@ const ProjectDashboard = () => {
 
   const loadAvailableTags = async () => {
     try {
-      const response = await api.getAllTags();
-      const tagsSet = new Set(response.data || []);
+      const response = await MeetingService.getAllTags();
+      const tagsSet = new Set(response || []);
       if (project?.tags && Array.isArray(project.tags)) {
         project.tags.forEach((tag) => {
           if (tag && tag.trim()) {
@@ -165,7 +165,7 @@ const ProjectDashboard = () => {
       }
       setAvailableTags(Array.from(tagsSet).sort());
     } catch (err) {
-      console.warn('Failed to load available tags', err);
+      logger.warn('Failed to load available tags', err);
     }
   };
 
@@ -214,7 +214,7 @@ const ProjectDashboard = () => {
       });
       setMeetings(response.data || []);
     } catch (err) {
-      console.error('Failed to load meetings:', err);
+      logger.error('Failed to load meetings:', err);
     } finally {
       setMeetingsLoading(false);
     }
@@ -226,7 +226,7 @@ const ProjectDashboard = () => {
       const response = await projectService.getMembers(projectId);
       setMembers(response.data || []);
     } catch (err) {
-      console.error('Failed to load members:', err);
+      logger.error('Failed to load members:', err);
     } finally {
       setMembersLoading(false);
     }
@@ -238,7 +238,7 @@ const ProjectDashboard = () => {
       await projectService.syncMembers(projectId);
       await loadMembers();
     } catch (err) {
-      console.error('Failed to sync members:', err);
+      logger.error('Failed to sync members:', err);
     } finally {
       setSyncing(false);
     }
@@ -251,7 +251,7 @@ const ProjectDashboard = () => {
       setAddMemberDialogOpen(false);
       setMemberFormData({ name: '', email: '', role: 'member' });
     } catch (err) {
-      console.error('Failed to add member:', err);
+      logger.error('Failed to add member:', err);
     }
   };
 
@@ -265,7 +265,7 @@ const ProjectDashboard = () => {
       setSelectedMember(null);
       setMemberFormData({ name: '', email: '', role: 'member' });
     } catch (err) {
-      console.error('Failed to update member:', err);
+      logger.error('Failed to update member:', err);
     }
   };
 
@@ -277,7 +277,7 @@ const ProjectDashboard = () => {
       await projectService.removeMember(projectId, memberId);
       await loadMembers();
     } catch (err) {
-      console.error('Failed to remove member:', err);
+      logger.error('Failed to remove member:', err);
     }
   };
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../../api';
+import { AppSettingsService, EmbeddingConfigService, WorkerConfigService } from '../../../services';
 import ModelConfigurations from './ModelConfigurations';
 import APIKeyManagement from './APIKeyManagement';
 import OllamaManager from './OllamaManager';
 import GoogleDriveSync from './GoogleDriveSync';
 import DataBackup from './DataBackup';
+import logger from '../../../utils/logger';
 import {
   Card,
   CardContent,
@@ -33,9 +34,6 @@ import {
   Tabs,
   Tab,
   Slider,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -51,7 +49,6 @@ import {
   Refresh as RefreshIcon,
   Tune as TuneIcon,
   Key as KeyIcon,
-  ExpandMore as ExpandMoreIcon,
   Memory as MemoryIcon,
   CloudQueue as CloudQueueIcon,
   Backup as BackupIcon,
@@ -115,13 +112,13 @@ const Settings = () => {
   const fetchSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/v1/settings/app-settings');
+      const response = await AppSettingsService.get();
       setSettings((prevSettings) => ({
         ...prevSettings,
-        maxFileSize: response.data.maxFileSize || response.data.defaultMaxFileSize || 3000,
+        maxFileSize: response.maxFileSize || response.defaultMaxFileSize || 3000,
       }));
     } catch (error) {
-      console.error('Failed to fetch settings:', error);
+      logger.error('Failed to fetch settings:', error);
       setSnackbar({
         open: true,
         message: 'Failed to load settings. Using defaults.',
@@ -141,18 +138,18 @@ const Settings = () => {
         queueStatus: 'healthy',
       });
     } catch (error) {
-      console.error('Failed to fetch system status:', error);
+      logger.error('Failed to fetch system status:', error);
     }
   };
 
   const fetchEmbeddingConfig = async () => {
     setEmbeddingLoading(true);
     try {
-      const response = await api.embeddingSettings.getConfig();
-      setEmbeddingConfigs(response.data.configurations || []);
-      setActiveEmbeddingId(response.data.activeConfigurationId || null);
+      const response = await EmbeddingConfigService.getConfig();
+      setEmbeddingConfigs(response.configurations || []);
+      setActiveEmbeddingId(response.activeConfigurationId || null);
     } catch (error) {
-      console.error('Failed to load embedding configuration', error);
+      logger.error('Failed to load embedding configuration', error);
       setSnackbar({
         open: true,
         message: 'Failed to load embedding configuration',
@@ -165,17 +162,17 @@ const Settings = () => {
 
   const fetchWorkerConfig = async () => {
     try {
-      const response = await api.workerSettings.get();
-      setWorkerConfig(response.data || { max_workers: 1 });
+      const response = await WorkerConfigService.get();
+      setWorkerConfig(response || { max_workers: 1 });
     } catch (error) {
-      console.error('Failed to load worker configuration', error);
+      logger.error('Failed to load worker configuration', error);
     }
   };
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      await api.post('/api/v1/settings/app-settings', {
+      await AppSettingsService.update({
         maxFileSize: settings.maxFileSize,
       });
 
@@ -185,7 +182,7 @@ const Settings = () => {
         severity: 'success',
       });
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      logger.error('Failed to save settings:', error);
       setSnackbar({
         open: true,
         message: error.response?.data?.detail || 'Failed to save settings',
@@ -246,12 +243,12 @@ const Settings = () => {
           return;
         }
       }
-      await api.embeddingSettings.createConfig(payload);
+      await EmbeddingConfigService.create(payload);
       setSnackbar({ open: true, message: 'Embedding configuration saved', severity: 'success' });
       setEmbeddingForm((prev) => ({ ...prev, is_active: false }));
       fetchEmbeddingConfig();
     } catch (error) {
-      console.error('Failed to create embedding configuration', error);
+      logger.error('Failed to create embedding configuration', error);
       setSnackbar({
         open: true,
         message: error.response?.data?.detail || 'Failed to create embedding configuration',
@@ -268,11 +265,11 @@ const Settings = () => {
 
     setModelValidation({ status: 'checking', message: 'Validating model...' });
     try {
-      const response = await api.embeddingSettings.validateModel(
+      const response = await EmbeddingConfigService.validateModel(
         embeddingForm.provider,
         embeddingForm.model_name
       );
-      const { valid, message, dimension } = response.data || {};
+      const { valid, message, dimension } = response || {};
       if (valid) {
         setModelValidation({ status: 'valid', message: message || 'Model is available.' });
 
@@ -292,7 +289,7 @@ const Settings = () => {
         });
       }
     } catch (error) {
-      console.error('Failed to validate model', error);
+      logger.error('Failed to validate model', error);
       setModelValidation({
         status: 'invalid',
         message: error.response?.data?.detail || 'Failed to validate model',
@@ -302,7 +299,7 @@ const Settings = () => {
 
   const handleActivateEmbeddingConfig = async (configId) => {
     try {
-      await api.embeddingSettings.activateConfig(configId);
+      await EmbeddingConfigService.activate(configId);
       setSnackbar({
         open: true,
         message: 'Embedding configuration activated',
@@ -310,18 +307,18 @@ const Settings = () => {
       });
       fetchEmbeddingConfig();
     } catch (error) {
-      console.error('Failed to activate configuration', error);
+      logger.error('Failed to activate configuration', error);
       setSnackbar({ open: true, message: 'Failed to activate configuration', severity: 'error' });
     }
   };
 
   const handleDeleteEmbeddingConfig = async (configId) => {
     try {
-      await api.embeddingSettings.deleteConfig(configId);
+      await EmbeddingConfigService.delete(configId);
       setSnackbar({ open: true, message: 'Embedding configuration removed', severity: 'success' });
       fetchEmbeddingConfig();
     } catch (error) {
-      console.error('Failed to delete configuration', error);
+      logger.error('Failed to delete configuration', error);
       setSnackbar({ open: true, message: 'Failed to delete configuration', severity: 'error' });
     }
   };
@@ -329,10 +326,10 @@ const Settings = () => {
   const handleRecomputeEmbeddings = async () => {
     setRecomputeLoading(true);
     try {
-      await api.embeddingSettings.recomputeAll();
+      await EmbeddingConfigService.recomputeAll();
       setSnackbar({ open: true, message: 'Embedding recomputation triggered', severity: 'info' });
     } catch (error) {
-      console.error('Failed to trigger recompute', error);
+      logger.error('Failed to trigger recompute', error);
       setSnackbar({ open: true, message: 'Failed to trigger recompute', severity: 'error' });
     } finally {
       setRecomputeLoading(false);
@@ -342,11 +339,11 @@ const Settings = () => {
   const handleWorkerSave = async () => {
     setWorkerSaving(true);
     try {
-      await api.workerSettings.update(workerConfig.max_workers);
+      await WorkerConfigService.update(workerConfig.max_workers);
       setSnackbar({ open: true, message: 'Worker configuration updated', severity: 'success' });
       fetchWorkerConfig();
     } catch (error) {
-      console.error('Failed to update worker configuration', error);
+      logger.error('Failed to update worker configuration', error);
       setSnackbar({
         open: true,
         message: 'Failed to update worker configuration',

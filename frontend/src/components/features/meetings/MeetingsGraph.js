@@ -35,6 +35,7 @@ import {
 import axios from 'axios';
 import ForceGraph2D from 'react-force-graph-2d';
 
+import logger from '../../../utils/logger';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
 
 const MeetingsGraph = () => {
@@ -93,7 +94,7 @@ const MeetingsGraph = () => {
       setGraphData({ nodes: data.nodes, links });
       setStats(data.stats);
     } catch (err) {
-      console.error('Error fetching graph data:', err);
+      logger.error('Error fetching graph data:', err);
       setError(err.response?.data?.detail || 'Failed to load graph data');
     } finally {
       setLoading(false);
@@ -391,6 +392,7 @@ const MeetingsGraph = () => {
         }
       }, 500);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredData.nodes.length]); // Only re-zoom if node count changes
 
   if (loading) {

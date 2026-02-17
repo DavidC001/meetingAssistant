@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../../api';
+import { APIKeyService } from '../../../services';
+import logger from '../../../utils/logger';
 import {
   Card,
   CardContent,
@@ -31,8 +32,6 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Key as KeyIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
 
 const APIKeyManagement = () => {
@@ -71,12 +70,12 @@ const APIKeyManagement = () => {
   const fetchApiKeys = async () => {
     setIsLoading(true);
     try {
-      console.log('Fetching API keys...');
-      const response = await api.get('/api/v1/settings/api-keys');
-      console.log('API keys response:', response.data);
-      setApiKeys(response.data);
+      logger.log('Fetching API keys...');
+      const response = await APIKeyService.getAll();
+      logger.log('API keys response:', response);
+      setApiKeys(response);
     } catch (error) {
-      console.error('Failed to fetch API keys:', error);
+      logger.error('Failed to fetch API keys:', error);
       setSnackbar({
         open: true,
         message: 'Failed to load API keys',
@@ -130,14 +129,14 @@ const APIKeyManagement = () => {
     setIsSaving(true);
     try {
       if (isEditing) {
-        await api.put(`/api/v1/settings/api-keys/${selectedKey.id}`, formData);
+        await APIKeyService.update(selectedKey.id, formData);
         setSnackbar({
           open: true,
           message: 'API key updated successfully',
           severity: 'success',
         });
       } else {
-        await api.post('/api/v1/settings/api-keys', formData);
+        await APIKeyService.create(formData);
         setSnackbar({
           open: true,
           message: 'API key created successfully',
@@ -147,7 +146,7 @@ const APIKeyManagement = () => {
       fetchApiKeys();
       handleCloseDialog();
     } catch (error) {
-      console.error('Failed to save API key:', error);
+      logger.error('Failed to save API key:', error);
       setSnackbar({
         open: true,
         message: error.response?.data?.detail || 'Failed to save API key',
@@ -159,12 +158,12 @@ const APIKeyManagement = () => {
   };
 
   const handleDeleteApiKey = async (keyId) => {
-    console.log('Attempting to delete API key with ID:', keyId);
+    logger.log('Attempting to delete API key with ID:', keyId);
     if (window.confirm('Are you sure you want to delete this API key?')) {
       try {
-        console.log('Sending DELETE request to:', `/api/v1/settings/api-keys/${keyId}`);
-        const response = await api.delete(`/api/v1/settings/api-keys/${keyId}`);
-        console.log('Delete response:', response);
+        logger.log('Sending DELETE request to:', `/api/v1/settings/api-keys/${keyId}`);
+        const response = await APIKeyService.delete(keyId);
+        logger.log('Delete response:', response);
         setSnackbar({
           open: true,
           message: 'API key deleted successfully',
@@ -172,8 +171,8 @@ const APIKeyManagement = () => {
         });
         fetchApiKeys();
       } catch (error) {
-        console.error('Failed to delete API key:', error);
-        console.error('Error response:', error.response);
+        logger.error('Failed to delete API key:', error);
+        logger.error('Error response:', error.response);
         setSnackbar({
           open: true,
           message: error.response?.data?.detail || 'Failed to delete API key',

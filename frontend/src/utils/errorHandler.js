@@ -1,3 +1,4 @@
+import logger from './logger';
 /**
  * API Error Handler Utility
  *
@@ -151,7 +152,7 @@ export function handleAPIError(error, customHandlers = {}) {
   const apiError = parseErrorResponse(error);
 
   // Log error for debugging
-  console.error('API Error:', {
+  logger.error('API Error:', {
     message: apiError.message,
     code: apiError.code,
     statusCode: apiError.statusCode,
@@ -243,7 +244,7 @@ export const ErrorTypes = {
   NETWORK: 'NetworkError',
 };
 
-export default {
+const ErrorHandler = {
   APIError,
   parseErrorResponse,
   getUserFriendlyMessage,
@@ -252,3 +253,5 @@ export default {
   retryRequest,
   ErrorTypes,
 };
+
+export default ErrorHandler;

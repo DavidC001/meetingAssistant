@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ErrorBoundary from '../ErrorBoundary';
@@ -169,7 +171,7 @@ describe('ErrorBoundary', () => {
       const [errorTrigger, setErrorTrigger] = React.useState(0);
 
       return (
-        <ErrorBoundary>
+        <ErrorBoundary onReset={() => setErrorTrigger(0)}>
           <button onClick={() => setErrorTrigger((prev) => prev + 1)}>Trigger</button>
           <ThrowError shouldThrow={errorTrigger > 0} />
         </ErrorBoundary>

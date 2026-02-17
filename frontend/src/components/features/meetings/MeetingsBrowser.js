@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -26,25 +26,14 @@ import {
   Typography,
   Checkbox,
   Toolbar,
-  Slide,
   Alert,
   Snackbar,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
   DriveFileMove as MoveIcon,
   Label as TagIcon,
-  Download as DownloadIcon,
   Close as CloseIcon,
-  Refresh as RefreshIcon,
-  GraphicEq as AudioIcon,
-  Visibility as ViewIcon,
-  Edit as EditIcon,
-  Chat as ChatIcon,
 } from '@mui/icons-material';
 import FilterBar from '../../common/FilterBar';
 import ViewModeToggle from '../../common/ViewModeToggle';
@@ -53,12 +42,7 @@ import LoadingSkeleton from '../../common/LoadingSkeleton';
 import EmptyState from '../../common/EmptyState';
 import PageHeader from '../../common/PageHeader';
 import { ConfirmDialog } from '../../common';
-import api from '../../../api';
-
-// Slide transition for bulk action bar
-const Transition = React.forwardRef(function Transition(props, ref) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
+import { MeetingService } from '../../../services';
 
 const MeetingsBrowser = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,12 +82,11 @@ const MeetingsBrowser = () => {
   const fetchMeetings = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/v1/meetings/');
-      setMeetings(response.data);
+      const meetingsData = await MeetingService.getAll();
+      setMeetings(meetingsData);
       setError(null);
     } catch (err) {
       setError('Failed to fetch meetings.');
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -111,24 +94,23 @@ const MeetingsBrowser = () => {
 
   useEffect(() => {
     fetchMeetings();
-  }, []);
+  }, [fetchMeetings]);
 
   // Separate effect for polling that doesn't cause re-renders
   useEffect(() => {
     // Poll for processing meetings
     const pollInterval = setInterval(() => {
       // Check if there are any processing meetings before fetching
-      api
-        .get('/api/v1/meetings/')
-        .then((response) => {
-          const hasProcessing = response.data.some(
+      MeetingService.getAll()
+        .then((meetingsData) => {
+          const hasProcessing = meetingsData.some(
             (m) => m.status === 'processing' || m.status === 'pending'
           );
           if (hasProcessing) {
-            setMeetings(response.data);
+            setMeetings(meetingsData);
           }
         })
-        .catch((err) => console.error('Polling error:', err));
+        .catch(() => {});
     }, 15000);
 
     return () => clearInterval(pollInterval);
@@ -273,7 +255,7 @@ const MeetingsBrowser = () => {
       await Promise.all(
         selectedMeetings.map((id) => {
           const meeting = meetings.find((m) => m.id === id);
-          return api.updateMeetingTagsFolder(id, meeting?.tags || '', bulkFolder.trim());
+          return MeetingService.updateTagsFolder(id, meeting?.tags || '', bulkFolder.trim());
         })
       );
       setSnackbar({
@@ -301,7 +283,7 @@ const MeetingsBrowser = () => {
           const meeting = meetings.find((m) => m.id === id);
           const existingTags = meeting?.tags ? meeting.tags.split(',').map((t) => t.trim()) : [];
           const newTags = [...new Set([...existingTags, ...bulkTags])].join(', ');
-          return api.updateMeetingTagsFolder(id, newTags, meeting?.folder || '');
+          return MeetingService.updateTagsFolder(id, newTags, meeting?.folder || '');
         })
       );
       setSnackbar({
@@ -327,7 +309,7 @@ const MeetingsBrowser = () => {
   const handleBulkDelete = async () => {
     setProcessing(true);
     try {
-      await Promise.all(selectedMeetings.map((id) => api.delete(`/api/v1/meetings/${id}`)));
+      await Promise.all(selectedMeetings.map((id) => MeetingService.delete(id)));
       setSnackbar({
         open: true,
         message: `Deleted ${selectedMeetings.length} meeting(s)`,
@@ -341,10 +323,6 @@ const MeetingsBrowser = () => {
     } finally {
       setProcessing(false);
     }
-  };
-
-  const handleSelectAll = () => {
-    setSelectedMeetings(filteredMeetings.map((m) => m.id));
   };
 
   const handleClearSelection = () => {
@@ -374,16 +352,7 @@ const MeetingsBrowser = () => {
 
   const handleDownloadMeeting = async (meeting, format = 'txt') => {
     try {
-      const response = await api.get(`/api/v1/meetings/${meeting.id}/download/${format}`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${meeting.filename}.${format}`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      await MeetingService.download(meeting.id, format, `${meeting.filename}.${format}`);
       setSnackbar({ open: true, message: 'Download started', severity: 'success' });
     } catch (err) {
       setSnackbar({ open: true, message: 'Failed to download transcript', severity: 'error' });
@@ -392,7 +361,7 @@ const MeetingsBrowser = () => {
 
   const handleRegenerateAudio = async (meeting) => {
     try {
-      await api.post(`/api/v1/meetings/${meeting.id}/audio/regenerate`);
+      await MeetingService.regenerateAudio(meeting.id);
       setSnackbar({ open: true, message: 'Audio regeneration started', severity: 'success' });
       await fetchMeetings();
     } catch (err) {
@@ -402,7 +371,7 @@ const MeetingsBrowser = () => {
 
   const handleRestartProcessing = async (meeting) => {
     try {
-      await api.post(`/api/v1/meetings/${meeting.id}/restart-processing`);
+      await MeetingService.restartProcessing(meeting.id);
       setSnackbar({ open: true, message: 'Processing restarted', severity: 'success' });
       await fetchMeetings();
     } catch (err) {
@@ -413,7 +382,7 @@ const MeetingsBrowser = () => {
   const handleDeleteMeeting = async (meeting) => {
     if (window.confirm(`Are you sure you want to delete "${meeting.filename}"?`)) {
       try {
-        await api.delete(`/api/v1/meetings/${meeting.id}`);
+        await MeetingService.delete(meeting.id);
         setSnackbar({ open: true, message: 'Meeting deleted', severity: 'success' });
         await fetchMeetings();
       } catch (err) {

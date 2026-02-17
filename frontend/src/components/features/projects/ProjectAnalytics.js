@@ -46,6 +46,7 @@ const ProjectAnalytics = () => {
 
   useEffect(() => {
     loadAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const loadAnalytics = async () => {

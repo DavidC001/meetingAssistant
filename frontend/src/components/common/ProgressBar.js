@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Box, LinearProgress, Typography, Fade } from '@mui/material';
+import { Box, LinearProgress, Typography } from '@mui/material';
 
 const ProgressBar = ({
   value = 0,

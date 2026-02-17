@@ -31,7 +31,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
-import api from '../api';
+import { AppSettingsService, MeetingService } from '../services';
 
 const VisuallyHiddenInput = styled('input')({
   clip: 'rect(0 0 0 0)',
@@ -104,10 +104,9 @@ const UploadForm = ({ onUploadSuccess }) => {
   useEffect(() => {
     const fetchMaxFileSize = async () => {
       try {
-        const response = await api.get('/api/v1/settings/app-settings');
-        setMaxFileSize(response.data.maxFileSize);
+        const settings = await AppSettingsService.get();
+        setMaxFileSize(settings.maxFileSize);
       } catch (error) {
-        console.error('Failed to fetch max file size setting:', error);
         // Keep default value of 3000MB if fetch fails
       }
     };
@@ -216,50 +215,31 @@ const UploadForm = ({ onUploadSuccess }) => {
 
       // For single file, use the original endpoint
       if (selectedFiles.length === 1) {
-        const formData = new FormData();
-        formData.append('file', selectedFiles[0].file);
-        formData.append('transcription_language', selectedFiles[0].transcriptionLanguage);
-        formData.append('number_of_speakers', selectedFiles[0].numberOfSpeakers);
-        if (selectedFiles[0].meetingDate) {
-          formData.append('meeting_date', selectedFiles[0].meetingDate);
-        }
-
-        const response = await api.post('/api/v1/meetings/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(percentCompleted);
+        await MeetingService.upload(selectedFiles[0].file, {
+          transcriptionLanguage: selectedFiles[0].transcriptionLanguage,
+          numberOfSpeakers: selectedFiles[0].numberOfSpeakers,
+          meetingDate: selectedFiles[0].meetingDate || null,
+          onProgress: (progress) => {
+            setUploadProgress(progress);
           },
         });
       } else {
         // For multiple files, use the batch endpoint
-        const formData = new FormData();
-
-        // Append all files
-        selectedFiles.forEach((fileConfig) => {
-          formData.append('files', fileConfig.file);
-        });
-
-        // Prepare comma-separated parameters
         const languages = selectedFiles.map((f) => f.transcriptionLanguage).join(',');
         const speakers = selectedFiles.map((f) => f.numberOfSpeakers).join(',');
         const dates = selectedFiles.map((f) => f.meetingDate || '').join(',');
 
-        formData.append('transcription_languages', languages);
-        formData.append('number_of_speakers_list', speakers);
-        formData.append('meeting_dates', dates);
-
-        const response = await api.post('/api/v1/meetings/batch-upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(percentCompleted);
-          },
-        });
+        await MeetingService.batchUpload(
+          selectedFiles.map((fileConfig) => fileConfig.file),
+          {
+            transcriptionLanguages: languages,
+            numberOfSpeakersList: speakers,
+            meetingDates: dates,
+            onProgress: (progress) => {
+              setUploadProgress(progress);
+            },
+          }
+        );
       }
 
       setUploadProgress(100);
@@ -278,7 +258,6 @@ const UploadForm = ({ onUploadSuccess }) => {
       setMessage('Upload failed. Please try again.');
       setMessageType('error');
       setSnackbarOpen(true);
-      console.error('Upload error:', error);
     } finally {
       setIsUploading(false);
       setTimeout(() => setUploadProgress(0), 2000);
@@ -450,7 +429,7 @@ const UploadForm = ({ onUploadSuccess }) => {
                                     return `${year}-${month}-${day}T${hours}:${minutes}`;
                                   }
                                 } catch (e) {
-                                  console.error('Error formatting date:', e);
+                                  // Ignore date formatting errors and fall back to raw value.
                                 }
                                 return fileConfig.meetingDate;
                               })()

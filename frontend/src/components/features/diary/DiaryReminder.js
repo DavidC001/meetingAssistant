@@ -19,7 +19,6 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  CircularProgress,
   Alert,
 } from '@mui/material';
 import {
@@ -31,6 +30,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import diaryService from '../../../services/diaryService';
 
+import logger from '../../../utils/logger';
 const DiaryReminder = () => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ const DiaryReminder = () => {
         setOpen(true);
       }
     } catch (err) {
-      console.error('Error checking diary reminder:', err);
+      logger.error('Error checking diary reminder:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -74,7 +74,7 @@ const DiaryReminder = () => {
       await diaryService.dismissReminder(reminderData.missing_date);
       setOpen(false);
     } catch (err) {
-      console.error('Error dismissing reminder:', err);
+      logger.error('Error dismissing reminder:', err);
       setError(err.message);
     }
   };

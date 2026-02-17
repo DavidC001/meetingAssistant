@@ -26,7 +26,6 @@ import {
   Select,
   InputLabel,
   FormControl,
-  Grid,
   Alert,
   useTheme,
   CircularProgress,
@@ -37,8 +36,6 @@ import {
   Delete as DeleteIcon,
   CalendarToday as CalendarIcon,
   Flag as FlagIcon,
-  FilterList as FilterListIcon,
-  AssignmentTurnedIn as TaskIcon,
   HourglassEmpty as PendingIcon,
   PlayCircleOutline as InProgressIcon,
   CheckCircleOutline as CompletedIcon,
@@ -50,6 +47,7 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import axios from 'axios';
 import { projectService, ActionItemService } from '../../../services';
 
+import logger from '../../../utils/logger';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api/v1';
 
 // Priority config with colors for both light and dark mode
@@ -202,7 +200,7 @@ const KanbanBoard = ({
 
   // Delete confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteAction, setDeleteAction] = useState('unlink'); // 'unlink' or 'global'
+  const [, setDeleteAction] = useState('unlink'); // 'unlink' or 'global'
 
   // Project linking (global mode)
   const [projects, setProjects] = useState([]);
@@ -243,6 +241,7 @@ const KanbanBoard = ({
     }, 500); // Wait 500ms after user stops typing
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showOnlyMyTasks, filterUserName, timeHorizon, projectId, mode, searchQuery, showCompleted]);
 
   // Save filter preferences
@@ -358,14 +357,14 @@ const KanbanBoard = ({
 
       setColumns(grouped);
     } catch (error) {
-      console.error('Error fetching action items:', error);
+      logger.error('Error fetching action items:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDragEnd = async (result) => {
-    const { source, destination, draggableId } = result;
+    const { source, destination } = result;
 
     // Dropped outside the list
     if (!destination) return;
@@ -416,7 +415,7 @@ const KanbanBoard = ({
         });
       }
     } catch (error) {
-      console.error('Error updating action item:', error);
+      logger.error('Error updating action item:', error);
       // Revert on error
       fetchActionItems();
     }
@@ -442,7 +441,7 @@ const KanbanBoard = ({
       await ActionItemService.unlinkFromProject(projectId, selectedTask.id);
       fetchActionItems();
     } catch (error) {
-      console.error('Error unlinking action item from project:', error);
+      logger.error('Error unlinking action item from project:', error);
     } finally {
       handleMenuClose();
     }
@@ -455,7 +454,7 @@ const KanbanBoard = ({
       await ActionItemService.delete(selectedTask.id);
       fetchActionItems();
     } catch (error) {
-      console.error('Error deleting action item:', error);
+      logger.error('Error deleting action item:', error);
     } finally {
       handleMenuClose();
       setDeleteConfirmOpen(false);
@@ -513,7 +512,7 @@ const KanbanBoard = ({
       setProjects(items);
       return items;
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      logger.error('Error fetching projects:', error);
       setProjects([]);
       return [];
     } finally {
@@ -538,7 +537,7 @@ const KanbanBoard = ({
       );
       setSelectedTaskProjects(new Set(projectChecks.filter(Boolean)));
     } catch (error) {
-      console.error('Error checking action item project links:', error);
+      logger.error('Error checking action item project links:', error);
     }
   };
 
@@ -558,7 +557,7 @@ const KanbanBoard = ({
         setSelectedTaskProjects((prev) => new Set([...prev, pId]));
       }
     } catch (error) {
-      console.error('Error toggling project link:', error);
+      logger.error('Error toggling project link:', error);
     }
   };
 
@@ -576,7 +575,7 @@ const KanbanBoard = ({
       const available = allItems.filter((item) => !linkedIds.has(item.id));
       setAvailableActionItems(available);
     } catch (error) {
-      console.error('Error fetching available action items:', error);
+      logger.error('Error fetching available action items:', error);
       setAvailableActionItems([]);
     } finally {
       setLoadingAvailable(false);
@@ -601,7 +600,7 @@ const KanbanBoard = ({
       fetchActionItems();
       handleAddExistingClose();
     } catch (error) {
-      console.error('Error linking action item to project:', error);
+      logger.error('Error linking action item to project:', error);
     }
   };
 
@@ -611,18 +610,18 @@ const KanbanBoard = ({
   };
 
   const handleEditSave = async () => {
-    console.log('handleEditSave called, editForm:', editForm);
+    logger.log('handleEditSave called, editForm:', editForm);
     if (!editForm.id) {
-      console.log('No editForm.id, returning early');
+      logger.log('No editForm.id, returning early');
       return;
     }
     if (!editForm.task.trim()) {
-      console.log('No task text, returning early');
+      logger.log('No task text, returning early');
       return;
     }
 
     try {
-      console.log('Sending PUT request to update action item:', editForm.id);
+      logger.log('Sending PUT request to update action item:', editForm.id);
       const payload = {
         task: editForm.task,
         owner: editForm.owner,
@@ -632,11 +631,11 @@ const KanbanBoard = ({
       const response = isProjectMode
         ? await ActionItemService.update(editForm.id, payload)
         : await axios.put(`${API_BASE_URL}/calendar/action-items/${editForm.id}`, payload);
-      console.log('Updated action item:', response.data || response);
+      logger.log('Updated action item:', response.data || response);
       await fetchActionItems();
       handleEditClose();
     } catch (error) {
-      console.error('Error updating action item:', error);
+      logger.error('Error updating action item:', error);
       alert('Failed to update task: ' + (error.response?.data?.detail || error.message));
     }
   };
@@ -691,7 +690,7 @@ const KanbanBoard = ({
       fetchActionItems();
       handleAddClose();
     } catch (error) {
-      console.error('Error creating action item:', error);
+      logger.error('Error creating action item:', error);
     }
   };
 

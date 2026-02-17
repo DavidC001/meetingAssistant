@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logger from '../../../utils/logger';
 import {
   Box,
   Paper,
@@ -71,7 +72,7 @@ const DataBackup = () => {
         filename: filename,
       });
     } catch (err) {
-      console.error('Export error:', err);
+      logger.error('Export error:', err);
       setError(err.message || 'Failed to export data');
     } finally {
       setExporting(false);
@@ -122,7 +123,7 @@ const DataBackup = () => {
       // Reset file input
       document.getElementById('backup-file-input').value = '';
     } catch (err) {
-      console.error('Import error:', err);
+      logger.error('Import error:', err);
       setError(err.message || 'Failed to import data');
     } finally {
       setImporting(false);

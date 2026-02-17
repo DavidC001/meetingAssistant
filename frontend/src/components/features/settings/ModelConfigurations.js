@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import api from '../../../api';
+import { APIKeyService, ModelConfigService } from '../../../services';
+import logger from '../../../utils/logger';
 import {
   Card,
   CardContent,
@@ -33,7 +34,6 @@ import {
   Delete as DeleteIcon,
   Star as StarIcon,
   StarBorder as StarBorderIcon,
-  Psychology as PsychologyIcon,
   Mic as MicIcon,
   Chat as ChatIcon,
   Analytics as AnalyticsIcon,
@@ -82,10 +82,10 @@ const ModelConfigurations = () => {
   const fetchConfigurations = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/v1/settings/model-configurations');
-      setConfigurations(response.data);
+      const response = await ModelConfigService.getAll();
+      setConfigurations(response);
     } catch (error) {
-      console.error('Failed to fetch configurations:', error);
+      logger.error('Failed to fetch configurations:', error);
       setSnackbar({
         open: true,
         message: 'Failed to load model configurations',
@@ -98,19 +98,19 @@ const ModelConfigurations = () => {
 
   const fetchProviders = async () => {
     try {
-      const response = await api.get('/api/v1/settings/model-providers');
-      setProviders(response.data);
+      const response = await ModelConfigService.getProviders();
+      setProviders(response);
     } catch (error) {
-      console.error('Failed to fetch providers:', error);
+      logger.error('Failed to fetch providers:', error);
     }
   };
 
   const fetchApiKeys = async () => {
     try {
-      const response = await api.get('/api/v1/settings/api-keys');
-      setApiKeys(response.data);
+      const response = await APIKeyService.getAll();
+      setApiKeys(response);
     } catch (error) {
-      console.error('Failed to fetch API keys:', error);
+      logger.error('Failed to fetch API keys:', error);
     }
   };
 
@@ -166,14 +166,14 @@ const ModelConfigurations = () => {
     setIsSaving(true);
     try {
       if (isEditing) {
-        await api.put(`/api/v1/settings/model-configurations/${selectedConfig.id}`, formData);
+        await ModelConfigService.update(selectedConfig.id, formData);
         setSnackbar({
           open: true,
           message: 'Configuration updated successfully',
           severity: 'success',
         });
       } else {
-        await api.post('/api/v1/settings/model-configurations', formData);
+        await ModelConfigService.create(formData);
         setSnackbar({
           open: true,
           message: 'Configuration created successfully',
@@ -183,7 +183,7 @@ const ModelConfigurations = () => {
       fetchConfigurations();
       handleCloseDialog();
     } catch (error) {
-      console.error('Failed to save configuration:', error);
+      logger.error('Failed to save configuration:', error);
       setSnackbar({
         open: true,
         message: error.response?.data?.detail || 'Failed to save configuration',
@@ -200,7 +200,7 @@ const ModelConfigurations = () => {
     }
 
     try {
-      await api.delete(`/api/v1/settings/model-configurations/${configId}`);
+      await ModelConfigService.delete(configId);
       setSnackbar({
         open: true,
         message: 'Configuration deleted successfully',
@@ -208,7 +208,7 @@ const ModelConfigurations = () => {
       });
       fetchConfigurations();
     } catch (error) {
-      console.error('Failed to delete configuration:', error);
+      logger.error('Failed to delete configuration:', error);
       setSnackbar({
         open: true,
         message: error.response?.data?.detail || 'Failed to delete configuration',
@@ -219,7 +219,7 @@ const ModelConfigurations = () => {
 
   const handleSetDefault = async (configId) => {
     try {
-      await api.post(`/api/v1/settings/model-configurations/${configId}/set-default`);
+      await ModelConfigService.setDefault(configId);
       setSnackbar({
         open: true,
         message: 'Default configuration updated',
@@ -227,7 +227,7 @@ const ModelConfigurations = () => {
       });
       fetchConfigurations();
     } catch (error) {
-      console.error('Failed to set default:', error);
+      logger.error('Failed to set default:', error);
       setSnackbar({
         open: true,
         message: 'Failed to set default configuration',
@@ -285,42 +285,6 @@ const ModelConfigurations = () => {
     },
     [handleFormChange]
   );
-
-  const getModelsForProvider = (provider) => {
-    if (!providers || !provider) return [];
-
-    switch (provider) {
-      case 'openai':
-        return providers.openai_models || [];
-      case 'anthropic':
-        return providers.anthropic_models || [];
-      case 'cohere':
-        return providers.cohere_models || [];
-      case 'gemini':
-        return providers.gemini_models || [];
-      case 'grok':
-        return providers.grok_models || [];
-      case 'groq':
-        return providers.groq_models || [];
-      case 'ollama':
-        return providers.ollama_models || [];
-      case 'other':
-        return providers.other_models || [];
-      default:
-        return [];
-    }
-  };
-
-  const getProviderIcon = (provider) => {
-    switch (provider) {
-      case 'openai':
-        return <PsychologyIcon />;
-      case 'ollama':
-        return <ChatIcon />;
-      default:
-        return <PsychologyIcon />;
-    }
-  };
 
   if (isLoading) {
     return (

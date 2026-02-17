@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Box,
   IconButton,
@@ -19,7 +19,6 @@ import {
   Speed as SpeedIcon,
   SkipNext as Skip10Icon,
   SkipPrevious as Back10Icon,
-  Fullscreen as FullscreenIcon,
 } from '@mui/icons-material';
 
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -33,7 +32,6 @@ const formatTime = (seconds) => {
 
 const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
   const audioRef = useRef(null);
-  const canvasRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -41,7 +39,6 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [speedMenuAnchor, setSpeedMenuAnchor] = useState(null);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -54,7 +51,6 @@ const AudioPlayer = ({ src, onTimeUpdate, speakers = [] }) => {
 
     const handleLoadedMetadata = () => {
       setDuration(audio.duration);
-      setIsLoaded(true);
     };
 
     const handleEnded = () => {

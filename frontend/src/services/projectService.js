@@ -50,18 +50,6 @@ export const projectService = {
   getAnalytics: (id) => apiClient.get(`${API_URL}/${id}/analytics`),
   getActivity: (id, limit) => apiClient.get(`${API_URL}/${id}/activity`, { params: { limit } }),
 
-  // Chat
-  getChatSessions: (id) => apiClient.get(`${API_URL}/${id}/chat/sessions`),
-  createChatSession: (id, title) => apiClient.post(`${API_URL}/${id}/chat/sessions`, { title }),
-  sendChatMessage: (id, message, sessionId) =>
-    apiClient.post(`${API_URL}/${id}/chat`, { message, session_id: sessionId }),
-  updateChatSession: (id, sessionId, title) =>
-    apiClient.put(`${API_URL}/${id}/chat/sessions/${sessionId}`, { title }),
-  getChatMessages: (id, sessionId) =>
-    apiClient.get(`${API_URL}/${id}/chat/sessions/${sessionId}/messages`),
-  deleteChatSession: (id, sessionId) =>
-    apiClient.delete(`${API_URL}/${id}/chat/sessions/${sessionId}`),
-
   // Notes
   getNotes: (id) => apiClient.get(`${API_URL}/${id}/notes`),
   createNote: (id, data) => apiClient.post(`${API_URL}/${id}/notes`, data),

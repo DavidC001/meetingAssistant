@@ -127,6 +127,36 @@ const diaryService = {
     const response = await apiClient.post(`/api/v1/diary/entries/${date}/snapshot-action-items`);
     return response.data;
   },
+
+  /**
+   * Get diary statistics summary for a date range.
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @returns {Promise<Object>} - Summary statistics
+   */
+  getStatisticsSummary: async (startDate, endDate) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const response = await apiClient.get(`/api/v1/diary/statistics/summary?${params}`);
+    return response.data;
+  },
+
+  /**
+   * Get diary statistics timeline for a date range.
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @returns {Promise<Object>} - Timeline statistics
+   */
+  getStatisticsTimeline: async (startDate, endDate) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+
+    const response = await apiClient.get(`/api/v1/diary/statistics/timeline?${params}`);
+    return response.data;
+  },
 };
 
 export default diaryService;

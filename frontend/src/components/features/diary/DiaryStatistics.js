@@ -50,6 +50,7 @@ const DiaryStatistics = () => {
 
   useEffect(() => {
     loadStatistics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   const loadStatistics = async () => {
@@ -58,18 +59,13 @@ const DiaryStatistics = () => {
       setError(null);
 
       const [statsData, timelineData] = await Promise.all([
-        fetch(
-          `/api/v1/diary/statistics/summary?start_date=${dateRange.start}&end_date=${dateRange.end}`
-        ).then((r) => r.json()),
-        fetch(
-          `/api/v1/diary/statistics/timeline?start_date=${dateRange.start}&end_date=${dateRange.end}`
-        ).then((r) => r.json()),
+        diaryService.getStatisticsSummary(dateRange.start, dateRange.end),
+        diaryService.getStatisticsTimeline(dateRange.start, dateRange.end),
       ]);
 
       setStatistics(statsData);
       setTimeline(timelineData.timeline || []);
     } catch (err) {
-      console.error('Error loading statistics:', err);
       setError(err.message || 'Failed to load statistics');
     } finally {
       setLoading(false);

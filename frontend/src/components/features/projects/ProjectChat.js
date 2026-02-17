@@ -33,7 +33,7 @@ import {
 import { useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { projectService } from '../../../services/projectService';
+import { ProjectChatService } from '../../../services';
 import QuickActions from '../../QuickActions';
 
 const ProjectChat = ({ projectId: projectIdProp }) => {
@@ -59,6 +59,7 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setActiveSessionId(null);
     setMessages([]);
     loadSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   useEffect(() => {
@@ -70,8 +71,8 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setLoadingSessions(true);
     setError('');
     try {
-      const response = await projectService.getChatSessions(projectId);
-      const sessionList = response.data || [];
+      const response = await ProjectChatService.listSessions(projectId);
+      const sessionList = response || [];
       setSessions(sessionList);
       if (sessionList.length > 0) {
         const firstSessionId = sessionList[0].id;
@@ -96,8 +97,8 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setLoading(true);
     setError('');
     try {
-      const response = await projectService.getChatMessages(projectId, sessionId);
-      const history = response.data || [];
+      const response = await ProjectChatService.getMessages(projectId, sessionId);
+      const history = response || [];
       const hydrated = history.map((message) => ({
         ...message,
         sources: Array.isArray(message.sources) ? message.sources : [],
@@ -122,8 +123,8 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setLoading(true);
     setError('');
     try {
-      const response = await projectService.createChatSession(projectId, 'New chat');
-      const newSession = response.data;
+      const response = await ProjectChatService.createSession(projectId, 'New chat');
+      const newSession = response;
       const updatedSessions = [newSession, ...sessions];
       setSessions(updatedSessions);
       setActiveSessionId(newSession.id);
@@ -146,7 +147,7 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setLoading(true);
     setError('');
     try {
-      await projectService.updateChatSession(projectId, renameSessionId, renameTitle.trim());
+      await ProjectChatService.updateSession(projectId, renameSessionId, renameTitle.trim());
       await loadSessions();
       setRenameDialogOpen(false);
       setRenameSessionId(null);
@@ -163,7 +164,7 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
     setLoading(true);
     setError('');
     try {
-      await projectService.deleteChatSession(projectId, sessionId);
+      await ProjectChatService.deleteSession(projectId, sessionId);
       const remainingSessions = sessions.filter((session) => session.id !== sessionId);
       setSessions(remainingSessions);
       if (sessionId === activeSessionId) {
@@ -185,8 +186,8 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
 
   const ensureSession = async () => {
     if (activeSessionId) return activeSessionId;
-    const response = await projectService.createChatSession(projectId, 'New chat');
-    const newSession = response.data;
+    const response = await ProjectChatService.createSession(projectId, 'New chat');
+    const newSession = response;
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
     setMessages([]);
@@ -207,8 +208,8 @@ const ProjectChat = ({ projectId: projectIdProp }) => {
 
     try {
       const sessionId = await ensureSession();
-      const response = await projectService.sendChatMessage(projectId, messageText, sessionId);
-      const responseData = response.data;
+      const response = await ProjectChatService.sendMessage(projectId, messageText, sessionId);
+      const responseData = response;
       const assistantMessage = {
         role: 'assistant',
         content: responseData.message,

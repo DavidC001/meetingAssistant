@@ -28,7 +28,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Tooltip,
   Stepper,
   Step,
   StepLabel,
@@ -37,7 +36,6 @@ import {
   AccordionDetails,
   Autocomplete,
   Popper,
-  ClickAwayListener,
   Stack,
   alpha,
   useTheme,
@@ -45,11 +43,9 @@ import {
 import {
   ArrowBack as ArrowBackIcon,
   PlayCircle as PlayCircleIcon,
-  PauseCircle as PauseCircleIcon,
   Summarize as SummarizeIcon,
   Description as DescriptionIcon,
   Assignment as AssignmentIcon,
-  Chat as ChatIcon,
   AttachFile as AttachFileIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -59,15 +55,12 @@ import {
   Refresh as RefreshIcon,
   RestartAlt as RestartAltIcon,
   CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
   Schedule as ScheduleIcon,
   Person as PersonIcon,
   CalendarToday as CalendarIcon,
   Folder as FolderIcon,
-  Label as LabelIcon,
   ExpandMore as ExpandMoreIcon,
   CloudUpload as CloudUploadIcon,
-  Visibility as VisibilityIcon,
   AccessTime as AccessTimeIcon,
   Info as InfoIcon,
   Note as NoteIcon,
@@ -77,9 +70,13 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import api from '../../../api';
-import { ActionItemService, projectService } from '../../../services';
-import Chat from '../chat/Chat';
+import {
+  ActionItemService,
+  AttachmentService,
+  MeetingService,
+  SpeakerService,
+  projectService,
+} from '../../../services';
 import AudioPlayer from '../../AudioPlayer';
 import FloatingChat from '../../meeting/FloatingChat';
 
@@ -162,8 +159,6 @@ const MeetingDetails = () => {
   const [allMeetings, setAllMeetings] = useState([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const notesRef = useRef(null);
-  const [meetingPreviews, setMeetingPreviews] = useState({});
-  const [hoveredMeetingId, setHoveredMeetingId] = useState(null);
 
   // Attachments
   const [attachments, setAttachments] = useState([]);
@@ -171,7 +166,6 @@ const MeetingDetails = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [attachmentDescription, setAttachmentDescription] = useState('');
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [editingAttachment, setEditingAttachment] = useState(null);
 
   // Dialogs
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -186,24 +180,23 @@ const MeetingDetails = () => {
       if (isInitial) setIsLoading(true);
       else setIsUpdating(true);
 
-      const response = await api.get(`/api/v1/meetings/${meetingId}`);
-      setMeeting(response.data);
+      const meetingData = await MeetingService.getById(meetingId);
+      setMeeting(meetingData);
       setTags(
-        response.data.tags
-          ? response.data.tags
+        meetingData.tags
+          ? meetingData.tags
               .split(',')
               .map((t) => t.trim())
               .filter((t) => t)
           : []
       );
-      setFolder(response.data.folder || '');
-      setNotes(response.data.notes || '');
+      setFolder(meetingData.folder || '');
+      setNotes(meetingData.notes || '');
       setError(null);
 
-      return response.data;
+      return meetingData;
     } catch (err) {
       setError('Failed to fetch meeting details.');
-      console.error(err);
       return null;
     } finally {
       if (isInitial) setIsLoading(false);
@@ -213,51 +206,41 @@ const MeetingDetails = () => {
 
   const fetchSpeakers = async () => {
     try {
-      const res = await api.getSpeakers(meetingId);
-      setSpeakers(res.data);
-    } catch (err) {
-      console.error('Failed to fetch speakers', err);
-    }
+      const data = await SpeakerService.getForMeeting(meetingId);
+      setSpeakers(data);
+    } catch (err) {}
   };
 
   const fetchAllSpeakers = async () => {
     try {
-      const res = await api.getAllSpeakers();
-      setAllSpeakers(res.data);
-    } catch (err) {
-      console.error('Failed to fetch all speakers', err);
-    }
+      const data = await SpeakerService.getAll();
+      setAllSpeakers(data);
+    } catch (err) {}
   };
 
   const fetchAttachments = async () => {
     try {
-      const response = await api.getMeetingAttachments(meetingId);
-      setAttachments(response.data);
-    } catch (err) {
-      console.error('Error fetching attachments:', err);
-    }
+      const data = await AttachmentService.getForMeeting(meetingId);
+      setAttachments(data);
+    } catch (err) {}
   };
 
   const fetchAvailableFolders = async () => {
     try {
-      const response = await api.get('/api/v1/meetings/');
+      const response = await MeetingService.getAll();
       const folders = [
-        ...new Set(response.data.map((m) => m.folder).filter((f) => f && f !== 'Uncategorized')),
+        ...new Set(response.map((m) => m.folder).filter((f) => f && f !== 'Uncategorized')),
       ];
       setAvailableFolders(folders.sort());
-      setAllMeetings(response.data.filter((m) => m.id !== parseInt(meetingId)));
-    } catch (err) {
-      console.error('Error fetching folders:', err);
-    }
+      setAllMeetings(response.filter((m) => m.id !== parseInt(meetingId)));
+    } catch (err) {}
   };
 
   const fetchAvailableTags = async () => {
     try {
-      const response = await api.getAllTags();
-      setAvailableTags(response.data);
-    } catch (err) {
-      console.error('Error fetching tags:', err);
-    }
+      const data = await MeetingService.getAllTags();
+      setAvailableTags(data);
+    } catch (err) {}
   };
 
   const fetchProjects = async () => {
@@ -267,7 +250,6 @@ const MeetingDetails = () => {
       const items = response?.data || response || [];
       setProjects(items);
     } catch (err) {
-      console.error('Error fetching projects:', err);
     } finally {
       setLoadingProjects(false);
     }
@@ -311,9 +293,7 @@ const MeetingDetails = () => {
       });
 
       setActionItemProjects(map);
-    } catch (err) {
-      console.error('Error fetching action item project links:', err);
-    }
+    } catch (err) {}
   };
 
   useEffect(() => {
@@ -333,7 +313,7 @@ const MeetingDetails = () => {
         }
       }
     });
-  }, [meetingId]);
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   let pollTimeout = null;
   let pollCount = 0;
@@ -376,13 +356,13 @@ const MeetingDetails = () => {
     return () => {
       if (pollTimeout) clearTimeout(pollTimeout);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (projects.length > 0 && meeting?.transcription?.action_items) {
       fetchActionItemProjectLinks(meeting.transcription.action_items);
     }
-  }, [projects, meeting?.transcription?.action_items]);
+  }, [projects, meeting?.transcription?.action_items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Handlers ---
 
@@ -394,9 +374,9 @@ const MeetingDetails = () => {
     if (!window.confirm('Restart processing? This will cancel current progress.')) return;
     try {
       setIsUpdating(true);
-      const response = await api.post(`/api/v1/meetings/${meetingId}/restart-processing`);
-      setMeeting(response.data);
-      startSmartPolling(response.data);
+      const data = await MeetingService.restartProcessing(meetingId);
+      setMeeting(data);
+      startSmartPolling(data);
     } catch (err) {
       setError('Failed to restart processing.');
     } finally {
@@ -408,7 +388,7 @@ const MeetingDetails = () => {
     if (!newName.trim()) return;
     try {
       setIsUpdating(true);
-      await api.renameMeeting(meetingId, newName.trim());
+      await MeetingService.rename(meetingId, newName.trim());
       setMeeting((prev) => ({ ...prev, filename: newName.trim() }));
       setRenameDialogOpen(false);
     } catch (err) {
@@ -421,7 +401,7 @@ const MeetingDetails = () => {
   const handleDeleteMeeting = async () => {
     try {
       setIsUpdating(true);
-      await api.deleteMeeting(meetingId);
+      await MeetingService.delete(meetingId);
       navigate('/');
     } catch (err) {
       setError('Failed to delete meeting.');
@@ -431,8 +411,8 @@ const MeetingDetails = () => {
 
   const handleUpdateTagsFolder = async () => {
     try {
-      const res = await api.updateMeetingTagsFolder(meetingId, tags.join(','), folder);
-      setMeeting(res.data);
+      const data = await MeetingService.updateTagsFolder(meetingId, tags.join(','), folder);
+      setMeeting(data);
     } catch (err) {
       setError('Failed to update tags/folder');
     }
@@ -442,8 +422,8 @@ const MeetingDetails = () => {
   const handleUpdateSpeaker = async () => {
     if (!editingSpeaker) return;
     try {
-      const res = await api.updateSpeaker(editingSpeaker.id, editingSpeaker);
-      setSpeakers(speakers.map((s) => (s.id === res.data.id ? res.data : s)));
+      const data = await SpeakerService.update(editingSpeaker.id, editingSpeaker);
+      setSpeakers(speakers.map((s) => (s.id === data.id ? data : s)));
       setEditingSpeaker(null);
       fetchMeetingDetails(false); // Refresh transcript
     } catch (err) {
@@ -455,28 +435,28 @@ const MeetingDetails = () => {
   const handleAddActionItem = async () => {
     if (!newActionItem.task.trim()) return;
     try {
-      const res = await api.addActionItem(meeting.transcription.id, newActionItem);
+      const data = await ActionItemService.add(meeting.transcription.id, newActionItem);
       setMeeting((prev) => ({
         ...prev,
         transcription: {
           ...prev.transcription,
-          action_items: [...prev.transcription.action_items, res.data],
+          action_items: [...prev.transcription.action_items, data],
         },
       }));
       // Link to selected projects
-      if (res.data?.id && newActionItemProjectIds.length > 0) {
+      if (data?.id && newActionItemProjectIds.length > 0) {
         await Promise.all(
-          newActionItemProjectIds.map((pid) => ActionItemService.linkToProject(pid, res.data.id))
+          newActionItemProjectIds.map((pid) => ActionItemService.linkToProject(pid, data.id))
         );
         setActionItemProjects((prev) => {
           const next = new Map(prev);
-          next.set(res.data.id, new Set(newActionItemProjectIds));
+          next.set(data.id, new Set(newActionItemProjectIds));
           return next;
         });
       } else {
         setActionItemProjects((prev) => {
           const next = new Map(prev);
-          next.set(res.data.id, new Set());
+          next.set(data.id, new Set());
           return next;
         });
       }
@@ -490,7 +470,7 @@ const MeetingDetails = () => {
   const handleUpdateActionItem = async () => {
     if (!editingActionItem) return;
     try {
-      const res = await api.updateActionItem(editingActionItem.id, {
+      const data = await ActionItemService.update(editingActionItem.id, {
         task: editingActionItem.task,
         owner: editingActionItem.owner,
         due_date: editingActionItem.due_date,
@@ -500,9 +480,7 @@ const MeetingDetails = () => {
         ...prev,
         transcription: {
           ...prev.transcription,
-          action_items: prev.transcription.action_items.map((a) =>
-            a.id === res.data.id ? res.data : a
-          ),
+          action_items: prev.transcription.action_items.map((a) => (a.id === data.id ? data : a)),
         },
       }));
       setEditingActionItem(null);
@@ -543,7 +521,7 @@ const MeetingDetails = () => {
 
   const handleDeleteActionItem = async (id) => {
     try {
-      await api.deleteActionItem(id);
+      await ActionItemService.delete(id);
       setMeeting((prev) => ({
         ...prev,
         transcription: {
@@ -622,7 +600,7 @@ const MeetingDetails = () => {
     }));
 
     try {
-      await api.updateActionItem(itemId, { status: newStatus });
+      await ActionItemService.update(itemId, { status: newStatus });
     } catch (err) {
       fetchMeetingDetails(false);
       setError('Failed to update action item status');
@@ -640,11 +618,6 @@ const MeetingDetails = () => {
       default:
         return isDarkMode ? '#b0b0b0' : '#757575';
     }
-  };
-
-  const openProjectMenu = (event, actionItemId) => {
-    setProjectMenuAnchor(event.currentTarget);
-    setProjectMenuItemId(actionItemId);
   };
 
   const closeProjectMenu = () => {
@@ -692,8 +665,8 @@ const MeetingDetails = () => {
   // Notes Handlers
   const handleUpdateNotes = async () => {
     try {
-      const res = await api.updateMeetingNotes(meetingId, notes);
-      setMeeting(res.data);
+      const data = await MeetingService.updateNotes(meetingId, notes);
+      setMeeting(data);
       setIsEditingNotes(false);
     } catch (err) {
       setError('Failed to update notes');
@@ -739,7 +712,7 @@ const MeetingDetails = () => {
     if (!selectedFile) return;
     try {
       setUploadingAttachment(true);
-      await api.uploadAttachment(meetingId, selectedFile, attachmentDescription);
+      await AttachmentService.upload(meetingId, selectedFile, attachmentDescription);
       await fetchAttachments();
       setAttachmentDialogOpen(false);
       setSelectedFile(null);
@@ -754,7 +727,7 @@ const MeetingDetails = () => {
   const handleDeleteAttachment = async (id) => {
     if (!window.confirm('Delete attachment?')) return;
     try {
-      await api.deleteAttachment(id);
+      await AttachmentService.delete(id);
       fetchAttachments();
     } catch (err) {
       setError('Failed to delete attachment');
@@ -764,15 +737,11 @@ const MeetingDetails = () => {
   const handleDownloadMeeting = async (format) => {
     setDownloadMenuAnchor(null);
     try {
-      const response = await api.downloadMeeting(meetingId, format);
-      const blob = new Blob([response.data], { type: response.headers['content-type'] });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${meeting.filename.replace(/\.[^/.]+$/, '')}.${format}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await MeetingService.download(
+        meetingId,
+        format,
+        `${meeting.filename.replace(/\.[^/.]+$/, '')}.${format}`
+      );
     } catch (err) {
       setError('Failed to download meeting');
     }
@@ -1929,7 +1898,9 @@ const MeetingDetails = () => {
                         <Button
                           size="small"
                           variant="outlined"
-                          onClick={() => window.open(api.previewAttachment(att.id), '_blank')}
+                          onClick={() =>
+                            window.open(AttachmentService.getPreviewUrl(att.id), '_blank')
+                          }
                         >
                           View
                         </Button>
