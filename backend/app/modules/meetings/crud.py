@@ -228,7 +228,14 @@ def update_attachment(db: Session, attachment_id: int, description: str = None):
 
 
 def delete_attachment(db: Session, attachment_id: int):
-    """Delete an attachment."""
+    """Delete an attachment, first removing any document chunks that reference it."""
+    # Remove document_chunks that reference this attachment to avoid FK violation.
+    # (The remove_attachment_embeddings Celery task handles the vector-store cleanup
+    # asynchronously, but the DB rows must be gone before we can delete the parent row.)
+    db.query(models.DocumentChunk).filter(models.DocumentChunk.attachment_id == attachment_id).delete(
+        synchronize_session=False
+    )
+    db.flush()
     return AttachmentRepository(db).delete(id=attachment_id)
 
 

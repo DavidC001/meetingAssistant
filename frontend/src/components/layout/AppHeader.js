@@ -26,7 +26,7 @@ import {
   LightMode as LightModeIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../../contexts/ThemeContext';
-import GlobalSearch from '../GlobalSearch';
+import GlobalSearch from './GlobalSearch';
 
 const AppHeader = ({ onMenuClick }) => {
   const theme = useTheme();

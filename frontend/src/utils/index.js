@@ -4,6 +4,31 @@
 
 import { MEETING_STATUS, ERROR_MESSAGES } from '../constants';
 
+// Re-export helpers from dedicated modules for backward compatibility
+export {
+  formatDate,
+  formatDateShort,
+  formatRelativeDate,
+  formatDuration,
+  isOverdue,
+  getISODate,
+  getDateChipInfo,
+} from './dateHelpers';
+export {
+  getStatusColor,
+  getStatusLabel,
+  getProjectStatusColor,
+  getActionItemStatusColor,
+  getSystemStatusColor,
+} from './statusHelpers';
+export {
+  getPriorityConfig,
+  getPriorityColor,
+  getPriorityBgColor,
+  getPriorityLabel,
+  sortPriorities,
+} from './priorityHelpers';
+
 /**
  * Format file size in bytes to human readable format
  * @param {number} bytes - File size in bytes
@@ -24,7 +49,7 @@ export const formatFileSize = (bytes) => {
  * @param {number} seconds - Duration in seconds
  * @returns {string} Formatted duration
  */
-export const formatDuration = (seconds) => {
+export const formatDurationLegacy = (seconds) => {
   if (!seconds || seconds < 0) return '0:00';
 
   const hours = Math.floor(seconds / 3600);
@@ -42,7 +67,7 @@ export const formatDuration = (seconds) => {
  * @param {string|Date} date - Date to format
  * @returns {string} Formatted date
  */
-export const formatDate = (date) => {
+export const formatDateLegacy = (date) => {
   if (!date) return 'Unknown';
 
   const dateObj = new Date(date);
@@ -66,26 +91,6 @@ export const formatDate = (date) => {
 export const truncateText = (text, maxLength = 50) => {
   if (!text || text.length <= maxLength) return text || '';
   return text.substring(0, maxLength) + '...';
-};
-
-/**
- * Get meeting status color
- * @param {string} status - Meeting status
- * @returns {string} Material-UI color
- */
-export const getStatusColor = (status) => {
-  switch (status) {
-    case MEETING_STATUS.COMPLETED:
-      return 'success';
-    case MEETING_STATUS.PROCESSING:
-      return 'info';
-    case MEETING_STATUS.PENDING:
-      return 'warning';
-    case MEETING_STATUS.FAILED:
-      return 'error';
-    default:
-      return 'default';
-  }
 };
 
 /**

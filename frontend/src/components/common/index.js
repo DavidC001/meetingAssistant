@@ -19,3 +19,4 @@ export { default as FilterBar } from './FilterBar';
 export { default as ViewModeToggle } from './ViewModeToggle';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as ErrorBoundaryAlert } from './ErrorBoundaryAlert';
+export { default as QuickActions } from './QuickActions';

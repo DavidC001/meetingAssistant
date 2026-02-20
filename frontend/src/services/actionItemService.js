@@ -91,6 +91,36 @@ const ActionItemService = {
   async unlinkFromProject(projectId, actionItemId) {
     await apiClient.delete(`/api/v1/projects/${projectId}/action-items/${actionItemId}`);
   },
+
+  /**
+   * Get all global action items (calendar endpoint).
+   * @returns {Promise<Array>}
+   */
+  async getGlobal() {
+    const response = await apiClient.get('/api/v1/calendar/action-items');
+    return response.data;
+  },
+
+  /**
+   * Update a global action item (calendar endpoint).
+   * @param {number} itemId - Action item ID
+   * @param {Object} updates - Fields to update
+   * @returns {Promise<Object>}
+   */
+  async updateGlobal(itemId, updates) {
+    const response = await apiClient.put(`/api/v1/calendar/action-items/${itemId}`, updates);
+    return response.data;
+  },
+
+  /**
+   * Create a global action item (calendar endpoint).
+   * @param {Object} actionItem - Action item data
+   * @returns {Promise<Object>}
+   */
+  async createGlobal(actionItem) {
+    const response = await apiClient.post('/api/v1/calendar/action-items', actionItem);
+    return response.data;
+  },
 };
 
 export default ActionItemService;

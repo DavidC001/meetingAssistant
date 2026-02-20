@@ -35,3 +35,5 @@ export { projectService } from './projectService';
 export { default as SearchService } from './searchService';
 export { default as OllamaService } from './ollamaService';
 export { default as GoogleDriveService } from './googleDriveService';
+export { default as CalendarService } from './calendarService';
+export { default as GraphService } from './graphService';

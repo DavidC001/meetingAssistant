@@ -304,7 +304,7 @@ const UploadForm = ({ onUploadSuccess }) => {
               <VisuallyHiddenInput
                 id="file-input"
                 type="file"
-                accept="audio/*,video/*"
+                accept=".mp3,.wav,.mp4,.m4a,.ogg,.flac,.aac,.wma,.webm,.mkv,.avi,.mov,.wmv,.opus,.aiff,.aif"
                 onChange={handleFileChange}
                 multiple
               />

@@ -22,7 +22,7 @@ import {
   keyframes,
 } from '@mui/material';
 import { Upload as UploadIcon, Close as CloseIcon } from '@mui/icons-material';
-import UploadForm from '../UploadForm';
+import UploadForm from './UploadForm';
 
 // Pulsing animation for FAB when processing
 const pulse = keyframes`
