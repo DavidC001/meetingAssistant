@@ -39,7 +39,8 @@ const statusConfig = {
 };
 
 const StatusChip = ({ status, size = 'small', showIcon = true, customLabel = null, ...props }) => {
-  const config = statusConfig[status] || {
+  const normalizedStatus = (status || '').trim().toLowerCase();
+  const config = statusConfig[normalizedStatus] || {
     color: 'default',
     icon: UnknownIcon,
     label: status || 'Unknown',

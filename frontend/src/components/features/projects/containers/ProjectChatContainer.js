@@ -323,11 +323,14 @@ const ProjectChatContainer = ({ projectId: projectIdProp }) => {
           <Stack direction="row" spacing={1} alignItems="center">
             <TextField
               fullWidth
+              multiline
+              maxRows={4}
               placeholder="Ask a question about your project..."
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyPress={(event) => {
-                if (event.key === 'Enter') {
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
                   handleSendMessage();
                 }
               }}

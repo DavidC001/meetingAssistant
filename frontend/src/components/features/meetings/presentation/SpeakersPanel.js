@@ -29,6 +29,7 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Close as CloseIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { stringAvatar } from '../../../../utils/stringAvatar';
 import ConfirmDialog from '../../../common/ConfirmDialog';
@@ -46,13 +47,20 @@ export const SpeakersPanel = ({ speakers = [], allSpeakers = [], onUpdate, onDel
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [selectedSpeaker, setSelectedSpeaker] = useState(null);
+  const [selectedSpeaker, setSelectedSpeaker] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Unique speaker names from all meetings — used for rename autocomplete
+  // allSpeakers can be an array of strings (from backend) or objects with name/speaker_name
   const allSpeakerNames = useMemo(
-    () => [...new Set(allSpeakers.map((s) => s.name || s.speaker_name).filter(Boolean))],
+    () => [
+      ...new Set(
+        allSpeakers
+          .map((s) => (typeof s === 'string' ? s : s.name || s.speaker_name))
+          .filter(Boolean)
+      ),
+    ],
     [allSpeakers]
   );
 
@@ -91,19 +99,24 @@ export const SpeakersPanel = ({ speakers = [], allSpeakers = [], onUpdate, onDel
   };
 
   const handleAddSpeaker = async () => {
-    if (!selectedSpeaker) return;
+    if (!selectedSpeaker?.trim()) return;
     try {
       setIsLoading(true);
-      await onAdd?.(selectedSpeaker.id);
-      setSelectedSpeaker(null);
+      await onAdd?.(selectedSpeaker.trim());
+      setSelectedSpeaker('');
       setOpenAddDialog(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const usedSpeakerIds = new Set(speakers.map((s) => s.id));
-  const availableForAdd = allSpeakers.filter((s) => !usedSpeakerIds.has(s.id));
+  // Build list of speaker names available for adding (excluding already-assigned names)
+  const usedSpeakerNames = new Set(
+    speakers.map((s) => (s.name || s.speaker_name || '').toLowerCase())
+  );
+  const availableForAdd = allSpeakerNames.filter(
+    (name) => !usedSpeakerNames.has(name.toLowerCase())
+  );
 
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
@@ -121,82 +134,106 @@ export const SpeakersPanel = ({ speakers = [], allSpeakers = [], onUpdate, onDel
           <Alert severity="info">No speakers assigned to this meeting.</Alert>
         ) : (
           <List disablePadding>
-            {speakers.map((speaker) => (
-              <ListItem
-                key={speaker.id}
-                secondaryAction={
-                  <Stack direction="row" spacing={0.5}>
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={() => handleEdit(speaker)}
-                      disabled={isLoading}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      onClick={() => handleDelete(speaker.id)}
-                      disabled={isLoading}
-                      color="error"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                }
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  py: 1,
-                  px: 0,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  '&:last-child': {
-                    borderBottom: 'none',
-                  },
-                }}
-              >
-                <Avatar
-                  {...stringAvatar(speaker.name || speaker.speaker_name || 'S')}
-                  sx={{ mr: 2 }}
-                />
-                {editingId === speaker.id ? (
-                  <Autocomplete
-                    freeSolo
-                    fullWidth
-                    options={allSpeakerNames}
-                    inputValue={editingName}
-                    onInputChange={(_, value) => setEditingName(value)}
-                    onChange={(_, value) => {
-                      if (value) setEditingName(value);
-                    }}
-                    disabled={isLoading}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        size="small"
-                        autoFocus
-                        placeholder="Speaker name..."
-                        onBlur={handleSaveEdit}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit();
-                          if (e.key === 'Escape') {
-                            setEditingId(null);
-                            setEditingName('');
-                          }
+            {speakers.map((speaker) => {
+              const isEditing = editingId === speaker.id;
+              return (
+                <ListItem
+                  key={speaker.id}
+                  disableGutters
+                  secondaryAction={
+                    !isEditing ? (
+                      <Stack direction="row" spacing={0.5}>
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={() => handleEdit(speaker)}
+                          disabled={isLoading}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={() => handleDelete(speaker.id)}
+                          disabled={isLoading}
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    ) : undefined
+                  }
+                  sx={{
+                    py: 1,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    '&:last-child': { borderBottom: 'none' },
+                    // make room for the secondaryAction buttons when not editing
+                    pr: isEditing ? 0 : 9,
+                  }}
+                >
+                  <Avatar
+                    {...stringAvatar(speaker.name || speaker.speaker_name || 'S')}
+                    sx={{ mr: 2, flexShrink: 0 }}
+                  />
+                  {isEditing ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
+                      <Autocomplete
+                        freeSolo
+                        fullWidth
+                        options={allSpeakerNames}
+                        inputValue={editingName}
+                        onInputChange={(_, value) => setEditingName(value)}
+                        onChange={(_, value) => {
+                          if (value) setEditingName(value);
                         }}
+                        disabled={isLoading}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            size="small"
+                            autoFocus
+                            placeholder="Speaker name..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveEdit();
+                              if (e.key === 'Escape') {
+                                setEditingId(null);
+                                setEditingName('');
+                              }
+                            }}
+                          />
+                        )}
                       />
-                    )}
-                  />
-                ) : (
-                  <ListItemText
-                    primary={speaker.name || speaker.speaker_name || 'Unknown'}
-                    secondary={speaker.email || ''}
-                  />
-                )}
-              </ListItem>
-            ))}
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={handleSaveEdit}
+                        disabled={isLoading || !editingName.trim()}
+                        title="Save"
+                      >
+                        <CheckIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditingName('');
+                        }}
+                        disabled={isLoading}
+                        title="Cancel"
+                      >
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  ) : (
+                    <ListItemText
+                      primary={speaker.name || speaker.speaker_name || 'Unknown'}
+                      secondary={speaker.email || ''}
+                    />
+                  )}
+                </ListItem>
+              );
+            })}
           </List>
         )}
       </CardContent>
@@ -218,26 +255,30 @@ export const SpeakersPanel = ({ speakers = [], allSpeakers = [], onUpdate, onDel
         </DialogTitle>
         <DialogContent sx={{ minWidth: '400px' }}>
           <Autocomplete
+            freeSolo
             fullWidth
             options={availableForAdd}
-            getOptionLabel={(option) => option.name || option.speaker_name || ''}
-            value={selectedSpeaker}
-            onChange={(e, v) => setSelectedSpeaker(v)}
-            renderInput={(params) => <TextField {...params} label="Select speaker" />}
+            inputValue={selectedSpeaker || ''}
+            onInputChange={(_, value) => setSelectedSpeaker(value)}
+            onChange={(_, value) => {
+              if (value) setSelectedSpeaker(value);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Speaker name"
+                placeholder="Type or select a speaker name..."
+              />
+            )}
             sx={{ mt: 2 }}
           />
-          {availableForAdd.length === 0 && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              All available speakers are already assigned.
-            </Alert>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddDialog(false)}>Cancel</Button>
           <Button
             onClick={handleAddSpeaker}
             variant="contained"
-            disabled={!selectedSpeaker || isLoading}
+            disabled={!selectedSpeaker?.trim() || isLoading}
           >
             Add
           </Button>

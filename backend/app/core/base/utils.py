@@ -184,4 +184,9 @@ def get_file_metadata(file_path: str | Path) -> MeetingMetadata:
     except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError):
         pass
 
-    return MeetingMetadata(**metadata)
+    return MeetingMetadata(
+        duration=metadata.get("duration"),
+        format=metadata.get("file_type"),
+        file_size=metadata.get("file_size"),
+        created_at=metadata.get("meeting_date"),
+    )

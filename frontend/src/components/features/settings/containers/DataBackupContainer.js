@@ -38,6 +38,7 @@ const DataBackupContainer = () => {
     setIncludeAudio,
     result,
     error,
+    fileInputRef,
     handleExport,
     handleFileSelect,
     handleImport,
@@ -169,6 +170,7 @@ const DataBackupContainer = () => {
 
         <Box sx={{ mb: 2 }}>
           <input
+            ref={fileInputRef}
             id="backup-file-input"
             type="file"
             accept=".json,.zip"

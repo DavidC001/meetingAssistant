@@ -14,19 +14,31 @@ import {
   Alert,
   Chip,
   Stack,
+  Tooltip,
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import { formatDuration } from '../../../../utils';
+import SpeakerRenameDialog from '../../../common/SpeakerRenameDialog';
 
 /**
  * TranscriptViewer Component
  * @param {Object} props
  * @param {Array} props.segments - Transcript segments with speaker and text
  * @param {boolean} props.isLoading - Whether transcript is loading
+ * @param {Array} props.speakers - Speaker objects for the meeting (for lookup)
+ * @param {string[]} props.allSpeakerNames - All known speaker names for autocomplete
+ * @param {Function} props.onSpeakerRenamed - Called with (oldName, newName) when a speaker is renamed
  */
-export const TranscriptViewer = ({ segments = [], isLoading = false }) => {
+export const TranscriptViewer = ({
+  segments = [],
+  isLoading = false,
+  speakers = [],
+  allSpeakerNames = [],
+  onSpeakerRenamed,
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSegment, setExpandedSegment] = useState(null);
+  const [renamingSpeaker, setRenamingSpeaker] = useState(null); // speaker name being renamed
 
   const filteredSegments = segments.filter(
     (segment) =>
@@ -113,7 +125,19 @@ export const TranscriptViewer = ({ segments = [], isLoading = false }) => {
                   sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
                 >
                   {segment.speaker && (
-                    <Chip label={segment.speaker} size="small" variant="outlined" color="primary" />
+                    <Tooltip title="Click to rename speaker" placement="top">
+                      <Chip
+                        label={segment.speaker}
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        clickable
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenamingSpeaker(segment.speaker);
+                        }}
+                      />
+                    </Tooltip>
                   )}
                   {segment.timestamp !== undefined && (
                     <Typography variant="caption" color="textSecondary">
@@ -148,6 +172,18 @@ export const TranscriptViewer = ({ segments = [], isLoading = false }) => {
           )}
         </Stack>
       </CardContent>
+
+      {/* Inline speaker rename dialog */}
+      <SpeakerRenameDialog
+        open={Boolean(renamingSpeaker)}
+        speakerName={renamingSpeaker || ''}
+        allSpeakerNames={allSpeakerNames}
+        onConfirm={(newName) => {
+          onSpeakerRenamed?.(renamingSpeaker, newName);
+          setRenamingSpeaker(null);
+        }}
+        onClose={() => setRenamingSpeaker(null)}
+      />
     </Card>
   );
 };

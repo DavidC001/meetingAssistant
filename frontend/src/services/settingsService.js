@@ -301,7 +301,12 @@ export const BackupService = {
       params: { include_audio: includeAudio },
       responseType: 'blob',
     });
-    return response.data;
+    const contentDisposition = response.headers?.['content-disposition'] || '';
+    const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+    const filename =
+      filenameMatch?.[1] ||
+      `backup_${new Date().toISOString().split('T')[0]}.${includeAudio ? 'zip' : 'json'}`;
+    return { blob: response.data, filename };
   },
 
   /**

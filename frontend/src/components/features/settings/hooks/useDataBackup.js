@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { BackupService } from '../../../../services/settingsService';
 import logger from '../../../../utils/logger';
 
 const useDataBackup = () => {
@@ -10,25 +11,17 @@ const useDataBackup = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
+  // Ref attached to the <input type="file"> in the container — avoids document.getElementById
+  const fileInputRef = useRef(null);
+
   const handleExport = async () => {
     setExporting(true);
     setError(null);
     setResult(null);
 
     try {
-      const response = await fetch(`/api/v1/backup/export?include_audio=${includeAudio}`);
+      const { blob, filename } = await BackupService.export(includeAudio);
 
-      if (!response.ok) {
-        throw new Error(`Export failed: ${response.statusText}`);
-      }
-
-      const contentDisposition = response.headers.get('Content-Disposition');
-      const filenameMatch = contentDisposition?.match(/filename="?([^"]+)"?/);
-      const filename =
-        filenameMatch?.[1] ||
-        `backup_${new Date().toISOString().split('T')[0]}.${includeAudio ? 'zip' : 'json'}`;
-
-      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -69,21 +62,7 @@ const useDataBackup = () => {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-      formData.append('merge_mode', mergeMode);
-
-      const response = await fetch(`/api/v1/backup/import?merge_mode=${mergeMode}`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Import failed');
-      }
-
-      const data = await response.json();
+      const data = await BackupService.import(importFile, mergeMode);
 
       setResult({
         type: 'success',
@@ -92,7 +71,7 @@ const useDataBackup = () => {
       });
 
       setImportFile(null);
-      document.getElementById('backup-file-input').value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err) {
       logger.error('Import error:', err);
       setError(err.message || 'Failed to import data');
@@ -111,6 +90,7 @@ const useDataBackup = () => {
     setIncludeAudio,
     result,
     error,
+    fileInputRef,
     handleExport,
     handleFileSelect,
     handleImport,

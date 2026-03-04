@@ -348,7 +348,7 @@ const GlobalChatContainer = () => {
               placeholder="Ask the assistant about any meeting..."
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyPress={(event) => {
+              onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   handleSend();

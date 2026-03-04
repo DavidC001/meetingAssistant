@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Button, Container, CircularProgress, Alert } from '@mui/material';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import KanbanBoard from '../../kanban/KanbanBoard';
+import ErrorBoundary from '../../../common/ErrorBoundary';
 import { projectService } from '../../../../services';
 
 const ProjectActionItemsContainer = () => {
@@ -54,18 +55,20 @@ const ProjectActionItemsContainer = () => {
         </Button>
       </Box>
 
-      <KanbanBoard
-        mode="project"
-        projectId={projectId}
-        showHeader
-        showFilters
-        allowAdd
-        allowEdit
-        allowDelete
-        defaultShowCompleted={false}
-        headerTitle="Project Action Items"
-        headerSubtitle={project?.name || 'Project'}
-      />
+      <ErrorBoundary>
+        <KanbanBoard
+          mode="project"
+          projectId={projectId}
+          showHeader
+          showFilters
+          allowAdd
+          allowEdit
+          allowDelete
+          defaultShowCompleted={false}
+          headerTitle="Project Action Items"
+          headerSubtitle={project?.name || 'Project'}
+        />
+      </ErrorBoundary>
     </Container>
   );
 };

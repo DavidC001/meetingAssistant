@@ -27,7 +27,18 @@ const useProjectAnalytics = () => {
         projectService.getActivity(projectId, 10),
       ]);
       setProject(projectResponse.data);
-      setAnalytics(analyticsResponse.data);
+      // Normalize action_items_by_status keys (merge 'in_progress' and 'in-progress')
+      const analyticsData = analyticsResponse.data;
+      if (analyticsData?.action_items_by_status) {
+        const raw = analyticsData.action_items_by_status;
+        const normalized = {};
+        for (const [key, count] of Object.entries(raw)) {
+          const normKey = key.replace(/_/g, '-');
+          normalized[normKey] = (normalized[normKey] || 0) + count;
+        }
+        analyticsData.action_items_by_status = normalized;
+      }
+      setAnalytics(analyticsData);
       setActivity(activityResponse.data || []);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load analytics');

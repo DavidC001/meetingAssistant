@@ -292,7 +292,7 @@ const ChatContainer = ({ meetingId }) => {
           placeholder="Ask a question about the meeting..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
           disabled={isLoading}
           multiline
           maxRows={4}

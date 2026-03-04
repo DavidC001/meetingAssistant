@@ -356,7 +356,7 @@ const FloatingChatContainer = ({ meetingId }) => {
               placeholder="Ask about this meeting..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               disabled={isLoading}
               multiline
               maxRows={3}

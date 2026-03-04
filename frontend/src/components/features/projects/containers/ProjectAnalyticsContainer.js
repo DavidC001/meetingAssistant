@@ -171,7 +171,13 @@ const ProjectAnalyticsContainer = () => {
               </Stack>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 {Object.entries(analytics?.action_items_by_status || {}).map(([status, count]) => (
-                  <Chip key={status} label={`${status}: ${count}`} sx={{ mr: 1, mb: 1 }} />
+                  <Chip
+                    key={status}
+                    label={`${status
+                      .replace(/-/g, ' ')
+                      .replace(/\b\w/g, (c) => c.toUpperCase())}: ${count}`}
+                    sx={{ mr: 1, mb: 1 }}
+                  />
                 ))}
                 {Object.keys(analytics?.action_items_by_status || {}).length === 0 && (
                   <Typography variant="body2" color="text.secondary">

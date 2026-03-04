@@ -40,8 +40,7 @@ export const useActionItems = ({
     if (!isMeetingMode) return;
     setActionItems(normalizeItems(initialItems));
     setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMeetingMode, JSON.stringify(initialItems)]);
+  }, [isMeetingMode, initialItems]);
 
   // Fetch action items based on mode and filters
   const fetchActionItems = useCallback(async () => {
@@ -205,25 +204,38 @@ export const useActionItems = ({
         if (isMeetingMode && transcriptionId) {
           createdItem = await ActionItemService.add(transcriptionId, payload);
         } else if (isProjectMode && projectId) {
-          createdItem = await projectService.createActionItem(projectId, payload);
+          const response = await projectService.createActionItem(projectId, payload);
+          createdItem = response.data ?? response;
         } else {
           createdItem = await ActionItemService.createGlobal(payload);
         }
 
+        if (!createdItem) {
+          setError('Failed to create action item: no data returned.');
+          return null;
+        }
+
+        // Normalize the created item the same way as fetchActionItems does
+        const normalizedItem = {
+          ...createdItem,
+          task: createdItem.task || createdItem.description || createdItem.title || '',
+          status: (createdItem.status || 'pending').replace('_', '-'),
+        };
+
         // Link to selected projects
-        if (linkedProjectIds.length > 0 && createdItem?.id) {
+        if (linkedProjectIds.length > 0 && normalizedItem?.id) {
           const idsToLink = isProjectMode
             ? linkedProjectIds.filter((pid) => String(pid) !== String(projectId))
             : linkedProjectIds;
 
           if (idsToLink.length > 0) {
             await Promise.all(
-              idsToLink.map((pid) => ActionItemService.linkToProject(pid, createdItem.id))
+              idsToLink.map((pid) => ActionItemService.linkToProject(pid, normalizedItem.id))
             );
           }
         }
 
-        setActionItems((prev) => [...prev, createdItem]);
+        setActionItems((prev) => [...prev, normalizedItem]);
         setError(null);
         return createdItem;
       } catch (err) {
@@ -341,10 +353,13 @@ export const useActionItems = ({
     if (!isProjectMode || !projectId) return [];
 
     try {
-      const allItems = await ActionItemService.getAll();
-      const linkedItems = await projectService.getActionItems(projectId);
-      const linkedIds = new Set(linkedItems.map((item) => item.id));
-      return allItems.filter((item) => !linkedIds.has(item.id));
+      const allItems = await ActionItemService.getGlobal();
+      const linkedResponse = await projectService.getActionItems(projectId);
+      const linkedItems = linkedResponse?.data || [];
+      const linkedIds = new Set(linkedItems.map((item) => String(item.id)));
+      return allItems.filter(
+        (item) => !linkedIds.has(String(item.id)) && item.status !== 'completed'
+      );
     } catch (err) {
       logger.error('Error fetching available action items:', err);
       return [];

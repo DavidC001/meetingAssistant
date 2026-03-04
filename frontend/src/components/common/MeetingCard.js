@@ -92,7 +92,7 @@ const MeetingCard = ({
     });
   };
 
-  const isProcessing = meeting.status === 'processing';
+  const isProcessing = (meeting.status || '').trim().toLowerCase() === 'processing';
 
   // Compact variant (for recent meetings)
   if (variant === 'compact') {

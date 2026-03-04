@@ -292,7 +292,7 @@ const MeetingsListContainer = ({ refreshKey, onMeetingUpdate }) => {
             helperText={
               newName !== null && newName.trim().length === 0 ? 'Meeting name cannot be empty' : ''
             }
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter' && newName?.trim()) handleRenameConfirm();
             }}
           />

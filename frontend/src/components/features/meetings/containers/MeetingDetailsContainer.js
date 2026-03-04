@@ -3,7 +3,7 @@
  * Main container component that manages meeting details with hooks and presentational components
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   CircularProgress,
   Container,
   Typography,
+  Snackbar,
 } from '@mui/material';
 import AudioPlayer from '../presentation/AudioPlayer';
 import FloatingChat from '../containers/FloatingChatContainer';
@@ -32,6 +33,8 @@ import {
   MeetingMetadata,
 } from '../presentation';
 import { FormDialog, ConfirmDialog } from '../../../common';
+import { EmbeddingConfigService } from '../../../../services/settingsService';
+import { Sync as SyncIcon } from '@mui/icons-material';
 
 // TabPanel component
 const TabPanel = (props) => {
@@ -66,11 +69,33 @@ export const MeetingDetailsContainer = () => {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [reembedConfirmOpen, setReembedConfirmOpen] = useState(false);
+  const [isReembedding, setIsReembedding] = useState(false);
 
-  // Parse full_text into line-segment objects for TranscriptViewer
-  // Must be before early returns (rules-of-hooks)
-  const segments = useMemo(() => {
-    const fullText = meetingDetail.meeting?.transcription?.full_text;
+  // Stable reference so useActionItems can use initialItems directly in its dep array
+  // (keyed on transcription id — only re-creates when the transcription record changes)
+  const actionItems = useMemo(
+    () => meetingDetail.meeting?.transcription?.action_items ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [meetingDetail.meeting?.transcription?.id]
+  );
+
+  // Derive all speaker names for autocomplete
+  const allSpeakerNames = useMemo(
+    () => [
+      ...new Set(
+        speakers.allSpeakers
+          .map((s) => (typeof s === 'string' ? s : s.name || s.speaker_name))
+          .filter(Boolean)
+      ),
+    ],
+    [speakers.allSpeakers]
+  );
+
+  // Parse full_text into segments and keep them in state so they can be
+  // updated optimistically after a speaker rename without a full refetch.
+  const parseSegments = useCallback((fullText) => {
     if (!fullText) return [];
     return fullText
       .split('\n')
@@ -82,7 +107,73 @@ export const MeetingDetailsContainer = () => {
         }
         return { id: idx, speaker: null, text: line };
       });
-  }, [meetingDetail.meeting?.transcription?.full_text]);
+  }, []);
+
+  const [segments, setSegments] = useState(() =>
+    parseSegments(meetingDetail.meeting?.transcription?.full_text)
+  );
+
+  // Keep segments in sync whenever the meeting data refreshes
+  useEffect(() => {
+    setSegments(parseSegments(meetingDetail.meeting?.transcription?.full_text));
+  }, [meetingDetail.meeting?.transcription?.full_text, parseSegments]);
+
+  // Handle speaker rename from TranscriptViewer chips
+  const handleSpeakerRenamed = useCallback(
+    async (oldName, newName) => {
+      // Optimistically update the transcript segments
+      setSegments((prev) =>
+        prev.map((seg) => (seg.speaker === oldName ? { ...seg, speaker: newName } : seg))
+      );
+
+      // Persist the rename via existing speakers hook
+      const speakerObj = speakers.speakers.find((s) => (s.name || s.speaker_name) === oldName);
+      if (speakerObj) {
+        await speakers.updateSpeaker({ ...speakerObj, name: newName });
+      }
+
+      // Trigger re-embedding in the background
+      try {
+        await EmbeddingConfigService.recomputeMeeting(meetingId);
+        setSnackbarMessage('Speaker renamed. Search index is being updated.');
+      } catch (e) {
+        // non-critical: silently ignore recompute errors
+      }
+    },
+    [speakers, meetingId]
+  );
+
+  // Re-embed handler (called from confirm dialog and inline rename)
+  const handleReembed = useCallback(async () => {
+    setIsReembedding(true);
+    try {
+      await EmbeddingConfigService.recomputeMeeting(meetingId);
+      setSnackbarMessage('Search index is being updated.');
+    } catch (e) {
+      setSnackbarMessage('Failed to trigger re-embedding.');
+    } finally {
+      setIsReembedding(false);
+      setReembedConfirmOpen(false);
+    }
+  }, [meetingId]);
+
+  // Wrap updateSpeaker so that a rename from the Speakers tab also patches
+  // the transcript segments in memory (same as inline rename from TranscriptViewer).
+  const handleSpeakerUpdateFromPanel = useCallback(
+    async (speaker) => {
+      const oldSpeakerObj = speakers.speakers.find((s) => s.id === speaker.id);
+      const oldName = oldSpeakerObj?.name || oldSpeakerObj?.speaker_name;
+      const newName = speaker.name;
+      const success = await speakers.updateSpeaker(speaker);
+      if (success && oldName && newName && oldName !== newName) {
+        setSegments((prev) =>
+          prev.map((seg) => (seg.speaker === oldName ? { ...seg, speaker: newName } : seg))
+        );
+      }
+      return success;
+    },
+    [speakers]
+  );
 
   if (meetingDetail.isLoading) {
     return (
@@ -170,6 +261,21 @@ export const MeetingDetailsContainer = () => {
         onDownload={handleDownloadMeeting}
       />
 
+      {/* Re-embed Search Index — shown for completed meetings with a transcription */}
+      {meeting.status === 'completed' && meeting.transcription && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            disabled={isReembedding}
+            onClick={() => setReembedConfirmOpen(true)}
+          >
+            {isReembedding ? 'Re-indexing…' : 'Re-embed Search Index'}
+          </Button>
+        </Box>
+      )}
+
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange} aria-label="meeting details tabs">
@@ -256,14 +362,20 @@ export const MeetingDetailsContainer = () => {
 
       {/* Transcript Tab */}
       <TabPanel value={activeTab} index={1}>
-        <TranscriptViewer segments={segments} isLoading={meetingDetail.isLoading} />
+        <TranscriptViewer
+          segments={segments}
+          isLoading={meetingDetail.isLoading}
+          speakers={speakers.speakers}
+          allSpeakerNames={allSpeakerNames}
+          onSpeakerRenamed={handleSpeakerRenamed}
+        />
       </TabPanel>
 
       {/* Action Items Tab */}
       <TabPanel value={activeTab} index={2}>
         <MeetingActionItems
           transcriptionId={meeting.transcription?.id}
-          initialItems={meeting.transcription?.action_items}
+          initialItems={actionItems}
         />
       </TabPanel>
 
@@ -272,7 +384,7 @@ export const MeetingDetailsContainer = () => {
         <SpeakersPanel
           speakers={speakers.speakers}
           allSpeakers={speakers.allSpeakers}
-          onUpdate={speakers.updateSpeaker}
+          onUpdate={handleSpeakerUpdateFromPanel}
           onDelete={speakers.deleteSpeaker}
           onAdd={speakers.addSpeaker}
         />
@@ -312,6 +424,16 @@ export const MeetingDetailsContainer = () => {
         />
       </FormDialog>
 
+      {/* Re-embed Confirm Dialog */}
+      <ConfirmDialog
+        open={reembedConfirmOpen}
+        title="Re-embed Search Index"
+        message="This will recompute the vector embeddings for this meeting so the search index reflects the latest transcript and speaker names. It runs in the background and may take a moment."
+        confirmLabel="Re-embed"
+        onConfirm={handleReembed}
+        onCancel={() => setReembedConfirmOpen(false)}
+      />
+
       {/* Delete Dialog */}
       <ConfirmDialog
         open={deleteDialogOpen}
@@ -330,6 +452,15 @@ export const MeetingDetailsContainer = () => {
           meetingTitle={meeting.filename || meeting.title || 'Meeting'}
         />
       )}
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={Boolean(snackbarMessage)}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarMessage('')}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Container>
   );
 };

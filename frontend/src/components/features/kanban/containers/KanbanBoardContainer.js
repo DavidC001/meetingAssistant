@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
+  Button,
   Menu,
   MenuItem,
   ListItemIcon,
@@ -15,7 +16,7 @@ import {
   Paper,
   useTheme,
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { DragDropContext } from 'react-beautiful-dnd';
 
 import { useActionItems } from '../hooks';
@@ -278,6 +279,20 @@ const KanbanBoardContainer = ({
             onAddExisting={handleAddExistingOpen}
             showHeader={showHeader}
           />
+        </Box>
+      )}
+
+      {/* Fallback Add button row when header is hidden */}
+      {!showHeader && allowAdd && (
+        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => handleAddOpen('pending')}
+          >
+            Add Action Item
+          </Button>
         </Box>
       )}
 

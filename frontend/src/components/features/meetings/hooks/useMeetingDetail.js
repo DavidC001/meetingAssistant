@@ -108,17 +108,19 @@ export const useMeetingDetail = (meetingId) => {
    */
   const startSmartPolling = useCallback(
     (currentMeeting) => {
-      let pollInterval = 5000;
-      if (currentMeeting.status === 'pending') pollInterval = 10000;
-      else if (currentMeeting.overall_progress > 80) pollInterval = 3000;
+      const getInterval = (m) => {
+        if (!m || m.status === 'pending') return 5000;
+        if (m.overall_progress > 80) return 3000;
+        return 5000;
+      };
 
-      const doPoll = async () => {
+      const doPoll = async (prevMeeting) => {
         const updated = await fetchMeetingDetails(false);
         pollCountRef.current++;
 
         // Continue polling if still processing
         if (updated && (updated.status === 'pending' || updated.status === 'processing')) {
-          pollTimeoutRef.current = setTimeout(doPoll, pollInterval);
+          pollTimeoutRef.current = setTimeout(() => doPoll(updated), getInterval(updated));
         }
         // After completion, poll a few more times to catch audio_filepath update
         else if (
@@ -127,7 +129,7 @@ export const useMeetingDetail = (meetingId) => {
           pollCountRef.current <= 3 &&
           !updated.audio_filepath
         ) {
-          pollTimeoutRef.current = setTimeout(doPoll, 3000);
+          pollTimeoutRef.current = setTimeout(() => doPoll(updated), 3000);
         }
         // Final check after a short delay if audio still missing
         else if (
@@ -136,10 +138,13 @@ export const useMeetingDetail = (meetingId) => {
           !updated.audio_filepath &&
           pollCountRef.current === 4
         ) {
-          pollTimeoutRef.current = setTimeout(doPoll, 5000);
+          pollTimeoutRef.current = setTimeout(() => doPoll(updated), 5000);
         }
       };
-      pollTimeoutRef.current = setTimeout(doPoll, pollInterval);
+      pollTimeoutRef.current = setTimeout(
+        () => doPoll(currentMeeting),
+        getInterval(currentMeeting)
+      );
     },
     [fetchMeetingDetails]
   );

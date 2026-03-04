@@ -32,14 +32,16 @@ const KanbanAddExistingDialog = ({ open = false, projectId = null, onSave, onCan
 
     try {
       setLoading(true);
-      // Get all action items from calendar
-      const allItems = await ActionItemService.getAll();
+      // Get all global action items (calendar endpoint covers all sources)
+      const allItems = await ActionItemService.getGlobal();
       // Get currently linked action items for this project
       const linkedResponse = await projectService.getActionItems(projectId);
       const linkedItems = linkedResponse?.data || [];
-      const linkedIds = new Set(linkedItems.map((item) => item.id));
-      // Filter out already linked items
-      const available = allItems.filter((item) => !linkedIds.has(item.id));
+      const linkedIds = new Set(linkedItems.map((item) => String(item.id)));
+      // Filter out already linked items and completed items
+      const available = allItems.filter(
+        (item) => !linkedIds.has(String(item.id)) && item.status !== 'completed'
+      );
       setAvailableItems(available);
       setSelectedItem(null);
     } catch (error) {

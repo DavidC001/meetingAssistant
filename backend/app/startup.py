@@ -37,13 +37,11 @@ def resume_interrupted_processing():
         logger.info(f"Found {len(interrupted_meetings)} interrupted processing job(s)")
 
         for meeting in interrupted_meetings:
-            # Check if meeting is actually already completed
-            is_completed = (
-                meeting.transcription
-                and meeting.transcription.summary
-                and meeting.transcription.full_text
-                and meeting.transcription.action_items
-            )
+            # Check if meeting is actually already completed.
+            # A meeting is complete when its transcription contains full_text.
+            # NOTE: do NOT rely on action_items here — an empty list [] is falsy
+            # but perfectly valid for a completed meeting.
+            is_completed = meeting.transcription is not None and bool(meeting.transcription.full_text)
 
             if is_completed:
                 logger.info(f"Meeting {meeting.id} appears to be completed, updating status to COMPLETED")

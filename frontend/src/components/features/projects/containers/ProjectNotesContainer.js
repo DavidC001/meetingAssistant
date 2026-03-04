@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Box,
@@ -39,6 +39,8 @@ import ConfirmDialog from '../../../common/ConfirmDialog';
 import useProjectNotes from '../hooks/useProjectNotes';
 
 const ProjectNotesContainer = ({ projectId: projectIdProp, embedded = false }) => {
+  const [previewNote, setPreviewNote] = useState(null);
+
   const {
     loading,
     error,
@@ -152,6 +154,11 @@ const ProjectNotesContainer = ({ projectId: projectIdProp, embedded = false }) =
                           )}
                         </IconButton>
                       </Tooltip>
+                      <Tooltip title="View full note">
+                        <IconButton onClick={() => setPreviewNote(note)} size="small">
+                          <PreviewIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Edit note">
                         <IconButton onClick={() => openEditDialog(note)} size="small">
                           <EditIcon fontSize="small" />
@@ -173,10 +180,12 @@ const ProjectNotesContainer = ({ projectId: projectIdProp, embedded = false }) =
                 <CardContent sx={{ flexGrow: 1 }}>
                   {note.content ? (
                     <Box
+                      onClick={() => setPreviewNote(note)}
                       sx={{
                         maxHeight: 200,
                         overflow: 'hidden',
                         position: 'relative',
+                        cursor: 'pointer',
                         '&:after': {
                           content: '""',
                           position: 'absolute',
@@ -300,6 +309,113 @@ const ProjectNotesContainer = ({ projectId: projectIdProp, embedded = false }) =
           ))}
         </Grid>
       )}
+
+      {/* Read-only preview dialog */}
+      <Dialog
+        open={Boolean(previewNote)}
+        onClose={() => setPreviewNote(null)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="h6">{previewNote?.title}</Typography>
+            {previewNote?.pinned && <Chip label="Pinned" size="small" color="primary" />}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {previewNote?.updated_at
+              ? `Updated ${format(new Date(previewNote.updated_at), 'MMM dd, yyyy HH:mm')}`
+              : 'Draft'}
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box
+            sx={{
+              p: 1,
+              borderRadius: 1,
+              minHeight: 100,
+            }}
+          >
+            {previewNote?.content ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewNote.content}</ReactMarkdown>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No content.
+              </Typography>
+            )}
+          </Box>
+          {previewNote && (attachmentsByNoteId[previewNote.id] || []).length > 0 && (
+            <Box mt={2}>
+              <Typography variant="subtitle2" gutterBottom>
+                Attachments
+              </Typography>
+              <Stack spacing={1}>
+                {(attachmentsByNoteId[previewNote.id] || []).map((attachment) => (
+                  <Box
+                    key={attachment.id}
+                    sx={{
+                      p: 1,
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1,
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>
+                        {attachment.filename}
+                      </Typography>
+                      {attachment.description && (
+                        <Typography variant="caption" color="text.secondary">
+                          {attachment.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                      <Tooltip title="Preview">
+                        <IconButton
+                          size="small"
+                          component="a"
+                          href={projectService.previewNoteAttachment(attachment.id)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <PreviewIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Download">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDownloadAttachment(attachment)}
+                        >
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPreviewNote(null)}>Close</Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              openEditDialog(previewNote);
+              setPreviewNote(null);
+            }}
+          >
+            Edit
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Editor dialog */}
       <Dialog open={editorOpen} onClose={() => setEditorOpen(false)} fullWidth maxWidth="md">

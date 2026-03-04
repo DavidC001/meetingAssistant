@@ -107,22 +107,28 @@ export const useSpeakers = (meetingId) => {
   }, []);
 
   /**
-   * Add speaker
+   * Add speaker by name
    */
-  const addSpeaker = useCallback(async (speakerData) => {
-    try {
-      setIsLoading(true);
-      const data = await SpeakerService.create(speakerData);
-      setSpeakers((prev) => [...prev, data]);
-      return data;
-    } catch (err) {
-      logger.error('Error adding speaker:', err);
-      setError('Failed to add speaker');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const addSpeaker = useCallback(
+    async (speakerName) => {
+      if (!meetingId || !speakerName) return null;
+      try {
+        setIsLoading(true);
+        const data = await SpeakerService.add(meetingId, { name: speakerName });
+        setSpeakers((prev) => [...prev, data]);
+        // Refresh allSpeakers to include the new name
+        fetchAllSpeakers();
+        return data;
+      } catch (err) {
+        logger.error('Error adding speaker:', err);
+        setError('Failed to add speaker');
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [meetingId, fetchAllSpeakers]
+  );
 
   return {
     // State

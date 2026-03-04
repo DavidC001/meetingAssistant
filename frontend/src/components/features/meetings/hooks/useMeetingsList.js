@@ -16,59 +16,70 @@ export const useMeetingsList = ({ refreshKey, onMeetingUpdate } = {}) => {
     try {
       setIsLoading(true);
       const data = await MeetingService.getAll();
-      setMeetings(
-        data.sort((a, b) => {
-          const dateA = new Date(a.meeting_date || a.created_at);
-          const dateB = new Date(b.meeting_date || b.created_at);
-          return dateB - dateA;
-        })
-      );
+      const sorted = data.sort((a, b) => {
+        const dateA = new Date(a.meeting_date || a.created_at);
+        const dateB = new Date(b.meeting_date || b.created_at);
+        return dateB - dateA;
+      });
+      setMeetings(sorted);
       setError(null);
+      return sorted; // return data so callers can use it directly
     } catch (err) {
       logger.error('Failed to fetch meetings', err);
       setError('Failed to fetch meetings.');
+      return null;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Initial fetch + smart polling
+  // Initial fetch + smart polling.
+  // FIX: previously `currentMeetings` was captured from a synchronous
+  // `setMeetings(prev => ...)` call that ran before the async fetchMeetings
+  // resolved, so it was always [] and polling never started.
   useEffect(() => {
-    fetchMeetings();
-
     let pollTimeout = null;
-    let currentMeetings = [];
+    let cancelled = false;
 
-    const scheduleNextPoll = () => {
-      const hasProcessing = currentMeetings.some(
+    const POLL_INTERVAL_MS = 5000;
+
+    const doPoll = async (latestData) => {
+      if (cancelled) return;
+      const hasProcessing = (latestData || []).some(
         (m) => m.status === 'processing' || m.status === 'pending'
       );
-      if (hasProcessing) {
-        pollTimeout = setTimeout(async () => {
-          try {
-            const updated = await MeetingService.getAll();
-            const sorted = updated.sort((a, b) => {
-              const dateA = new Date(a.meeting_date || a.created_at);
-              const dateB = new Date(b.meeting_date || b.created_at);
-              return dateB - dateA;
-            });
+      if (!hasProcessing) return; // no active jobs — stop polling
+
+      pollTimeout = setTimeout(async () => {
+        if (cancelled) return;
+        try {
+          const updated = await MeetingService.getAll();
+          const sorted = updated.sort((a, b) => {
+            const dateA = new Date(a.meeting_date || a.created_at);
+            const dateB = new Date(b.meeting_date || b.created_at);
+            return dateB - dateA;
+          });
+          if (!cancelled) {
             setMeetings(sorted);
-            currentMeetings = sorted;
-            scheduleNextPoll();
-          } catch (_) {}
-        }, 15000);
+            doPoll(sorted); // schedule next poll based on fresh data
+          }
+        } catch (_) {
+          if (!cancelled) doPoll(latestData); // keep polling on transient error
+        }
+      }, POLL_INTERVAL_MS);
+    };
+
+    const initialize = async () => {
+      const data = await fetchMeetings();
+      if (!cancelled && data) {
+        doPoll(data); // start polling only after we have real data
       }
     };
 
-    // Track current meetings in closure
-    setMeetings((prev) => {
-      currentMeetings = prev;
-      return prev;
-    });
+    initialize();
 
-    const initialTimer = setTimeout(scheduleNextPoll, 5000);
     return () => {
-      clearTimeout(initialTimer);
+      cancelled = true;
       if (pollTimeout) clearTimeout(pollTimeout);
     };
   }, [refreshKey, fetchMeetings]);
