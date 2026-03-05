@@ -17,7 +17,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
-from ... import crud
+from ...modules.calendar.repository import GoogleCalendarCredentialsRepository
 
 
 class GoogleCalendarService:
@@ -52,7 +52,7 @@ class GoogleCalendarService:
 
     def _load_credentials(self):
         """Load credentials from database."""
-        db_creds = crud.get_google_calendar_credentials(self.db, self.user_id)
+        db_creds = GoogleCalendarCredentialsRepository(self.db).get_active_credentials(self.user_id)
         if db_creds:
             try:
                 creds_dict = json.loads(db_creds.credentials_json)
@@ -68,7 +68,7 @@ class GoogleCalendarService:
                         error_str = str(e)
                         if "invalid_grant" in error_str or "Token has been expired or revoked" in error_str:
                             # Silently clear invalid credentials - user needs to re-authenticate
-                            crud.delete_google_calendar_credentials(self.db, self.user_id)
+                            GoogleCalendarCredentialsRepository(self.db).delete_credentials(self.user_id)
                         self.credentials = None
                         return
 
@@ -89,8 +89,8 @@ class GoogleCalendarService:
                 "client_secret": self.credentials.client_secret,
                 "scopes": self.credentials.scopes,
             }
-            crud.save_google_calendar_credentials(
-                self.db, credentials_json=json.dumps(creds_dict), user_id=self.user_id
+            GoogleCalendarCredentialsRepository(self.db).save_credentials(
+                credentials_json=json.dumps(creds_dict), user_id=self.user_id
             )
 
     def get_authorization_url(self) -> str:
@@ -146,7 +146,7 @@ class GoogleCalendarService:
 
     def disconnect(self):
         """Disconnect from Google Calendar."""
-        crud.delete_google_calendar_credentials(self.db, self.user_id)
+        GoogleCalendarCredentialsRepository(self.db).delete_credentials(self.user_id)
         self.credentials = None
         self.service = None
 

@@ -5,8 +5,9 @@ Handles recovery from Docker restarts and other initialization tasks.
 
 import logging
 
-from . import crud, models
 from .database import SessionLocal
+from .modules.meetings.models import MeetingStatus, ProcessingStage
+from .modules.meetings.repository import MeetingRepository
 from .tasks import process_meeting_task
 
 logger = logging.getLogger(__name__)
@@ -22,13 +23,7 @@ def resume_interrupted_processing():
     db = SessionLocal()
     try:
         # Find meetings that are stuck in PROCESSING or PENDING state
-        interrupted_meetings = (
-            db.query(models.Meeting)
-            .filter(
-                models.Meeting.status.in_([models.MeetingStatus.PROCESSING.value, models.MeetingStatus.PENDING.value])
-            )
-            .all()
-        )
+        interrupted_meetings = MeetingRepository(db).list_by_statuses([MeetingStatus.PROCESSING, MeetingStatus.PENDING])
 
         if not interrupted_meetings:
             logger.info("No interrupted processing jobs found.")
@@ -45,32 +40,33 @@ def resume_interrupted_processing():
 
             if is_completed:
                 logger.info(f"Meeting {meeting.id} appears to be completed, updating status to COMPLETED")
-                crud.update_meeting_status(db, meeting.id, models.MeetingStatus.COMPLETED)
-                crud.update_meeting_processing_details(
-                    db,
+                meeting_repo = MeetingRepository(db)
+                meeting_repo.update_status(meeting.id, MeetingStatus.COMPLETED)
+                meeting_repo.update_processing_details(
                     meeting.id,
                     overall_progress=100.0,
                     stage_progress=100.0,
-                    current_stage=models.ProcessingStage.ANALYSIS.value,
+                    current_stage=ProcessingStage.ANALYSIS.value,
                 )
                 continue
 
             logger.info(f"Resuming processing for meeting {meeting.id}: {meeting.filename}")
 
+            meeting_repo = MeetingRepository(db)
             # Reset the meeting to PENDING state
-            crud.update_meeting_status(db, meeting.id, models.MeetingStatus.PENDING)
+            meeting_repo.update_status(meeting.id, MeetingStatus.PENDING)
 
             # Clear any existing task ID since the old task is dead
-            crud.update_meeting_task_id(db, meeting.id, None)
+            meeting_repo.update_task_id(meeting.id, None)
 
             # Add recovery log
-            crud.update_meeting_processing_details(
-                db, meeting.id, processing_logs=[f"Resumed processing after system restart at {meeting.id}"]
+            meeting_repo.update_processing_details(
+                meeting.id, processing_logs=[f"Resumed processing after system restart at {meeting.id}"]
             )
 
             # Start a new processing task
             task_result = process_meeting_task.delay(meeting.id)
-            crud.update_meeting_task_id(db, meeting.id, task_result.id)
+            meeting_repo.update_task_id(meeting.id, task_result.id)
 
             logger.info(f"Restarted processing task {task_result.id} for meeting {meeting.id}")
 
@@ -113,22 +109,10 @@ def queue_missing_audio_generation():
         from .tasks import generate_audio_for_existing_meeting
 
         # Find completed meetings without audio_filepath
-        meetings_without_audio = (
-            db.query(models.Meeting)
-            .filter(
-                models.Meeting.status == models.MeetingStatus.COMPLETED.value, models.Meeting.audio_filepath.is_(None)
-            )
-            .all()
-        )
+        meetings_without_audio = MeetingRepository(db).list_completed_without_audio()
 
         # Also check for meetings with audio_filepath but missing file
-        all_completed = (
-            db.query(models.Meeting)
-            .filter(
-                models.Meeting.status == models.MeetingStatus.COMPLETED.value, models.Meeting.audio_filepath.isnot(None)
-            )
-            .all()
-        )
+        all_completed = MeetingRepository(db).list_completed_with_audio()
 
         meetings_with_missing_files = [m for m in all_completed if not Path(m.audio_filepath).exists()]
 
@@ -171,14 +155,10 @@ def fix_diary_action_items():
     db = SessionLocal()
     try:
         from .modules.diary.models import DiaryEntry
-        from .modules.diary.repository import extract_action_item_ids_from_content
+        from .modules.diary.repository import DiaryRepository, extract_action_item_ids_from_content
 
         # Get all entries that have content but no action items extracted
-        entries = (
-            db.query(DiaryEntry)
-            .filter(DiaryEntry.content.isnot(None), DiaryEntry.action_items_worked_on.is_(None))
-            .all()
-        )
+        entries = DiaryRepository.get_entries_needing_action_item_fix(db)
 
         if not entries:
             logger.info("No diary entries need action item extraction.")

@@ -6,10 +6,10 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from ... import crud as app_crud
-from ...modules.meetings import crud as meetings_crud
 from ...modules.meetings import schemas
 from ...modules.meetings.models import MeetingStatus, ProcessingStage
+from ...modules.meetings.repository import MeetingRepository, SpeakerRepository, TranscriptionRepository
+from ...modules.settings.repository import SettingsRepository
 from ..base import utils
 from ..base.retry import retry_file_operation
 from ..integrations.calendar import generate_ics_calendar
@@ -32,6 +32,8 @@ def run_processing_pipeline(db: Session, meeting_id: int):
     """
     logger.info(f"Starting enhanced processing pipeline for meeting_id: {meeting_id}")
 
+    meeting_repo = MeetingRepository(db)
+
     # Initialize checkpoint manager
     checkpoint_manager = CheckpointManager(meeting_id)
 
@@ -43,7 +45,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
         logger.info("Starting processing from the beginning")
 
     # Get meeting from DB
-    meeting = meetings_crud.get_meeting(db, meeting_id)
+    meeting = meeting_repo.get_by_id(meeting_id)
     if not meeting:
         raise ValueError(f"Meeting with ID {meeting_id} not found.")
 
@@ -59,15 +61,15 @@ def run_processing_pipeline(db: Session, meeting_id: int):
     if is_completed:
         logger.info(f"Meeting {meeting_id} already has transcription, processing complete")
         # Ensure progress is properly set
-        meetings_crud.update_meeting_processing_details(
-            db, meeting_id, overall_progress=100.0, stage_progress=100.0, current_stage=ProcessingStage.ANALYSIS.value
+        meeting_repo.update_processing_details(
+            meeting_id, overall_progress=100.0, stage_progress=100.0, current_stage=ProcessingStage.ANALYSIS.value
         )
         return True
 
     # If the meeting is in FAILED state, allow reprocessing
     if meeting.status == MeetingStatus.FAILED.value:
         logger.info(f"Meeting {meeting_id} previously failed, restarting processing...")
-        meetings_crud.update_meeting_status(db, meeting_id, MeetingStatus.PROCESSING)
+        meeting_repo.update_status(meeting_id, MeetingStatus.PROCESSING)
 
         # Check if we have existing transcription - if so, we can skip straight to analysis
         has_transcription = meeting.transcription and meeting.transcription.full_text
@@ -76,8 +78,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             logger.info(f"Meeting {meeting_id} has existing transcription, will retry from analysis stage")
             resume_stage = "analysis"  # Force resume from analysis stage
 
-        meetings_crud.update_meeting_processing_details(
-            db,
+        meeting_repo.update_processing_details(
             meeting_id,
             error_message=None,  # Clear previous error
             processing_logs=["Restarting processing after previous failure"],
@@ -110,8 +111,8 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     getattr(metadata, "duration", 0) / 60 if hasattr(metadata, "duration") else None
                 )
                 if estimated_duration_minutes:
-                    meetings_crud.update_meeting_processing_details(
-                        db, meeting_id, estimated_duration=round(estimated_duration_minutes, 1)
+                    meeting_repo.update_processing_details(
+                        meeting_id, estimated_duration=round(estimated_duration_minutes, 1)
                     )
                     # Save metadata as checkpoint
                     checkpoint_manager.save_checkpoint(
@@ -128,8 +129,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
         # 1. Convert input file to WAV audio format for processing
         if not resume_stage or resume_stage == "conversion":
             logger.info("Converting file to WAV format...")
-            meetings_crud.update_meeting_processing_details(
-                db,
+            meeting_repo.update_processing_details(
                 meeting_id,
                 current_stage=ProcessingStage.CONVERSION.value,
                 stage_start_time=time.time(),
@@ -167,8 +167,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 metadata={"stage": "conversion", "file_size": input_file_path.stat().st_size},
             )
 
-            meetings_crud.update_meeting_processing_details(
-                db,
+            meeting_repo.update_processing_details(
                 meeting_id,
                 stage_progress=100.0,
                 overall_progress=25.0,
@@ -187,8 +186,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             if diarization_checkpoint and checkpoint_manager.validate_checkpoint("diarization"):
                 logger.info("Loading diarization results from checkpoint...")
                 diarization_segments = diarization_checkpoint
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.DIARIZATION.value,
                     stage_progress=100.0,
@@ -199,8 +197,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 )
             else:
                 logger.info("Performing speaker diarization...")
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.DIARIZATION.value,
                     stage_start_time=time.time(),
@@ -219,8 +216,8 @@ def run_processing_pipeline(db: Session, meeting_id: int):
 
                 # Create a progress callback for diarization
                 def diarization_progress_callback(progress: int, message: str):
-                    meetings_crud.update_meeting_processing_details(
-                        db, meeting_id, stage_progress=float(progress), processing_logs=[f"Diarization: {message}"]
+                    meeting_repo.update_processing_details(
+                        meeting_id, stage_progress=float(progress), processing_logs=[f"Diarization: {message}"]
                     )
 
                 diarization_segments = diarization.diarize_audio(
@@ -249,7 +246,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 # Clear existing speakers for this meeting (in case of reprocessing)
                 from ... import models
 
-                db.query(models.Speaker).filter(models.Speaker.meeting_id == meeting_id).delete()
+                SpeakerRepository(db).delete_by_meeting_id(meeting_id)
 
                 # Create a speaker record for each unique speaker detected
                 for speaker_label in sorted(unique_speakers):
@@ -263,8 +260,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 db.commit()
                 logger.info(f"Created {len(unique_speakers)} speaker records")
 
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     stage_progress=100.0,
                     overall_progress=50.0,
@@ -291,8 +287,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 logger.info("Loading transcription results from checkpoint...")
                 full_transcript = transcription_checkpoint["full_transcript"]
                 dominant_language = transcription_checkpoint["dominant_language"]
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.TRANSCRIPTION.value,
                     stage_progress=100.0,
@@ -301,8 +296,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 )
             else:
                 logger.info("Compiling transcript...")
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.TRANSCRIPTION.value,
                     stage_start_time=time.time(),
@@ -316,8 +310,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     if total > 0:
                         stage_progress = round((current / total) * 100.0, 1)
                         overall_progress = round(50.0 + (stage_progress * 0.25), 1)  # Transcription is 25% of overall
-                        meetings_crud.update_meeting_processing_details(
-                            db,
+                        meeting_repo.update_processing_details(
                             meeting_id,
                             stage_progress=stage_progress,
                             overall_progress=overall_progress,
@@ -345,10 +338,10 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 # Get model configuration for whisper model selection
                 model_config = None
                 if meeting.model_configuration_id:
-                    model_config = app_crud.get_model_configuration(db, meeting.model_configuration_id)
+                    model_config = SettingsRepository(db).get_model_configuration_by_id(meeting.model_configuration_id)
                 if not model_config:
                     # Fall back to default configuration
-                    model_config = app_crud.get_default_model_configuration(db)
+                    model_config = SettingsRepository(db).get_default_model_configuration()
 
                 # Determine whisper model size
                 whisper_model_size = model_config.whisper_model if model_config else "base"
@@ -376,8 +369,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     },
                 )
 
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     stage_progress=100.0,
                     overall_progress=75.0,
@@ -424,8 +416,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             if analysis_checkpoint and checkpoint_manager.validate_checkpoint("analysis"):
                 logger.info("Loading analysis results from checkpoint...")
                 analysis_results = analysis_checkpoint
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.ANALYSIS.value,
                     stage_progress=100.0,
@@ -434,8 +425,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 )
             else:
                 logger.info("Analyzing transcript with LLM...")
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     current_stage=ProcessingStage.ANALYSIS.value,
                     stage_start_time=time.time(),
@@ -464,16 +454,16 @@ Transcript:
 
                 # Create a progress callback for analysis
                 def analysis_progress_callback(progress: int, message: str):
-                    meetings_crud.update_meeting_processing_details(
-                        db, meeting_id, stage_progress=float(progress), processing_logs=[f"Analysis: {message}"]
+                    meeting_repo.update_processing_details(
+                        meeting_id, stage_progress=float(progress), processing_logs=[f"Analysis: {message}"]
                     )
 
                 # Get model configuration for analysis
                 model_config = None
                 if meeting.model_configuration_id:
-                    model_config = app_crud.get_model_configuration(db, meeting.model_configuration_id)
+                    model_config = SettingsRepository(db).get_model_configuration_by_id(meeting.model_configuration_id)
                 if not model_config:
-                    model_config = app_crud.get_default_model_configuration(db)
+                    model_config = SettingsRepository(db).get_default_model_configuration()
 
                 # Convert to LLMConfig if we have a model configuration
                 llm_config = None
@@ -503,8 +493,7 @@ Transcript:
                     },
                 )
 
-                meetings_crud.update_meeting_processing_details(
-                    db,
+                meeting_repo.update_processing_details(
                     meeting_id,
                     stage_progress=100.0,
                     overall_progress=85.0,
@@ -553,8 +542,8 @@ Transcript:
                 filename=calendar_filename,
             )
 
-        meetings_crud.update_meeting_processing_details(
-            db, meeting_id, stage_progress=50.0, overall_progress=95.0, processing_logs=["Export files generated"]
+        meeting_repo.update_processing_details(
+            meeting_id, stage_progress=50.0, overall_progress=95.0, processing_logs=["Export files generated"]
         )
 
         # 7. Structure the data for database insertion
@@ -586,21 +575,19 @@ Transcript:
         logger.info("Saving results to database...")
         # Check if analysis was successful before marking as completed
         analysis_success = analysis_results.get("success", True)
-        meetings_crud.create_meeting_transcription(
-            db=db,
+        TranscriptionRepository(db).create_with_action_items(
             meeting_id=meeting_id,
-            transcription=transcription_data,
+            transcription_data=transcription_data,
             action_items=action_items_data,
             mark_completed=analysis_success,
         )
 
         # Update status based on analysis success
         if analysis_success:
-            meetings_crud.update_meeting_status(db, meeting_id, MeetingStatus.COMPLETED)
+            meeting_repo.update_status(meeting_id, MeetingStatus.COMPLETED)
         else:
-            meetings_crud.update_meeting_status(db, meeting_id, MeetingStatus.FAILED)
-            meetings_crud.update_meeting_processing_details(
-                db,
+            meeting_repo.update_status(meeting_id, MeetingStatus.FAILED)
+            meeting_repo.update_processing_details(
                 meeting_id,
                 error_message=analysis_results.get("error", "Analysis failed"),
                 processing_logs=["Analysis failed - meeting can be reprocessed"],
@@ -616,8 +603,7 @@ Transcript:
         if calendar_path:
             export_info.append(f"Calendar: {calendar_path}")
 
-        meetings_crud.update_meeting_processing_details(
-            db,
+        meeting_repo.update_processing_details(
             meeting_id,
             stage_progress=100.0,
             overall_progress=100.0,

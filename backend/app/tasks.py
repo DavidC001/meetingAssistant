@@ -3,12 +3,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import crud, models, schemas
+from . import models, schemas
 from .core.processing import chunking
 from .core.processing.document_processor import extract_text
 from .core.storage.embeddings import batched_embeddings, get_embedding_provider
 from .core.storage.vector_store import DEFAULT_PROJECT_VECTOR_STORE, DEFAULT_VECTOR_STORE
 from .database import SessionLocal
+from .modules.meetings.repository import AttachmentRepository, DocumentChunkRepository, MeetingRepository
+from .modules.projects.repository import ProjectNoteAttachmentRepository, ProjectNoteRepository
+from .modules.settings.repository import GoogleDriveRepository
 from .worker import celery_app
 
 # Configure logging
@@ -126,9 +129,8 @@ def process_meeting_task(self, meeting_id: int):
 
     try:
         # 1. Update meeting status to PROCESSING and set processing start time
-        crud.update_meeting_status(db, meeting_id, models.MeetingStatus.PROCESSING)
-        crud.update_meeting_processing_details(
-            db,
+        MeetingRepository(db).update_status(meeting_id, models.MeetingStatus.PROCESSING)
+        MeetingRepository(db).update_processing_details(
             meeting_id,
             processing_start_time=time.time(),
             current_stage=models.ProcessingStage.CONVERSION.value,
@@ -140,7 +142,7 @@ def process_meeting_task(self, meeting_id: int):
         logger.info(f"Meeting {meeting_id} status updated to PROCESSING.")
 
         # 2. Get meeting details from DB
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             logger.error(f"Meeting with id {meeting_id} not found.")
             raise ValueError("Meeting not found")
@@ -159,9 +161,9 @@ def process_meeting_task(self, meeting_id: int):
         logger.error(error_message, exc_info=True)
 
         # Mark the task as failed in the database
-        crud.update_meeting_status(db, meeting_id, models.MeetingStatus.FAILED)
-        crud.update_meeting_processing_details(
-            db, meeting_id, error_message=error_message, stage_progress=0.0, overall_progress=0.0
+        MeetingRepository(db).update_status(meeting_id, models.MeetingStatus.FAILED)
+        MeetingRepository(db).update_processing_details(
+            meeting_id, error_message=error_message, stage_progress=0.0, overall_progress=0.0
         )
 
         # You might want to re-raise the exception if you want Celery to record it as a failure
@@ -194,7 +196,7 @@ def compute_embeddings_for_meeting(self, meeting_id: int) -> dict[str, Any]:
     db = SessionLocal()
     try:
         logger.info(f"Starting embedding computation for meeting {meeting_id}")
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             raise ValueError(f"Meeting {meeting_id} not found")
 
@@ -206,19 +208,19 @@ def compute_embeddings_for_meeting(self, meeting_id: int) -> dict[str, Any]:
             )
         except Exception as e:
             logger.error(f"Failed to get embedding provider: {e}", exc_info=True)
-            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            MeetingRepository(db).mark_embeddings(meeting_id, computed=False, config_id=None)
             return {"status": "error", "meeting_id": meeting_id, "error": str(e)}
 
         logger.info(f"Building chunk payloads for meeting {meeting_id}")
         payloads = _build_chunk_payloads(meeting)
         if not payloads:
             logger.warning(f"No content to embed for meeting {meeting_id}")
-            crud.clear_meeting_chunks(db, meeting_id)
-            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            DocumentChunkRepository(db).clear_meeting_chunks(meeting_id)
+            MeetingRepository(db).mark_embeddings(meeting_id, computed=False, config_id=None)
             return {"status": "no-content", "meeting_id": meeting_id}
 
         logger.info(f"Generated {len(payloads)} chunks for meeting {meeting_id}")
-        crud.clear_meeting_chunks(db, meeting_id)
+        DocumentChunkRepository(db).clear_meeting_chunks(meeting_id)
 
         texts = [payload["content"] for payload in payloads]
         logger.info(f"Computing embeddings for {len(texts)} text chunks")
@@ -227,7 +229,7 @@ def compute_embeddings_for_meeting(self, meeting_id: int) -> dict[str, Any]:
             logger.info(f"Successfully computed {len(embeddings)} embeddings")
         except Exception as e:
             logger.error(f"Failed to compute embeddings: {e}", exc_info=True)
-            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            MeetingRepository(db).mark_embeddings(meeting_id, computed=False, config_id=None)
             return {"status": "error", "meeting_id": meeting_id, "error": str(e)}
 
         logger.info("Storing embeddings in vector store")
@@ -238,13 +240,13 @@ def compute_embeddings_for_meeting(self, meeting_id: int) -> dict[str, Any]:
             embeddings=embeddings,
             embedding_config_id=config.id,
         )
-        crud.mark_meeting_embeddings(db, meeting_id, computed=True, config_id=config.id)
+        MeetingRepository(db).mark_embeddings(meeting_id, computed=True, config_id=config.id)
         logger.info("Successfully stored %s chunks for meeting %s", len(payloads), meeting_id)
         return {"status": "completed", "chunks": len(payloads), "meeting_id": meeting_id}
     except Exception as exc:
         logger.error("Failed to compute embeddings for meeting %s: %s", meeting_id, exc, exc_info=True)
         try:
-            crud.mark_meeting_embeddings(db, meeting_id, computed=False, config_id=None)
+            MeetingRepository(db).mark_embeddings(meeting_id, computed=False, config_id=None)
         except Exception as mark_exc:
             logger.error("Failed to mark embeddings as failed: %s", mark_exc)
         raise
@@ -258,7 +260,7 @@ def recompute_all_embeddings() -> dict[str, Any]:
 
     db = SessionLocal()
     try:
-        meeting_ids = [meeting.id for meeting in crud.get_meetings(db, skip=0, limit=100000)]
+        meeting_ids = [meeting.id for meeting in MeetingRepository(db).get_all(skip=0, limit=100000)]
     finally:
         db.close()
 
@@ -297,7 +299,7 @@ def sync_google_drive_folder(self, force: bool = False):
             return {"status": "not_authenticated"}
 
         # Get sync configuration
-        sync_config = crud.get_google_drive_sync_config(db)
+        sync_config = GoogleDriveRepository(db).get_sync_config()
 
         if not sync_config or not sync_config.enabled:
             logger.info("Google Drive sync is disabled")
@@ -347,9 +349,9 @@ def sync_google_drive_folder(self, force: bool = False):
         if not sync_config.processed_folder_id:
             logger.info("Creating processed folder")
             processed_folder_id = drive_service.ensure_processed_folder(sync_config.sync_folder_id)
-            crud.save_google_drive_sync_config(db, processed_folder_id=processed_folder_id, user_id="default")
+            GoogleDriveRepository(db).save_sync_config(processed_folder_id=processed_folder_id)
             # Refresh config
-            sync_config = crud.get_google_drive_sync_config(db)
+            sync_config = GoogleDriveRepository(db).get_sync_config()
 
         # List files in the sync folder
         files = drive_service.list_files_in_folder(sync_config.sync_folder_id)
@@ -363,7 +365,7 @@ def sync_google_drive_folder(self, force: bool = False):
             file_name = file_info["name"]
 
             # Skip if already processed
-            if crud.is_file_processed(db, file_id):
+            if GoogleDriveRepository(db).is_file_processed(file_id):
                 logger.debug(f"File {file_name} already processed, skipping")
                 continue
 
@@ -371,7 +373,7 @@ def sync_google_drive_folder(self, force: bool = False):
             file_ext = Path(file_name).suffix.lower()
             if file_ext not in config.upload.allowed_extensions:
                 logger.info(f"Skipping {file_name}: extension {file_ext} not allowed")
-                crud.mark_file_as_processed(db, file_id, file_name)
+                GoogleDriveRepository(db).mark_file_as_processed(file_id, file_name)
                 continue
 
             try:
@@ -395,7 +397,7 @@ def sync_google_drive_folder(self, force: bool = False):
                 logger.info(f"Downloaded to: {file_path}, upload date: {upload_date}")
 
                 # Mark as processed (before creating meeting to avoid duplicates)
-                crud.mark_file_as_processed(db, file_id, file_name)
+                GoogleDriveRepository(db).mark_file_as_processed(file_id, file_name)
 
                 # Create meeting record if auto_process is enabled
                 if sync_config.auto_process:
@@ -408,12 +410,10 @@ def sync_google_drive_folder(self, force: bool = False):
                         meeting_date=upload_date,  # Use file upload date as meeting date
                     )
 
-                    db_meeting = crud.create_meeting(
-                        db=db, meeting=meeting_create, file_path=file_path, file_size=file_size
-                    )
+                    db_meeting = MeetingRepository(db).create_meeting(meeting_create, file_path, file_size=file_size)
 
                     # Update processed file with meeting ID
-                    crud.update_processed_file_meeting(db, file_id, db_meeting.id)
+                    GoogleDriveRepository(db).update_processed_file_meeting(file_id, db_meeting.id)
 
                     # Trigger processing task
                     process_meeting_task.delay(db_meeting.id)
@@ -422,7 +422,7 @@ def sync_google_drive_folder(self, force: bool = False):
                 # Move file to processed folder in Google Drive
                 try:
                     drive_service.move_file(file_id, sync_config.sync_folder_id, sync_config.processed_folder_id)
-                    crud.mark_file_moved_to_processed(db, file_id)
+                    GoogleDriveRepository(db).mark_file_moved_to_processed(file_id)
                     logger.info(f"Moved {file_name} to processed folder")
                 except Exception as move_error:
                     logger.error(f"Failed to move file {file_name}: {move_error}")
@@ -437,7 +437,7 @@ def sync_google_drive_folder(self, force: bool = False):
                 continue
 
         # Update last sync time
-        crud.update_sync_last_run(db)
+        GoogleDriveRepository(db).update_sync_last_run()
 
         logger.info(f"Google Drive sync completed: {processed_count} processed, {error_count} errors")
 
@@ -465,7 +465,7 @@ def generate_audio_for_existing_meeting(self, meeting_id: int):
     """
     db = SessionLocal()
     try:
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             logger.warning(f"Meeting {meeting_id} not found")
             return {"status": "error", "reason": "meeting_not_found", "meeting_id": meeting_id}
@@ -538,7 +538,7 @@ def update_notes_embeddings(self, meeting_id: int, notes: str):
         logger.info(f"Updating notes embeddings for meeting {meeting_id}")
 
         # Get meeting
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             logger.warning(f"Meeting {meeting_id} not found")
             return {"status": "error", "reason": "meeting_not_found"}
@@ -615,7 +615,7 @@ def index_attachment(self, attachment_id: int):
         logger.info(f"Indexing attachment {attachment_id}")
 
         # Get attachment
-        attachment = db.query(models.Attachment).filter(models.Attachment.id == attachment_id).first()
+        attachment = AttachmentRepository(db).get(attachment_id)
 
         if not attachment:
             logger.warning(f"Attachment {attachment_id} not found")
@@ -648,7 +648,7 @@ def index_attachment(self, attachment_id: int):
 
         # Build payloads
         payloads = []
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         for i, chunk in enumerate(attachment_chunks):
             metadata = dict(chunk.metadata or {})
             metadata.setdefault("meeting_id", meeting_id)
@@ -697,7 +697,7 @@ def index_project_note(self, note_id: int):
     """Index a project note for RAG."""
     db = SessionLocal()
     try:
-        note = db.query(models.ProjectNote).filter(models.ProjectNote.id == note_id).first()
+        note = ProjectNoteRepository(db).get(note_id)
         if not note:
             return {"status": "error", "reason": "note_not_found"}
 
@@ -763,9 +763,7 @@ def index_project_note_attachment(self, attachment_id: int):
     """Index a single project note attachment for RAG."""
     db = SessionLocal()
     try:
-        attachment = (
-            db.query(models.ProjectNoteAttachment).filter(models.ProjectNoteAttachment.id == attachment_id).first()
-        )
+        attachment = ProjectNoteAttachmentRepository(db).get(attachment_id)
         if not attachment:
             return {"status": "error", "reason": "attachment_not_found"}
 
@@ -784,7 +782,7 @@ def index_project_note_attachment(self, attachment_id: int):
 
         note_title = None
         if attachment.note_id:
-            note = db.query(models.ProjectNote).filter(models.ProjectNote.id == attachment.note_id).first()
+            note = ProjectNoteRepository(db).get(attachment.note_id)
             note_title = note.title if note else None
 
         attachment_chunks = chunking.chunk_document(

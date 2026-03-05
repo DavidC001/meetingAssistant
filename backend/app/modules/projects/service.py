@@ -7,19 +7,19 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.core.llm import chat as llm_chat
 from app.core.llm.providers import ProviderFactory
 from app.core.storage import rag
-from app.models import ActionItem, DiarizationTiming, Meeting, MeetingStatus, Speaker, Transcription
-from app.modules.meetings.repository import ActionItemRepository, TranscriptionRepository
-from app.modules.settings import crud as settings_crud
+from app.models import ActionItem, Meeting, Transcription
+from app.modules.meetings.repository import TranscriptionRepository
+from app.modules.settings.service import SettingsService
 
 from . import schemas
 from .models import Project, ProjectActionItem, ProjectMeeting, ProjectMember, ProjectMilestone
 from .repository import (
+    ProjectActionItemRepository,
     ProjectChatRepository,
     ProjectMemberRepository,
     ProjectMilestoneRepository,
@@ -39,29 +39,20 @@ class ProjectService:
         self.member_repository = ProjectMemberRepository(db)
         self.chat_repository = ProjectChatRepository(db)
         self.note_repository = ProjectNoteRepository(db)
+        self.pai_repo = ProjectActionItemRepository(db)
 
     def link_action_item_to_project(self, project_id: int, action_item_id: int) -> None:
         """Link an existing action item to a project. Raises ValueError if already linked."""
-        from .models import ProjectActionItem
-
-        exists = (
-            self.db.query(ProjectActionItem).filter_by(project_id=project_id, action_item_id=action_item_id).first()
-        )
-        if exists:
+        if self.pai_repo.get(project_id, action_item_id):
             raise ValueError("Action item already linked to project.")
-        pai = ProjectActionItem(project_id=project_id, action_item_id=action_item_id)
-        self.db.add(pai)
-        self.db.commit()
+        self.pai_repo.create(project_id, action_item_id)
 
     def unlink_action_item_from_project(self, project_id: int, action_item_id: int) -> None:
         """Unlink an action item from a project. Raises ValueError if not linked."""
-        from .models import ProjectActionItem
-
-        pai = self.db.query(ProjectActionItem).filter_by(project_id=project_id, action_item_id=action_item_id).first()
+        pai = self.pai_repo.get(project_id, action_item_id)
         if not pai:
             raise ValueError("Action item not linked to project.")
-        self.db.delete(pai)
-        self.db.commit()
+        self.pai_repo.delete(pai)
 
     def list_projects(self, status: str | None = None) -> list[schemas.Project]:
         """List all projects with computed metrics."""
@@ -99,8 +90,7 @@ class ProjectService:
     def create_project(self, data: schemas.ProjectCreate) -> schemas.Project:
         """Create a new project from meeting links."""
         if data.meeting_ids:
-            meeting_rows = self.db.query(Meeting.id).filter(Meeting.id.in_(data.meeting_ids)).all()
-            existing_ids = {row[0] for row in meeting_rows}
+            existing_ids = self.repository.validate_meeting_ids(data.meeting_ids)
             missing_ids = set(data.meeting_ids) - existing_ids
             if missing_ids:
                 raise HTTPException(status_code=404, detail=f"Meetings not found: {sorted(missing_ids)}")
@@ -171,8 +161,7 @@ class ProjectService:
 
         if meeting_ids is not None:
             if meeting_ids:
-                meeting_rows = self.db.query(Meeting.id).filter(Meeting.id.in_(meeting_ids)).all()
-                existing_ids = {row[0] for row in meeting_rows}
+                existing_ids = self.repository.validate_meeting_ids(meeting_ids)
                 missing_ids = set(meeting_ids) - existing_ids
                 if missing_ids:
                     raise HTTPException(status_code=404, detail=f"Meetings not found: {sorted(missing_ids)}")
@@ -188,9 +177,8 @@ class ProjectService:
             raise HTTPException(status_code=404, detail="Project not found")
 
         if delete_meetings:
-            meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-            self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids)).delete(synchronize_session=False)
-            self.db.commit()
+            meeting_ids = self.repository.get_meeting_ids_subquery(project.id)
+            self.repository.delete_meetings_by_ids(meeting_ids)
 
         self.repository.delete(project)
 
@@ -202,25 +190,9 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-        query = self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids))
-
-        if status:
-            query = query.filter(Meeting.status == status)
-
-        # Sort
-        if sort_by == "date":
-            order_col = Meeting.meeting_date if Meeting.meeting_date else Meeting.created_at
-        elif sort_by == "created":
-            order_col = Meeting.created_at
-        else:
-            order_col = Meeting.created_at
-
-        query = query.order_by(order_col.desc()) if sort_order == "desc" else query.order_by(order_col.asc())
-
-        meetings = query.all()
-
-        # Convert to dict for response
+        meetings = self.repository.get_meetings_by_project(
+            project_id, status=status, sort_by=sort_by, sort_order=sort_order
+        )
         return [self._meeting_to_dict(m) for m in meetings]
 
     def add_meeting_to_project(self, project_id: int, meeting_id: int) -> dict:
@@ -229,15 +201,11 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
+        meeting = self.repository.get_meeting_by_id(meeting_id)
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
 
-        existing = (
-            self.db.query(ProjectMeeting)
-            .filter(ProjectMeeting.project_id == project_id, ProjectMeeting.meeting_id == meeting_id)
-            .first()
-        )
+        existing = self.repository.check_meeting_in_project(project_id, meeting_id)
         if existing:
             raise HTTPException(status_code=409, detail="Meeting already linked to project")
 
@@ -251,37 +219,19 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        deleted = (
-            self.db.query(ProjectMeeting)
-            .filter(ProjectMeeting.project_id == project_id, ProjectMeeting.meeting_id == meeting_id)
-            .delete()
-        )
+        deleted = self.repository.remove_meeting_link(project_id, meeting_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Meeting not linked to project")
-
-        self.db.commit()
 
     def get_project_action_items(
         self, project_id: int, status: str | None = None, owner: str | None = None
     ) -> list[dict]:
         """Get all action items linked to this project via project_action_items."""
-        from .models import ProjectActionItem
-
         project = self.repository.get(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        query = (
-            self.db.query(ActionItem)
-            .join(ProjectActionItem, ProjectActionItem.action_item_id == ActionItem.id)
-            .filter(ProjectActionItem.project_id == project_id)
-        )
-        if status:
-            query = query.filter(ActionItem.status == status)
-        if owner:
-            query = query.filter(ActionItem.owner.ilike(f"%{owner}%"))
-
-        action_items = query.all()
+        action_items = self.repository.get_project_linked_action_items(project_id, status=status, owner=owner)
 
         # Add meeting info to each action item (if available)
         result = []
@@ -317,9 +267,7 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-        meetings_query = self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids))
-        meetings = meetings_query.all()
+        meetings = self.repository.get_meetings_by_project(project_id)
         total_meetings = len(meetings)
 
         total_duration_minutes = 0.0
@@ -330,13 +278,7 @@ class ProjectService:
 
         total_duration_hours = round(total_duration_minutes / 60.0, 2)
 
-        action_items_query = (
-            self.db.query(ActionItem)
-            .join(Transcription, ActionItem.transcription_id == Transcription.id)
-            .filter(Transcription.meeting_id.in_(meeting_ids))
-        )
-
-        action_items = action_items_query.all()
+        action_items = self.repository.get_all_action_items_by_project(project_id)
         total_action_items = len(action_items)
         status_counts = Counter([item.status or "pending" for item in action_items])
         completed_action_items = status_counts.get("completed", 0)
@@ -354,13 +296,7 @@ class ProjectService:
             if due_date and due_date < now:
                 overdue_action_items += 1
 
-        unique_participants = (
-            self.db.query(func.count(func.distinct(Speaker.name)))
-            .join(Meeting, Speaker.meeting_id == Meeting.id)
-            .filter(Meeting.id.in_(meeting_ids), Speaker.name.isnot(None))
-            .scalar()
-            or 0
-        )
+        unique_participants = self.repository.count_distinct_speakers_by_project(project_id)
 
         meetings_by_month = self._group_meetings_by_month(meetings)
         action_items_by_status = dict(status_counts)
@@ -440,7 +376,7 @@ class ProjectService:
         history_messages = self.chat_repository.list_messages(session_id)
         chat_history = [{"role": message.role, "content": message.content} for message in history_messages[-6:]]
 
-        model_config = settings_crud.get_default_model_configuration(self.db)
+        model_config = SettingsService(self.db).get_default_model_configuration()
         llm_config = None
         if model_config:
             llm_config = llm_chat.model_config_to_llm_config(model_config, use_analysis=False)
@@ -484,7 +420,7 @@ class ProjectService:
             title_fallback = f"{title_fallback[:57]}..."
 
         try:
-            model_config = settings_crud.get_default_model_configuration(self.db)
+            model_config = SettingsService(self.db).get_default_model_configuration()
             llm_config = None
             if model_config:
                 llm_config = llm_chat.model_config_to_llm_config(model_config, use_analysis=False)
@@ -512,45 +448,17 @@ class ProjectService:
             return title_fallback
 
     def _get_project_meeting_ids_subquery(self, project_id: int):
-        return self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).subquery()
+        return self.repository.get_meeting_ids_subquery(project_id)
 
     def _get_project_meeting_ids_list(self, project_id: int) -> list[int]:
-        rows = self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).all()
-        return [row[0] for row in rows]
+        return self.repository.get_meeting_ids_list(project_id)
 
     def _get_project_meeting_ids(self, project: Project) -> list[int]:
         """Get completed meeting IDs for a project."""
-        meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-        results = (
-            self.db.query(Meeting.id)
-            .filter(Meeting.id.in_(meeting_ids))
-            .filter(Meeting.status == MeetingStatus.COMPLETED.value)
-            .all()
-        )
-        return [row[0] for row in results]
+        return self.repository.get_completed_meeting_ids(project.id)
 
     def _sync_project_meetings(self, project: Project, meeting_ids: list[int]) -> None:
-        existing_ids = set(self._get_project_meeting_ids_list(project.id))
-        desired_ids = set(meeting_ids)
-
-        to_add = desired_ids - existing_ids
-        to_remove = existing_ids - desired_ids
-
-        for meeting_id in to_add:
-            self.db.add(ProjectMeeting(project_id=project.id, meeting_id=meeting_id))
-
-        if to_remove:
-            (
-                self.db.query(ProjectMeeting)
-                .filter(
-                    ProjectMeeting.project_id == project.id,
-                    ProjectMeeting.meeting_id.in_(to_remove),
-                )
-                .delete(synchronize_session=False)
-            )
-
-        self.db.commit()
-        self.db.refresh(project)
+        self.repository.sync_meetings(project, meeting_ids)
 
     def _parse_datetime(self, value: str | datetime | None) -> datetime | None:
         if not value:
@@ -601,7 +509,7 @@ class ProjectService:
 
         logger = logging.getLogger(__name__)
 
-        meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
+        meeting = self.repository.get_meeting_by_id(meeting_id)
         if not meeting:
             logger.warning(f"Meeting {meeting_id} not found for tag sync")
             return
@@ -658,27 +566,18 @@ class ProjectService:
                 logger.info(f"Linking meeting {meeting_id} to project {project.id} ({project.name})")
 
                 # Link meeting to project if not already linked
-                existing = self.db.query(ProjectMeeting).filter_by(project_id=project.id, meeting_id=meeting_id).first()
+                existing = self.repository.check_meeting_in_project(project.id, meeting_id)
                 if not existing:
                     self.db.add(ProjectMeeting(project_id=project.id, meeting_id=meeting_id))
                     logger.info(f"Created project_meeting link: project {project.id} <-> meeting {meeting_id}")
 
                 # Also link all action items from this meeting to the project
-                action_items = (
-                    self.db.query(ActionItem)
-                    .join(Transcription, ActionItem.transcription_id == Transcription.id)
-                    .filter(Transcription.meeting_id == meeting_id)
-                    .all()
-                )
+                action_items = self.repository.get_action_items_by_meeting(meeting_id)
 
                 logger.info(f"Found {len(action_items)} action items for meeting {meeting_id}")
 
                 for action_item in action_items:
-                    existing_ai = (
-                        self.db.query(ProjectActionItem)
-                        .filter_by(project_id=project.id, action_item_id=action_item.id)
-                        .first()
-                    )
+                    existing_ai = self.pai_repo.get(project.id, action_item.id)
                     if not existing_ai:
                         self.db.add(ProjectActionItem(project_id=project.id, action_item_id=action_item.id))
                         logger.info(f"Linked action item {action_item.id} to project {project.id}")
@@ -694,21 +593,14 @@ class ProjectService:
                 raise HTTPException(status_code=404, detail="Project not found")
 
             # Get all unique speakers from project meetings
-            meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-            speakers = (
-                self.db.query(Speaker.name)
-                .join(Meeting, Speaker.meeting_id == Meeting.id)
-                .filter(Meeting.id.in_(meeting_ids), Speaker.name.isnot(None))
-                .distinct()
-                .all()
-            )
+            speakers = self.repository.get_speaker_names_by_project(project_id)
 
             # Remove old auto-detected members
             self.member_repository.delete_auto_detected(project_id)
 
             # Add new auto-detected members
             members = []
-            for (speaker_name,) in speakers:
+            for speaker_name in speakers:
                 if speaker_name and speaker_name.strip():
                     try:
                         member = self.member_repository.create(
@@ -727,27 +619,10 @@ class ProjectService:
 
     def _compute_project_metrics(self, project_id: int) -> dict:
         """Compute metrics for a project."""
-        meeting_ids = self._get_project_meeting_ids_subquery(project_id)
-        meeting_count = self.db.query(func.count(Meeting.id)).filter(Meeting.id.in_(meeting_ids)).scalar() or 0
-
-        action_item_count = (
-            self.db.query(func.count(ActionItem.id))
-            .join(Transcription, ActionItem.transcription_id == Transcription.id)
-            .filter(Transcription.meeting_id.in_(meeting_ids))
-            .scalar()
-            or 0
-        )
-
-        completed_action_items = (
-            self.db.query(func.count(ActionItem.id))
-            .join(Transcription, ActionItem.transcription_id == Transcription.id)
-            .filter(Transcription.meeting_id.in_(meeting_ids), ActionItem.status == "completed")
-            .scalar()
-            or 0
-        )
-
-        # Member count
-        member_count = self.member_repository.list_by_project(project_id).__len__()
+        meeting_count = self.repository.count_meetings_by_project(project_id)
+        action_item_count = self.repository.count_action_items_by_project(project_id)
+        completed_action_items = self.repository.count_action_items_by_project(project_id, status="completed")
+        member_count = len(self.member_repository.list_by_project(project_id))
 
         return {
             "meeting_count": meeting_count,
@@ -761,14 +636,7 @@ class ProjectService:
         activities = []
 
         # Recent meetings
-        meeting_ids = self._get_project_meeting_ids_subquery(project_id)
-        recent_meetings = (
-            self.db.query(Meeting)
-            .filter(Meeting.id.in_(meeting_ids))
-            .order_by(Meeting.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        recent_meetings = self.repository.get_recent_meetings_by_project(project_id, limit=limit)
 
         for meeting in recent_meetings:
             activities.append(
@@ -923,12 +791,7 @@ class ProjectService:
         if meeting.estimated_duration and meeting.estimated_duration > 0:
             return float(meeting.estimated_duration)
 
-        timing = (
-            self.db.query(DiarizationTiming)
-            .filter(DiarizationTiming.meeting_id == meeting.id)
-            .order_by(DiarizationTiming.created_at.desc())
-            .first()
-        )
+        timing = self.repository.get_diarization_timing_for_meeting(meeting.id)
         if timing and timing.audio_duration_seconds and timing.audio_duration_seconds > 0:
             return round(float(timing.audio_duration_seconds) / 60.0, 2)
 
@@ -971,20 +834,10 @@ class ProjectService:
             for link in normalized_links:
                 dependency_map.setdefault(link["target"], []).append(link["source"])
 
-            meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-
             gantt_items = []
 
             # Add meetings to Gantt (only those with meeting_date set)
-            meetings = (
-                self.db.query(Meeting)
-                .filter(
-                    Meeting.id.in_(meeting_ids),
-                    Meeting.meeting_date.isnot(None),  # Only meetings with dates
-                )
-                .order_by(Meeting.meeting_date)
-                .all()
-            )
+            meetings = self.repository.get_dated_meetings_by_project(project.id)
 
             for meeting in meetings:
                 # Calculate end date based on duration (if available)
@@ -1171,14 +1024,12 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        meeting_ids = self._get_project_meeting_ids_subquery(project.id)
-        meeting_query = self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids))
         if data.meeting_id:
-            meeting = meeting_query.filter(Meeting.id == data.meeting_id).first()
+            meeting = self.repository.get_project_meetings_query(project_id, data_meeting_id=data.meeting_id)
             if not meeting:
                 raise HTTPException(status_code=404, detail="Meeting not found in project")
         else:
-            meeting = meeting_query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc()).first()
+            meeting = self.repository.get_project_meetings_query(project_id)
 
         if not meeting:
             raise HTTPException(status_code=400, detail="No meetings available to attach action item")
@@ -1277,7 +1128,7 @@ class ProjectService:
             # Parse item type and ID
             if item_id.startswith("meeting-"):
                 db_id = int(item_id.split("-")[1])
-                meeting = self.db.query(Meeting).filter(Meeting.id == db_id).first()
+                meeting = self.repository.get_meeting_by_id(db_id)
                 if not meeting:
                     raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -1334,7 +1185,7 @@ class ProjectService:
 
             elif item_id.startswith("action-"):
                 db_id = int(item_id.split("-")[1])
-                action = self.db.query(ActionItem).filter(ActionItem.id == db_id).first()
+                action = self.pai_repo.get_action_item(db_id)
                 if not action:
                     raise HTTPException(status_code=404, detail="Action item not found")
 

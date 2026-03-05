@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ... import crud
+from ...modules.meetings.repository import MeetingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ class CheckpointManager:
         """
         try:
             # Get meeting from database
-            meeting = crud.get_meeting(db, self.meeting_id)
+            meeting = MeetingRepository(db).get_by_id(self.meeting_id)
             if not meeting:
                 return None
 

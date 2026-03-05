@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 
-from .repository import DiaryRepository
 from .schemas import (
     ActionItemsDailySummary,
     DiaryEntriesListResponse,
@@ -33,9 +32,9 @@ async def list_diary_entries(
     """List diary entries with pagination and date range filter."""
     skip = (page - 1) * page_size
 
-    entries = DiaryRepository.get_entries(db, start_date=start_date, end_date=end_date, skip=skip, limit=page_size)
+    entries = DiaryService.get_entries(db, start_date=start_date, end_date=end_date, skip=skip, limit=page_size)
 
-    total = DiaryRepository.count_entries(db, start_date=start_date, end_date=end_date)
+    total = DiaryService.count_entries(db, start_date=start_date, end_date=end_date)
 
     return DiaryEntriesListResponse(entries=entries, total=total, page=page, page_size=page_size)
 
@@ -47,7 +46,7 @@ async def get_diary_entry(
     db: Session = Depends(get_db),
 ):
     """Get diary entry for specific date (YYYY-MM-DD)."""
-    entry = DiaryRepository.get_entry_by_date(db, entry_date)
+    entry = DiaryService.get_entry_by_date(db, entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
@@ -88,7 +87,7 @@ async def create_diary_entry(
 ):
     """Create diary entry for a date."""
     # Check if entry already exists
-    existing_entry = DiaryRepository.get_entry_by_date(db, entry_data.date)
+    existing_entry = DiaryService.get_entry_by_date(db, entry_data.date)
     if existing_entry:
         raise HTTPException(status_code=400, detail=f"Diary entry already exists for {entry_data.date}")
 
@@ -96,31 +95,31 @@ async def create_diary_entry(
     if auto_generate and not entry_data.content:
         entry_data.content = DiaryService.generate_diary_template(db, entry_data.date)
 
-    entry = DiaryRepository.create_entry(db, entry_data)
+    entry = DiaryService.create_entry(db, entry_data)
     return entry
 
 
 @router.put("/entries/{entry_date}", response_model=DiaryEntry)
 async def update_diary_entry(entry_date: date, entry_data: DiaryEntryUpdate, db: Session = Depends(get_db)):
     """Update diary entry."""
-    entry = DiaryRepository.get_entry_by_date(db, entry_date)
+    entry = DiaryService.get_entry_by_date(db, entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
 
-    updated_entry = DiaryRepository.update_entry(db, entry, entry_data)
+    updated_entry = DiaryService.update_entry(db, entry, entry_data)
     return updated_entry
 
 
 @router.delete("/entries/{entry_date}", status_code=204)
 async def delete_diary_entry(entry_date: date, db: Session = Depends(get_db)):
     """Delete diary entry."""
-    entry = DiaryRepository.get_entry_by_date(db, entry_date)
+    entry = DiaryService.get_entry_by_date(db, entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
 
-    DiaryRepository.delete_entry(db, entry)
+    DiaryService.delete_entry(db, entry)
     return None
 
 
@@ -141,7 +140,7 @@ async def check_diary_reminder(db: Session = Depends(get_db)):
 @router.post("/reminder/dismiss", status_code=204)
 async def dismiss_diary_reminder(dismiss_request: ReminderDismissRequest, db: Session = Depends(get_db)):
     """Dismiss reminder for specific date."""
-    DiaryRepository.dismiss_reminder(db, dismiss_request.date)
+    DiaryService.dismiss_reminder(db, dismiss_request.date)
     return None
 
 
@@ -167,10 +166,10 @@ async def snapshot_action_items(entry_date: date, db: Session = Depends(get_db))
     # For now, it's a placeholder for the snapshot functionality
 
     # Get or create diary entry for the date
-    entry = DiaryRepository.get_entry_by_date(db, entry_date)
+    entry = DiaryService.get_entry_by_date(db, entry_date)
     if not entry:
         entry_data = DiaryEntryCreate(date=entry_date, is_work_day=DiaryService.is_work_day(entry_date))
-        entry = DiaryRepository.create_entry(db, entry_data)
+        entry = DiaryService.create_entry(db, entry_data)
 
     # This would trigger the snapshot logic
     # For now, just return success
@@ -203,7 +202,7 @@ async def get_statistics_summary(
         start_date = end_date - timedelta(days=30)
 
     # Get entries in range
-    entries = DiaryRepository.get_entries(db, start_date, end_date, skip=0, limit=1000)
+    entries = DiaryService.get_entries(db, start_date, end_date, skip=0, limit=1000)
 
     if not entries:
         return {
@@ -270,7 +269,7 @@ async def get_statistics_timeline(
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
-    entries = DiaryRepository.get_entries(db, start_date, end_date, skip=0, limit=1000)
+    entries = DiaryService.get_entries(db, start_date, end_date, skip=0, limit=1000)
 
     timeline = []
     for entry in sorted(entries, key=lambda e: e.date):

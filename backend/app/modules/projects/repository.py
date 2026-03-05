@@ -7,8 +7,11 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models import ActionItem, DiarizationTiming, Meeting, MeetingStatus, Speaker, Transcription
+
 from .models import (
     Project,
+    ProjectActionItem,
     ProjectChatMessage,
     ProjectChatSession,
     ProjectMeeting,
@@ -82,6 +85,234 @@ class ProjectRepository:
         """Delete a project."""
         self.db.delete(project)
         self.db.commit()
+
+    # -------------------------------------------------------------------------
+    # Meeting ID helpers
+    # -------------------------------------------------------------------------
+
+    def get_meeting_ids_subquery(self, project_id: int):
+        """Return a SQLAlchemy subquery of meeting IDs for a project."""
+        return self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).subquery()
+
+    def get_meeting_ids_list(self, project_id: int) -> list[int]:
+        """Return a plain list of meeting IDs for a project."""
+        rows = self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).all()
+        return [row[0] for row in rows]
+
+    def get_completed_meeting_ids(self, project_id: int) -> list[int]:
+        """Return IDs of COMPLETED meetings linked to a project."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        results = (
+            self.db.query(Meeting.id)
+            .filter(
+                Meeting.id.in_(meeting_ids),
+                Meeting.status == MeetingStatus.COMPLETED.value,
+            )
+            .all()
+        )
+        return [row[0] for row in results]
+
+    # -------------------------------------------------------------------------
+    # Meeting validation / CRUD helpers
+    # -------------------------------------------------------------------------
+
+    def validate_meeting_ids(self, meeting_ids: list[int]) -> set[int]:
+        """Return the subset of meeting_ids that actually exist in the DB."""
+        rows = self.db.query(Meeting.id).filter(Meeting.id.in_(meeting_ids)).all()
+        return {row[0] for row in rows}
+
+    def delete_meetings_by_ids(self, meeting_ids) -> None:
+        """Bulk-delete meetings matching a list/subquery of IDs."""
+        self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids)).delete(synchronize_session=False)
+        self.db.commit()
+
+    def get_meeting_by_id(self, meeting_id: int) -> Meeting | None:
+        """Get a single Meeting record by primary key."""
+        return self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
+
+    def get_meetings_by_ids(self, meeting_ids) -> list[Meeting]:
+        """Get Meeting records filtered by a list or subquery of IDs."""
+        return self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids)).all()
+
+    def get_meetings_by_project(
+        self,
+        project_id: int,
+        status: str | None = None,
+        sort_by: str = "date",
+        sort_order: str = "desc",
+    ) -> list[Meeting]:
+        """Get project meetings with optional status filter and sorting."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        query = self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids))
+        if status:
+            query = query.filter(Meeting.status == status)
+        order_col = Meeting.meeting_date if sort_by == "date" else Meeting.created_at
+        query = query.order_by(order_col.desc()) if sort_order == "desc" else query.order_by(order_col.asc())
+        return query.all()
+
+    def get_dated_meetings_by_project(self, project_id: int) -> list[Meeting]:
+        """Get project meetings that have a meeting_date set, ordered by date asc."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        return (
+            self.db.query(Meeting)
+            .filter(Meeting.id.in_(meeting_ids), Meeting.meeting_date.isnot(None))
+            .order_by(Meeting.meeting_date)
+            .all()
+        )
+
+    def get_recent_meetings_by_project(self, project_id: int, limit: int = 50) -> list[Meeting]:
+        """Get most recently created meetings in a project."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        return (
+            self.db.query(Meeting)
+            .filter(Meeting.id.in_(meeting_ids))
+            .order_by(Meeting.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def get_project_meetings_query(self, project_id: int, data_meeting_id: int | None = None) -> Meeting | None:
+        """Get the best meeting for a project action item creation."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        query = self.db.query(Meeting).filter(Meeting.id.in_(meeting_ids))
+        if data_meeting_id:
+            return query.filter(Meeting.id == data_meeting_id).first()
+        return query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc()).first()
+
+    # -------------------------------------------------------------------------
+    # ProjectMeeting link helpers
+    # -------------------------------------------------------------------------
+
+    def check_meeting_in_project(self, project_id: int, meeting_id: int) -> ProjectMeeting | None:
+        """Return the ProjectMeeting link if it exists, else None."""
+        return (
+            self.db.query(ProjectMeeting)
+            .filter(
+                ProjectMeeting.project_id == project_id,
+                ProjectMeeting.meeting_id == meeting_id,
+            )
+            .first()
+        )
+
+    def remove_meeting_link(self, project_id: int, meeting_id: int) -> int:
+        """Delete a project–meeting link. Returns number of deleted rows."""
+        result = (
+            self.db.query(ProjectMeeting)
+            .filter(
+                ProjectMeeting.project_id == project_id,
+                ProjectMeeting.meeting_id == meeting_id,
+            )
+            .delete()
+        )
+        self.db.commit()
+        return result
+
+    def sync_meetings(self, project: Project, meeting_ids: list[int]) -> None:
+        """Synchronise project meetings to exactly the given list."""
+        existing_ids = set(self.get_meeting_ids_list(project.id))
+        desired_ids = set(meeting_ids)
+        to_add = desired_ids - existing_ids
+        to_remove = existing_ids - desired_ids
+        for mid in to_add:
+            self.db.add(ProjectMeeting(project_id=project.id, meeting_id=mid))
+        if to_remove:
+            (
+                self.db.query(ProjectMeeting)
+                .filter(
+                    ProjectMeeting.project_id == project.id,
+                    ProjectMeeting.meeting_id.in_(to_remove),
+                )
+                .delete(synchronize_session=False)
+            )
+        self.db.commit()
+        self.db.refresh(project)
+
+    # -------------------------------------------------------------------------
+    # Cross-module analytics
+    # -------------------------------------------------------------------------
+
+    def count_meetings_by_project(self, project_id: int) -> int:
+        """Count meetings linked to a project."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        return self.db.query(func.count(Meeting.id)).filter(Meeting.id.in_(meeting_ids)).scalar() or 0
+
+    def count_action_items_by_project(self, project_id: int, status: str | None = None) -> int:
+        """Count action items from meetings in a project, optionally filtered by status."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        query = (
+            self.db.query(func.count(ActionItem.id))
+            .join(Transcription, ActionItem.transcription_id == Transcription.id)
+            .filter(Transcription.meeting_id.in_(meeting_ids))
+        )
+        if status:
+            query = query.filter(ActionItem.status == status)
+        return query.scalar() or 0
+
+    def count_distinct_speakers_by_project(self, project_id: int) -> int:
+        """Count distinct speaker names across all project meetings."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        return (
+            self.db.query(func.count(func.distinct(Speaker.name)))
+            .join(Meeting, Speaker.meeting_id == Meeting.id)
+            .filter(Meeting.id.in_(meeting_ids), Speaker.name.isnot(None))
+            .scalar()
+            or 0
+        )
+
+    def get_all_action_items_by_project(self, project_id: int) -> list[ActionItem]:
+        """Get all action items from meetings in a project."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        return (
+            self.db.query(ActionItem)
+            .join(Transcription, ActionItem.transcription_id == Transcription.id)
+            .filter(Transcription.meeting_id.in_(meeting_ids))
+            .all()
+        )
+
+    def get_action_items_by_meeting(self, meeting_id: int) -> list[ActionItem]:
+        """Get all action items from a specific meeting."""
+        return (
+            self.db.query(ActionItem)
+            .join(Transcription, ActionItem.transcription_id == Transcription.id)
+            .filter(Transcription.meeting_id == meeting_id)
+            .all()
+        )
+
+    def get_project_linked_action_items(
+        self, project_id: int, status: str | None = None, owner: str | None = None
+    ) -> list[ActionItem]:
+        """Get action items linked to a project via ProjectActionItem."""
+        query = (
+            self.db.query(ActionItem)
+            .join(ProjectActionItem, ProjectActionItem.action_item_id == ActionItem.id)
+            .filter(ProjectActionItem.project_id == project_id)
+        )
+        if status:
+            query = query.filter(ActionItem.status == status)
+        if owner:
+            query = query.filter(ActionItem.owner.ilike(f"%{owner}%"))
+        return query.all()
+
+    def get_speaker_names_by_project(self, project_id: int) -> list[str]:
+        """Get distinct non-null speaker names from a project's meetings."""
+        meeting_ids = self.get_meeting_ids_subquery(project_id)
+        rows = (
+            self.db.query(Speaker.name)
+            .join(Meeting, Speaker.meeting_id == Meeting.id)
+            .filter(Meeting.id.in_(meeting_ids), Speaker.name.isnot(None))
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    def get_diarization_timing_for_meeting(self, meeting_id: int) -> DiarizationTiming | None:
+        """Get the most recent diarization timing record for a meeting."""
+        return (
+            self.db.query(DiarizationTiming)
+            .filter(DiarizationTiming.meeting_id == meeting_id)
+            .order_by(DiarizationTiming.created_at.desc())
+            .first()
+        )
 
     def get_with_details(self, project_id: int) -> Project | None:
         """Get project with all related entities loaded."""
@@ -356,3 +587,30 @@ class ProjectNoteAttachmentRepository:
     def delete(self, attachment: ProjectNoteAttachment) -> None:
         self.db.delete(attachment)
         self.db.commit()
+
+
+class ProjectActionItemRepository:
+    """Repository for ProjectActionItem (project ↔ action item links)."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get(self, project_id: int, action_item_id: int) -> ProjectActionItem | None:
+        """Return the link if it exists, else None."""
+        return self.db.query(ProjectActionItem).filter_by(project_id=project_id, action_item_id=action_item_id).first()
+
+    def create(self, project_id: int, action_item_id: int) -> ProjectActionItem:
+        """Create a project–action-item link."""
+        pai = ProjectActionItem(project_id=project_id, action_item_id=action_item_id)
+        self.db.add(pai)
+        self.db.commit()
+        return pai
+
+    def delete(self, pai: ProjectActionItem) -> None:
+        """Remove a project–action-item link."""
+        self.db.delete(pai)
+        self.db.commit()
+
+    def get_action_item(self, action_item_id: int) -> ActionItem | None:
+        """Convenience: get the ActionItem by primary key."""
+        return self.db.query(ActionItem).filter(ActionItem.id == action_item_id).first()

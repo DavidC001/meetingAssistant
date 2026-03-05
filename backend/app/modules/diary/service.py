@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.modules.meetings.models import ActionItem
+from app.modules.meetings.repository import ActionItemRepository
 
 from .repository import DiaryRepository
 from .schemas import ActionItemsDailySummary, ActionItemSnapshot, DiaryReminderResponse
@@ -140,7 +141,7 @@ class DiaryService:
         end_range = (target_date + timedelta(days=7)).isoformat()
 
         # Get ALL items that are currently in progress (global status)
-        in_progress_items = db.query(ActionItem).filter(ActionItem.status == "in-progress").all()
+        in_progress_items = ActionItemRepository(db).get_by_status("in-progress")
 
         # Get completed items that are either:
         # 1. Due within the date range around target_date, OR
@@ -150,24 +151,16 @@ class DiaryService:
             diary_entry.action_items_completed if diary_entry and diary_entry.action_items_completed else []
         )
 
-        completed_items = (
-            db.query(ActionItem)
-            .filter(
-                ActionItem.status == "completed",
-                (ActionItem.due_date.between(start_range, end_range))
-                | (ActionItem.id.in_(saved_completed_ids) if saved_completed_ids else False),
-            )
-            .all()
+        completed_items = ActionItemRepository(db).get_completed_in_range_or_ids(
+            start_range, end_range, saved_completed_ids
         )
 
         # If no due_date filter matched, get items that were actually completed in this diary
         if saved_completed_ids and not completed_items:
-            completed_items = db.query(ActionItem).filter(ActionItem.id.in_(saved_completed_ids)).all()
+            completed_items = ActionItemRepository(db).get_by_ids(saved_completed_ids)
 
         # Get pending items that are due today or overdue
-        pending_items = (
-            db.query(ActionItem).filter(ActionItem.status == "pending", ActionItem.due_date <= today_str).all()
-        )
+        pending_items = ActionItemRepository(db).get_pending_due_before(today_str)
 
         # Convert to snapshot format
         in_progress_snapshots = [DiaryService._action_item_to_snapshot(item) for item in in_progress_items]
@@ -199,6 +192,55 @@ class DiaryService:
             priority=action_item.priority,
             due_date=action_item.due_date,  # Already a string in the model
         )
+
+    # ------------------------------------------------------------------
+    # Data-access delegation methods (keep router free of repository imports)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_entries(
+        db: Session,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        skip: int = 0,
+        limit: int = 50,
+    ):
+        """Fetch paginated diary entries."""
+        return DiaryRepository.get_entries(db, start_date=start_date, end_date=end_date, skip=skip, limit=limit)
+
+    @staticmethod
+    def count_entries(
+        db: Session,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> int:
+        """Count diary entries matching the date range."""
+        return DiaryRepository.count_entries(db, start_date=start_date, end_date=end_date)
+
+    @staticmethod
+    def get_entry_by_date(db: Session, entry_date: date):
+        """Get diary entry for a specific date."""
+        return DiaryRepository.get_entry_by_date(db, entry_date)
+
+    @staticmethod
+    def create_entry(db: Session, entry_data):
+        """Create a new diary entry."""
+        return DiaryRepository.create_entry(db, entry_data)
+
+    @staticmethod
+    def update_entry(db: Session, entry, entry_data):
+        """Update an existing diary entry."""
+        return DiaryRepository.update_entry(db, entry, entry_data)
+
+    @staticmethod
+    def delete_entry(db: Session, entry) -> bool:
+        """Delete a diary entry."""
+        return DiaryRepository.delete_entry(db, entry)
+
+    @staticmethod
+    def dismiss_reminder(db: Session, entry_date: date):
+        """Dismiss the reminder for a specific date."""
+        return DiaryRepository.dismiss_reminder(db, entry_date)
 
     @staticmethod
     def generate_diary_template(db: Session, target_date: date) -> str:

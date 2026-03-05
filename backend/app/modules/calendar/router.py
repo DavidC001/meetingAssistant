@@ -6,12 +6,12 @@ Manages calendar action items and Google Calendar integration.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ... import models
 from ...core.integrations.google_calendar import GoogleCalendarService
 from ...database import get_db
-from ..meetings import crud as meetings_crud
 from ..meetings import schemas as meetings_schemas
-from . import crud, schemas
+from ..meetings.repository import ActionItemRepository, TranscriptionRepository
+from ..users.repository import UserMappingRepository
+from . import schemas
 
 # Main router that includes sub-routers
 router = APIRouter()
@@ -37,7 +37,12 @@ def get_all_action_items(
     Get all action items across all meetings with meeting information.
     Useful for calendar view that shows all action items with their source meeting.
     """
-    action_items = meetings_crud.get_all_action_items(db, skip=skip, limit=limit, status=status)
+    action_item_repo = ActionItemRepository(db)
+    action_items = (
+        action_item_repo.get_by_status(status, skip=skip, limit=limit)
+        if status
+        else action_item_repo.get_all(skip=skip, limit=limit)
+    )
 
     # Enrich action items with meeting information
     result = []
@@ -75,7 +80,7 @@ def get_all_action_items(
 @calendar_router.get("/action-items/{item_id}", response_model=meetings_schemas.ActionItem)
 def get_action_item(item_id: int, db: Session = Depends(get_db)):
     """Get a specific action item by ID."""
-    action_item = meetings_crud.get_action_item(db, item_id)
+    action_item = ActionItemRepository(db).get(item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     return action_item
@@ -87,22 +92,9 @@ def create_standalone_action_item(action_item: meetings_schemas.ActionItemCreate
     Create a standalone action item not tied to any specific meeting.
     This is useful for creating tasks directly from the calendar view.
     """
-    # Create action item without a transcription_id (standalone task)
-    db_action_item = models.ActionItem(
-        transcription_id=None,
-        task=action_item.task,
-        owner=action_item.owner,
-        due_date=action_item.due_date,
-        status=action_item.status or "pending",
-        priority=action_item.priority,
-        notes=action_item.notes,
-        is_manual=True,
-        synced_to_calendar=False,
+    db_action_item = ActionItemRepository(db).create_action_item(
+        transcription_id=None, item_data=action_item, is_manual=True
     )
-    db.add(db_action_item)
-    db.commit()
-    db.refresh(db_action_item)
-
     return db_action_item
 
 
@@ -114,7 +106,7 @@ def update_action_item(
     Update an action item (e.g., change due date, status, priority, etc.).
     This is useful for drag-and-drop calendar interactions.
     """
-    action_item = meetings_crud.update_action_item(db, item_id, action_item_update)
+    action_item = ActionItemRepository(db).update_action_item(item_id, action_item_update)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -129,7 +121,7 @@ def update_action_item(
 
                 if action_item.owner and user_email:
                     # Get email for the owner (handles both name and email formats)
-                    owner_email = crud.get_email_for_name(db, action_item.owner)
+                    owner_email = UserMappingRepository(db).get_email_for_name(action_item.owner)
                     item_owner = owner_email.strip().lower()
                     current_user = user_email.strip().lower()
 
@@ -139,14 +131,11 @@ def update_action_item(
                         return action_item
 
                 # Get meeting title for context
-                transcription = (
-                    db.query(models.Transcription)
-                    .filter(models.Transcription.id == action_item.transcription_id)
-                    .first()
+                meeting_title = (
+                    TranscriptionRepository(db).get_meeting_title(action_item.transcription_id)
+                    if action_item.transcription_id
+                    else None
                 )
-                meeting_title = None
-                if transcription and transcription.meeting:
-                    meeting_title = transcription.meeting.filename
 
                 calendar_service.update_event(action_item.google_calendar_event_id, action_item, meeting_title)
         except Exception as e:
@@ -162,7 +151,7 @@ def delete_action_item(item_id: int, db: Session = Depends(get_db)):
     Delete an action item.
     If the item is synced to Google Calendar, also removes the calendar event.
     """
-    action_item = meetings_crud.get_action_item(db, item_id)
+    action_item = ActionItemRepository(db).get(item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -177,7 +166,7 @@ def delete_action_item(item_id: int, db: Session = Depends(get_db)):
             # Continue with deletion even if calendar sync fails
 
     # Delete from database
-    meetings_crud.delete_action_item(db, item_id)
+    ActionItemRepository(db).delete(id=item_id)
     return None
 
 
@@ -240,7 +229,7 @@ def sync_action_item_to_calendar(item_id: int, db: Session = Depends(get_db)):
     if not calendar_service.is_connected():
         raise HTTPException(status_code=400, detail="Not connected to Google Calendar. Please authorize first.")
 
-    action_item = meetings_crud.get_action_item(db, item_id)
+    action_item = ActionItemRepository(db).get(item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -251,7 +240,7 @@ def sync_action_item_to_calendar(item_id: int, db: Session = Depends(get_db)):
     # Check if the action item is assigned to the current user
     if action_item.owner and user_email:
         # Get email for the owner (handles both name and email formats)
-        owner_email = crud.get_email_for_name(db, action_item.owner)
+        owner_email = UserMappingRepository(db).get_email_for_name(action_item.owner)
 
         # Normalize both emails for comparison (case-insensitive)
         item_owner = owner_email.strip().lower()
@@ -269,12 +258,11 @@ def sync_action_item_to_calendar(item_id: int, db: Session = Depends(get_db)):
         )
 
     # Get meeting title for context
-    transcription = (
-        db.query(models.Transcription).filter(models.Transcription.id == action_item.transcription_id).first()
+    meeting_title = (
+        TranscriptionRepository(db).get_meeting_title(action_item.transcription_id)
+        if action_item.transcription_id
+        else None
     )
-    meeting_title = None
-    if transcription and transcription.meeting:
-        meeting_title = transcription.meeting.filename
 
     try:
         # If already synced, update; otherwise create new
@@ -282,7 +270,7 @@ def sync_action_item_to_calendar(item_id: int, db: Session = Depends(get_db)):
             calendar_service.update_event(action_item.google_calendar_event_id, action_item, meeting_title)
         else:
             event_id = calendar_service.create_event_from_action_item(action_item, meeting_title)
-            meetings_crud.update_action_item_calendar_sync(db, item_id, event_id, True)
+            ActionItemRepository(db).update_calendar_sync(item_id, event_id=event_id, synced=True)
 
         return {"message": "Action item synced to Google Calendar", "event_id": action_item.google_calendar_event_id}
     except Exception as e:
@@ -294,7 +282,7 @@ def unsync_action_item_from_calendar(item_id: int, db: Session = Depends(get_db)
     """Remove an action item from Google Calendar."""
     calendar_service = GoogleCalendarService(db)
 
-    action_item = meetings_crud.get_action_item(db, item_id)
+    action_item = ActionItemRepository(db).get(item_id)
     if not action_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
@@ -303,16 +291,16 @@ def unsync_action_item_from_calendar(item_id: int, db: Session = Depends(get_db)
 
     if not calendar_service.is_connected():
         # Just update the database status if not connected
-        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
+        ActionItemRepository(db).update_calendar_sync(item_id, event_id=None, synced=False)
         return {"message": "Action item marked as unsynced (Google Calendar not connected)"}
 
     try:
         calendar_service.delete_event(action_item.google_calendar_event_id)
-        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
+        ActionItemRepository(db).update_calendar_sync(item_id, event_id=None, synced=False)
         return {"message": "Action item removed from Google Calendar"}
     except Exception as e:
         # Update database even if deletion fails
-        meetings_crud.update_action_item_calendar_sync(db, item_id, None, False)
+        ActionItemRepository(db).update_calendar_sync(item_id, event_id=None, synced=False)
         return {"message": f"Action item marked as unsynced, but calendar deletion failed: {str(e)}"}
 
 
@@ -333,7 +321,7 @@ def sync_all_action_items(
     if not user_email:
         raise HTTPException(status_code=500, detail="Unable to retrieve user email from Google Calendar.")
 
-    action_items = crud.get_all_action_items(db, status=status)
+    action_items = ActionItemRepository(db).get_by_status(status) if status else ActionItemRepository(db).get_all()
 
     synced_count = 0
     failed_count = 0
@@ -349,7 +337,7 @@ def sync_all_action_items(
             continue  # Skip items without an owner
 
         # Get email for the owner (handles both name and email formats)
-        owner_email = crud.get_email_for_name(db, action_item.owner)
+        owner_email = UserMappingRepository(db).get_email_for_name(action_item.owner)
 
         # Normalize both emails for comparison (case-insensitive)
         item_owner = owner_email.strip().lower()
@@ -360,16 +348,15 @@ def sync_all_action_items(
             continue  # Skip items not assigned to the current user
 
         # Get meeting title
-        transcription = (
-            db.query(models.Transcription).filter(models.Transcription.id == action_item.transcription_id).first()
+        meeting_title = (
+            TranscriptionRepository(db).get_meeting_title(action_item.transcription_id)
+            if action_item.transcription_id
+            else None
         )
-        meeting_title = None
-        if transcription and transcription.meeting:
-            meeting_title = transcription.meeting.filename
 
         try:
             event_id = calendar_service.create_event_from_action_item(action_item, meeting_title)
-            meetings_crud.update_action_item_calendar_sync(db, action_item.id, event_id, True)
+            ActionItemRepository(db).update_calendar_sync(action_item.id, event_id=event_id, synced=True)
             synced_count += 1
         except Exception as e:
             print(f"Failed to sync action item {action_item.id}: {e}")

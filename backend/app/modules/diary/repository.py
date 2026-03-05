@@ -157,6 +157,15 @@ class DiaryRepository:
 
         return missing_dates
 
+    @staticmethod
+    def get_entries_needing_action_item_fix(db: Session) -> list[DiaryEntry]:
+        """Get diary entries that have content but no extracted action items."""
+        return (
+            db.query(DiaryEntry)
+            .filter(DiaryEntry.content.isnot(None), DiaryEntry.action_items_worked_on.is_(None))
+            .all()
+        )
+
 
 class DiaryActionItemSnapshotRepository:
     """Repository for diary action item snapshot operations."""

@@ -5,14 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ... import models
 from ...core.llm import chat as llm_chat
 from ...core.llm.providers import ProviderFactory
 from ...core.storage import rag
 from ...database import get_db
 from ...dependencies import get_global_chat_service
-from ..meetings import crud as meetings_crud
-from ..settings import crud as settings_crud
+from ..meetings.repository import MeetingRepository
+from ..settings.service import SettingsService
 from . import schemas
 from .service import GlobalChatService
 
@@ -30,7 +29,7 @@ async def _generate_chat_title(db: Session, message: str) -> str:
         title_fallback = f"{title_fallback[:57]}..."
 
     try:
-        model_config = settings_crud.get_default_model_configuration(db)
+        model_config = SettingsService(db).get_default_model_configuration()
         llm_config = None
         if model_config:
             llm_config = llm_chat.model_config_to_llm_config(model_config, use_analysis=False)
@@ -163,39 +162,13 @@ def update_session(
 @router.get("/filters/folders")
 def get_available_folders(db: Session = Depends(get_db)):
     """Get list of unique folders from completed meetings"""
-    from sqlalchemy import distinct
-
-    folders = (
-        db.query(distinct(models.Meeting.folder))
-        .filter(models.Meeting.folder.isnot(None))
-        .filter(models.Meeting.folder != "")
-        .filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
-        .all()
-    )
-    return [f[0] for f in folders if f[0]]
+    return MeetingRepository(db).get_unique_folders()
 
 
 @router.get("/filters/tags")
 def get_available_filter_tags(db: Session = Depends(get_db)):
     """Get list of unique tags from completed meetings for filtering"""
-    meetings_with_tags = (
-        db.query(models.Meeting.tags)
-        .filter(models.Meeting.tags.isnot(None))
-        .filter(models.Meeting.tags != "")
-        .filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
-        .all()
-    )
-
-    # Parse comma-separated tags and collect unique ones
-    tags_set = set()
-    for (tags_str,) in meetings_with_tags:
-        if tags_str:
-            for tag in tags_str.split(","):
-                tag = tag.strip()
-                if tag:
-                    tags_set.add(tag)
-
-    return sorted(tags_set)
+    return MeetingRepository(db).get_unique_tags()
 
 
 @router.post("/sessions/{session_id}/messages", response_model=schemas.GlobalChatMessage)
@@ -230,7 +203,7 @@ async def send_message(
     # Get model configuration from database (same as meeting chat)
     from ...core.llm import chat
 
-    model_config = settings_crud.get_default_model_configuration(db)
+    model_config = SettingsService(db).get_default_model_configuration()
 
     llm_config = None
     if model_config:
@@ -239,9 +212,7 @@ async def send_message(
     # Apply filters if present in the session
     meeting_ids = None
     if session.filter_folder or session.filter_tags:
-        meeting_ids = meetings_crud.get_meeting_ids_by_filters(
-            db, folder=session.filter_folder, tags=session.filter_tags
-        )
+        meeting_ids = MeetingRepository(db).get_by_filters(folder=session.filter_folder, tags=session.filter_tags)
         # If filters are applied but no meetings match, inform the user
         if not meeting_ids:
             assistant_message = service.add_message(

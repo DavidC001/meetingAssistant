@@ -19,7 +19,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 from sqlalchemy.orm import Session
 
-from ... import crud
+from ...modules.settings.repository import GoogleDriveRepository
 
 
 class GoogleDriveService:
@@ -54,7 +54,7 @@ class GoogleDriveService:
 
     def _load_credentials(self):
         """Load credentials from database."""
-        db_creds = crud.get_google_drive_credentials(self.db, self.user_id)
+        db_creds = GoogleDriveRepository(self.db).get_credentials(self.user_id)
         if db_creds:
             try:
                 creds_dict = json.loads(db_creds.credentials_json)
@@ -70,7 +70,7 @@ class GoogleDriveService:
                         error_str = str(e)
                         if "invalid_grant" in error_str or "Token has been expired or revoked" in error_str:
                             # Silently clear invalid credentials - user needs to re-authenticate
-                            crud.delete_google_drive_credentials(self.db, self.user_id)
+                            GoogleDriveRepository(self.db).delete_credentials(self.user_id)
                         self.credentials = None
                         return
 
@@ -91,7 +91,9 @@ class GoogleDriveService:
                 "client_secret": self.credentials.client_secret,
                 "scopes": self.credentials.scopes,
             }
-            crud.save_google_drive_credentials(self.db, credentials_json=json.dumps(creds_dict), user_id=self.user_id)
+            GoogleDriveRepository(self.db).save_credentials(
+                credentials_json=json.dumps(creds_dict), user_id=self.user_id
+            )
 
     def get_authorization_url(self) -> str:
         """Get the OAuth2 authorization URL."""
@@ -149,7 +151,7 @@ class GoogleDriveService:
 
     def disconnect(self):
         """Disconnect and remove stored credentials."""
-        crud.delete_google_drive_credentials(self.db, self.user_id)
+        GoogleDriveRepository(self.db).delete_credentials(self.user_id)
         self.credentials = None
         self.service = None
 

@@ -12,9 +12,9 @@ from typing import Any
 import requests
 from sqlalchemy.orm import Session
 
-from ...modules.meetings import crud, models
-from ...modules.settings import crud as settings_crud
+from ...modules.meetings import models
 from ...modules.settings import schemas as settings_schemas
+from ...modules.settings.repository import SettingsRepository
 from ..config import config
 
 LOGGER = logging.getLogger(__name__)
@@ -326,7 +326,7 @@ def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguratio
     provider = db_config.provider.lower()
     api_key: str | None = None
     if db_config.api_key_id:
-        api_key_record = crud.get_api_key(db, db_config.api_key_id)
+        api_key_record = SettingsRepository(db).get_api_key_by_id(db_config.api_key_id)
         if api_key_record:
             api_key = config.get_api_key(api_key_record.environment_variable)
     if not api_key and provider == "openai":
@@ -354,7 +354,7 @@ def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguratio
 def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfiguration:
     """Fetch the active embedding configuration, creating a default if necessary."""
 
-    config_record = settings_crud.get_active_embedding_configuration(db)
+    config_record = SettingsRepository(db).get_active_embedding_configuration()
     if config_record:
         return config_record
 
@@ -394,7 +394,7 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
         settings={"device": "cpu"},
         is_active=True,
     )
-    return settings_crud.create_embedding_configuration(db, create_schema)
+    return SettingsRepository(db).create_embedding_configuration(create_schema)
 
 
 def get_embedding_provider(db: Session) -> tuple[EmbeddingProvider, models.EmbeddingConfiguration]:

@@ -8,11 +8,11 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, cast, func
 from sqlalchemy.orm import Session
 
-from ...modules.meetings import crud, schemas
+from ...modules.meetings import schemas
 from ...modules.meetings.models import Meeting, Speaker, Transcription
+from ...modules.meetings.repository import ActionItemRepository, MeetingRepository, SpeakerRepository
 from ...modules.projects import schemas as project_schemas
 from ...modules.projects.service import ProjectService
 
@@ -540,41 +540,30 @@ class ToolRegistry:
         query_text: str | None,
         meeting_ids: list[int] | None = None,
     ) -> Meeting | None:
-        base_query = db.query(Meeting)
-        if meeting_ids:
-            base_query = base_query.filter(Meeting.id.in_(meeting_ids))
+        meeting_repo = MeetingRepository(db)
 
         if not query_text:
-            return base_query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc()).first()
+            return meeting_repo.get_latest(meeting_ids)
 
         query_lower = query_text.lower()
 
         # Try folder match
-        folders = db.query(Meeting.folder).filter(Meeting.folder.isnot(None)).distinct().all()
-        for (folder,) in folders:
+        folders = meeting_repo.get_distinct_folders_all()
+        for folder in folders:
             if folder and folder.lower() in query_lower:
-                match = (
-                    base_query.filter(Meeting.folder == folder)
-                    .order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc())
-                    .first()
-                )
+                match = meeting_repo.get_latest_by_folder(folder, meeting_ids)
                 if match:
                     return match
 
         # Try speaker name match
-        speaker_names = db.query(Speaker.name).filter(Speaker.name.isnot(None)).distinct().all()
-        matched_names = [name for (name,) in speaker_names if name and name.lower() in query_lower]
+        all_speaker_names = SpeakerRepository(db).get_all_distinct_names()
+        matched_names = [name for name in all_speaker_names if name and name.lower() in query_lower]
         if matched_names:
-            match = (
-                base_query.join(Speaker)
-                .filter(func.lower(Speaker.name).in_([n.lower() for n in matched_names]))
-                .order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc())
-                .first()
-            )
+            match = meeting_repo.get_latest_by_speaker_names(matched_names, meeting_ids)
             if match:
                 return match
 
-        return base_query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc()).first()
+        return meeting_repo.get_latest(meeting_ids)
 
     # Tool Handlers
 
@@ -607,7 +596,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: No meeting available to attach the action item"
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting or not meeting.transcription:
             return "Error: Meeting or transcription not found"
 
@@ -619,8 +608,8 @@ class ToolRegistry:
             notes=args.get("notes"),
         )
 
-        action_item = crud.create_action_item(
-            db, transcription_id=meeting.transcription.id, action_item=action_item_data, is_manual=True
+        action_item = ActionItemRepository(db).create_action_item(
+            transcription_id=meeting.transcription.id, item_data=action_item_data, is_manual=True
         )
 
         meeting_name = meeting.filename or f"Meeting {meeting.id}"
@@ -649,7 +638,7 @@ class ToolRegistry:
             notes=args.get("notes"),
         )
 
-        updated_item = crud.update_action_item(db, item_id, update_data)
+        updated_item = ActionItemRepository(db).update_action_item(item_id, update_data)
         if not updated_item:
             return f"Error: Action item with ID {item_id} not found"
 
@@ -686,7 +675,7 @@ class ToolRegistry:
 
         if meeting_id:
             # Single meeting scope
-            meeting = crud.get_meeting(db, meeting_id)
+            meeting = MeetingRepository(db).get_by_id(meeting_id)
             if not meeting or not meeting.transcription:
                 return "No action items found - meeting or transcription not available"
 
@@ -712,20 +701,11 @@ class ToolRegistry:
             return result
 
         # Global/multi-meeting scope: list action items across all (or scoped) meetings
-        from ...models import ActionItem as GlobalActionItem
-
-        query = (
-            db.query(GlobalActionItem, Meeting)
-            .join(Transcription, GlobalActionItem.transcription_id == Transcription.id)
-            .join(Meeting, Transcription.meeting_id == Meeting.id)
+        rows = ActionItemRepository(db).list_with_meetings(
+            meeting_ids=meeting_ids,
+            status=status_filter if status_filter != "all" else None,
+            limit=30,
         )
-        if meeting_ids:
-            query = query.filter(Meeting.id.in_(meeting_ids))
-        if status_filter != "all":
-            query = query.filter(GlobalActionItem.status == status_filter)
-
-        query = query.order_by(GlobalActionItem.due_date.asc().nullslast())
-        rows = query.limit(30).all()
 
         if not rows:
             return f"No action items found with status: {status_filter}"
@@ -758,7 +738,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: No meeting available to update notes"
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             return "Error: Meeting not found"
 
@@ -799,7 +779,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: No meeting available to update"
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             return "Error: Meeting not found"
 
@@ -904,7 +884,7 @@ class ToolRegistry:
             meeting_ids = service._get_project_meeting_ids(project)
 
         if meeting_id:
-            meeting = crud.get_meeting(db, meeting_id)
+            meeting = MeetingRepository(db).get_by_id(meeting_id)
             if not meeting or not meeting.transcription:
                 return "Error: Meeting transcript not available"
 
@@ -938,20 +918,7 @@ class ToolRegistry:
                 ],
             }
 
-        query = (
-            db.query(Meeting, Transcription)
-            .join(Transcription, Transcription.meeting_id == Meeting.id)
-            .filter(Transcription.full_text.isnot(None))
-        )
-
-        if meeting_ids:
-            query = query.filter(Meeting.id.in_(meeting_ids))
-
-        query = query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc())
-        if meeting_limit:
-            query = query.limit(meeting_limit)
-
-        rows = query.all()
+        rows = MeetingRepository(db).list_with_transcriptions(meeting_ids=meeting_ids, limit=meeting_limit or 50)
         if not rows:
             return "Error: No meeting transcripts available"
 
@@ -1077,7 +1044,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: meeting_id is required. Use list_meetings to find the meeting first."
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting or not meeting.transcription:
             return "Error: Meeting summary not available"
 
@@ -1096,7 +1063,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: meeting_id is required. Use list_meetings to find the meeting first."
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             return "Error: Meeting not found"
 
@@ -1131,48 +1098,15 @@ class ToolRegistry:
             project_meeting_ids = service._get_project_meeting_ids(project)
             meeting_ids = list(set(meeting_ids) & set(project_meeting_ids)) if meeting_ids else project_meeting_ids
 
-        query = db.query(Meeting)
-
-        # Scope to project meetings if applicable
-        if meeting_ids:
-            query = query.filter(Meeting.id.in_(meeting_ids))
-
-        if folder_filter:
-            query = query.filter(func.lower(Meeting.folder) == folder_filter.lower())
-
-        if search:
-            # Match on filename, folder, or speaker names (check both name and label fields)
-            name_match = query.filter(
-                func.lower(Meeting.filename).contains(search) | func.lower(Meeting.folder).contains(search)
-            )
-            speaker_match = query.join(Speaker, Speaker.meeting_id == Meeting.id).filter(
-                func.lower(Speaker.name).contains(search)
-                | func.lower(func.coalesce(Speaker.label, "")).contains(search)
-            )
-            # Union both
-            meeting_id_set = set()
-            combined_meetings = []
-            for m in name_match.all():
-                if m.id not in meeting_id_set:
-                    meeting_id_set.add(m.id)
-                    combined_meetings.append(m)
-            for m in speaker_match.all():
-                if m.id not in meeting_id_set:
-                    meeting_id_set.add(m.id)
-                    combined_meetings.append(m)
-            # Sort by date desc
-            combined_meetings.sort(
-                key=lambda m: (m.meeting_date or m.created_at) if (m.meeting_date or m.created_at) else datetime.min,
-                reverse=True,
-            )
-            meetings = combined_meetings[:limit]
-        else:
-            meetings = (
-                query.order_by(Meeting.meeting_date.desc().nullslast(), Meeting.created_at.desc()).limit(limit).all()
-            )
+        meetings = MeetingRepository(db).search_for_llm(
+            search=search or None,
+            folder=folder_filter or None,
+            meeting_ids=meeting_ids,
+            limit=limit,
+        )
 
         if not meetings:
-            return f"No meetings found{' matching: ' + search if search else ''}."
+            return f"No meetings found{' matching: ' + search if search else '.'}"
 
         result = f"Found {len(meetings)} meeting(s):\n\n"
         for m in meetings:
@@ -1200,7 +1134,7 @@ class ToolRegistry:
         if not meeting_id:
             return "Error: meeting_id is required"
 
-        meeting = crud.get_meeting(db, meeting_id)
+        meeting = MeetingRepository(db).get_by_id(meeting_id)
         if not meeting:
             return f"Error: Meeting {meeting_id} not found"
 
@@ -1240,8 +1174,6 @@ class ToolRegistry:
 
     async def _handle_get_upcoming_deadlines(self, args: dict[str, Any], context: dict[str, Any]) -> str:
         """Handler for getting upcoming action item deadlines."""
-        from ...models import ActionItem as GlobalActionItem
-
         db: Session = context["db"]
         project_id: int | None = context.get("project_id")
         meeting_ids: list[int] | None = context.get("meeting_ids")
@@ -1255,24 +1187,12 @@ class ToolRegistry:
         items = []
 
         # Query meeting action items — scoped to project meetings when in project context
-        due_date_expr = cast(GlobalActionItem.due_date, DateTime)
-        meeting_query = (
-            db.query(GlobalActionItem, Meeting)
-            .join(Transcription, GlobalActionItem.transcription_id == Transcription.id)
-            .join(Meeting, Transcription.meeting_id == Meeting.id)
-            .filter(GlobalActionItem.due_date.isnot(None))
-            .filter(GlobalActionItem.status.in_(["pending", "in_progress"]))
-        )
-        if meeting_ids:
-            meeting_query = meeting_query.filter(Meeting.id.in_(meeting_ids))
-        if include_overdue:
-            meeting_query = meeting_query.filter(due_date_expr <= future_date)
-        else:
-            meeting_query = meeting_query.filter(
-                due_date_expr >= now,
-                due_date_expr <= future_date,
-            )
-        for ai, meeting in meeting_query.order_by(due_date_expr.asc()).all():
+        for ai, meeting in ActionItemRepository(db).get_upcoming_with_meetings(
+            meeting_ids=meeting_ids,
+            before_date=future_date,
+            now=now if not include_overdue else None,
+            include_overdue=include_overdue,
+        ):
             due_value = ai.due_date
             try:
                 parsed_due = datetime.fromisoformat(due_value) if isinstance(due_value, str) else due_value
@@ -1340,13 +1260,10 @@ class ToolRegistry:
         item_id: int = args["item_id"]
 
         # Try meeting action item first
-        from ...models import ActionItem as GlobalActionItem
-
-        item = db.query(GlobalActionItem).filter(GlobalActionItem.id == item_id).first()
+        item = ActionItemRepository(db).get(item_id)
         if item:
             task_name = item.task
-            db.delete(item)
-            db.commit()
+            ActionItemRepository(db).delete(id=item_id)
             return f"Action item {item_id} ('{task_name}') deleted successfully."
 
         return f"Error: Action item with ID {item_id} not found."

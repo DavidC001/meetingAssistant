@@ -2,35 +2,32 @@
 Meetings router for the Meeting Assistant API.
 
 This module handles all meeting-related API endpoints including file upload,
-processing management, and meeting data retrieval.
+processing management, and meeting data retrieval. All business logic is
+delegated to MeetingService – this file is an HTTP-layer-only module.
 """
-
-import os
-import re
-import shutil
-import tempfile
-from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ...core.config import config
-from ...core.integrations.export import export_to_docx, export_to_json, export_to_pdf, export_to_txt
-from ...core.llm import chat
-from ...core.storage import rag
 from ...database import get_db
-from ..chat import crud as chat_crud
 from ..chat import schemas as chat_schemas
-from ..settings import crud as settings_crud
-from . import crud, models, schemas
-from .models import MeetingStatus
+from . import schemas
 from .service import MeetingService
 
 router = APIRouter(
     prefix="/meetings",
     tags=["meetings"],
 )
+
+
+def _service(db: Session) -> MeetingService:
+    return MeetingService(db)
+
+
+# =============================================================================
+# Upload Endpoints
+# =============================================================================
 
 
 @router.post("/upload", response_model=schemas.Meeting)
@@ -47,49 +44,8 @@ def create_upload_file(
     meeting_date: str | None = Form(None, description="Meeting date in ISO format (e.g., 2024-01-15T10:00:00Z)"),
     db: Session = Depends(get_db),
 ):
-    """
-    Upload a new meeting file for processing.
-
-    This endpoint accepts audio/video files and initiates asynchronous processing
-    including transcription, speaker diarization, and AI-powered analysis.
-
-    **Processing Steps:**
-    1. File validation (size, extension)
-    2. File storage and database record creation
-    3. Asynchronous transcription with Whisper
-    4. Speaker diarization with Pyannote
-    5. AI-powered summary and action item extraction
-
-    **Supported File Types:**
-    - Audio: mp3, wav, m4a, mpga, oga, ogg, flac
-    - Video: mp4, mpeg, webm
-
-    **File Size Limit:** 500MB (configurable)
-
-    **Parameters:**
-    - **file**: The audio/video file to upload (required)
-    - **transcription_language**: ISO language code (default: "en-US")
-    - **number_of_speakers**: Expected speaker count or "auto" (default: "auto")
-    - **meeting_date**: ISO 8601 formatted date/time (optional)
-
-    **Returns:**
-    A meeting object with initial status "uploaded". Monitor the `status` field:
-    - uploaded → transcribing → analyzing → completed
-    - Or "failed" if any step encounters an error
-
-    **Example:**
-    ```python
-    files = {'file': open('meeting.mp3', 'rb')}
-    data = {
-        'transcription_language': 'en-US',
-        'number_of_speakers': 'auto',
-        'meeting_date': '2024-01-15T10:00:00Z'
-    }
-    response = requests.post('/api/v1/meetings/upload', files=files, data=data)
-    ```
-    """
-    service = MeetingService(db)
-    return service.create_meeting_from_upload(
+    """Upload a new meeting file for processing."""
+    return _service(db).create_meeting_from_upload(
         file=file,
         transcription_language=transcription_language,
         number_of_speakers=number_of_speakers,
@@ -105,16 +61,8 @@ def create_batch_upload_files(
     meeting_dates: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
-    """Upload multiple meeting files for processing with individual custom parameters.
-
-    Parameters:
-    - files: List of files to upload
-    - transcription_languages: Comma-separated list of languages (one per file) or single value for all
-    - number_of_speakers_list: Comma-separated list of speaker counts (one per file) or single value for all
-    - meeting_dates: Comma-separated list of ISO date strings (one per file) or empty for none
-    """
-    service = MeetingService(db)
-    return service.create_batch_meetings_from_upload(
+    """Upload multiple meeting files for processing."""
+    return _service(db).create_batch_meetings_from_upload(
         files=files,
         transcription_languages=transcription_languages,
         number_of_speakers_list=number_of_speakers_list,
@@ -122,69 +70,21 @@ def create_batch_upload_files(
     )
 
 
+# =============================================================================
+# Meeting CRUD
+# =============================================================================
+
+
 @router.get("/", response_model=list[schemas.Meeting])
 def read_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Retrieve a paginated list of all meetings.
-
-    Returns meetings ordered by creation date (newest first). Use pagination
-    parameters to retrieve large datasets efficiently.
-
-    **Parameters:**
-    - **skip**: Number of records to skip (for pagination, default: 0)
-    - **limit**: Maximum number of records to return (max: 1000, default: 100)
-
-    **Returns:**
-    List of meeting objects with all fields including status, transcripts,
-    summaries, and action items.
-
-    **Status Values:**
-    - uploaded: File uploaded, awaiting processing
-    - transcribing: Whisper transcription in progress
-    - analyzing: AI analysis in progress
-    - completed: All processing completed successfully
-    - failed: Processing encountered an error
-
-    **Example:**
-    ```
-    GET /api/v1/meetings/?skip=0&limit=10
-    ```
-    """
-    meetings = crud.get_meetings(db, skip=skip, limit=limit)
-    return meetings
+    """Retrieve a paginated list of all meetings."""
+    return _service(db).list_meetings(skip=skip, limit=limit)
 
 
 @router.get("/{meeting_id}", response_model=schemas.Meeting)
 def read_meeting(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Retrieve complete details for a specific meeting.
-
-    Returns full meeting data including transcripts with speaker diarization,
-    AI-generated summaries, action items, attachments, and metadata.
-
-    **Parameters:**
-    - **meeting_id**: Unique identifier of the meeting
-
-    **Returns:**
-    Complete meeting object with nested relationships:
-    - Transcription segments with speaker labels and timestamps
-    - AI-generated summary with key points
-    - Extracted action items with assignees and deadlines
-    - Attached documents and their embeddings
-    - Processing metadata and status
-
-    **Errors:**
-    - 404: Meeting not found
-
-    **Example:**
-    ```
-    GET /api/v1/meetings/42
-    ```
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    return db_meeting
+    """Retrieve complete details for a specific meeting."""
+    return _service(db).get_meeting_or_404(meeting_id)
 
 
 @router.put("/{meeting_id}", response_model=schemas.Meeting)
@@ -193,787 +93,161 @@ def update_meeting_details(
     meeting: schemas.MeetingUpdate,
     db: Session = Depends(get_db),
 ):
-    """
-    Update a meeting's details, e.g., rename it.
-    """
-    # Validate the meeting exists
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Validate filename if provided
+    """Update a meeting's details, e.g., rename it."""
     if meeting.filename and not meeting.filename.strip():
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
-
     try:
-        updated_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting=meeting)
-        print(f"Successfully updated meeting {meeting_id} with new filename: {meeting.filename}")
-        return updated_meeting
+        return _service(db).update_meeting(meeting_id, meeting)
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error updating meeting {meeting_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to update meeting")
 
 
 @router.post("/{meeting_id}/restart-processing", response_model=schemas.Meeting)
 def restart_meeting_processing(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Restart processing for a meeting that may be stuck or failed.
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Check if meeting is already fully completed
-    if db_meeting.status == models.MeetingStatus.COMPLETED.value:
-        is_fully_completed = (
-            db_meeting.transcription
-            and db_meeting.transcription.summary
-            and db_meeting.transcription.full_text
-            and db_meeting.transcription.action_items
-        )
-        if is_fully_completed:
-            raise HTTPException(
-                status_code=400,
-                detail="Meeting processing is already completed. All transcription, analysis, and action items are available.",
-            )
-
-    # Only allow restart for failed, completed, or stuck processing meetings
-    if db_meeting.status not in [
-        models.MeetingStatus.FAILED.value,
-        models.MeetingStatus.COMPLETED.value,
-        models.MeetingStatus.PROCESSING.value,
-    ]:
-        raise HTTPException(
-            status_code=400, detail=f"Cannot restart processing for meeting with status: {db_meeting.status}"
-        )
-
-    # Cancel existing task if it exists
-    if db_meeting.celery_task_id:
-        try:
-            from ...worker import celery_app
-
-            celery_app.control.revoke(db_meeting.celery_task_id, terminate=True)
-        except Exception as e:
-            print(f"Error cancelling existing task: {e}")
-
-    # Reset meeting status and clear previous processing data
-    crud.update_meeting_status(db, meeting_id, models.MeetingStatus.PENDING)
-    crud.update_meeting_processing_details(
-        db,
-        meeting_id,
-        current_stage=None,
-        stage_progress=0.0,
-        overall_progress=0.0,
-        processing_start_time=None,
-        stage_start_time=None,
-        error_message=None,
-        processing_logs=["Processing restarted manually"],
-    )
-
-    # Start new processing task
-    from ...tasks import process_meeting_task
-
-    task_result = process_meeting_task.delay(meeting_id)
-    crud.update_meeting_task_id(db, meeting_id, task_result.id)
-
-    # Return updated meeting
-    return crud.get_meeting(db, meeting_id=meeting_id)
+    """Restart processing for a meeting that may be stuck or failed."""
+    return _service(db).restart_processing(meeting_id)
 
 
 @router.post("/{meeting_id}/retry-analysis", response_model=schemas.Meeting)
 def retry_meeting_analysis(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Retry only the analysis phase for a meeting that has failed analysis but has valid transcription.
-    This is useful when the LLM connection failed but transcription/diarization completed successfully.
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Check if meeting has failed
-    if db_meeting.status != models.MeetingStatus.FAILED.value:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot retry analysis for meeting with status: {db_meeting.status}. Only FAILED meetings can be retried.",
-        )
-
-    # Check if meeting has transcription data (required for analysis)
-    if not db_meeting.transcription or not db_meeting.transcription.full_text:
-        raise HTTPException(
-            status_code=400,
-            detail="Meeting has no transcription data. Use /restart-processing to reprocess the entire meeting.",
-        )
-
-    # Cancel existing task if it exists
-    if db_meeting.celery_task_id:
-        try:
-            from ...worker import celery_app
-
-            celery_app.control.revoke(db_meeting.celery_task_id, terminate=True)
-        except Exception as e:
-            print(f"Error cancelling existing task: {e}")
-
-    # Update meeting status to allow reprocessing
-    crud.update_meeting_status(db, meeting_id, models.MeetingStatus.PROCESSING)
-    crud.update_meeting_processing_details(
-        db,
-        meeting_id,
-        current_stage=models.ProcessingStage.ANALYSIS.value,
-        stage_progress=0.0,
-        overall_progress=75.0,
-        error_message=None,
-        processing_logs=["Retrying analysis after previous failure"],
-    )
-
-    # Start new processing task (it will skip to analysis since transcription exists)
-    from ...tasks import process_meeting_task
-
-    task_result = process_meeting_task.delay(meeting_id)
-    crud.update_meeting_task_id(db, meeting_id, task_result.id)
-
-    # Return updated meeting
-    return crud.get_meeting(db, meeting_id=meeting_id)
+    """Retry only the analysis phase for a meeting that has failed analysis but has valid transcription."""
+    return _service(db).retry_analysis(meeting_id)
 
 
 @router.delete("/{meeting_id}", status_code=204)
 def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Delete a meeting, its transcription, and the associated file.
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Attempt to delete the file
-    file_deleted = False
+    """Delete a meeting, its transcription, and the associated file."""
     try:
-        if db_meeting.filepath and os.path.exists(db_meeting.filepath):
-            os.remove(db_meeting.filepath)
-            file_deleted = True
-            print(f"Successfully deleted file: {db_meeting.filepath}")
-        else:
-            print(f"File not found or path empty: {db_meeting.filepath}")
-    except OSError as e:
-        # Log this error, but don't block deletion of the DB record
-        print(f"Error deleting file {db_meeting.filepath}: {e}")
-
-    # Delete the meeting from the database
-    try:
-        crud.delete_meeting(db, meeting_id=meeting_id)
-        print(f"Successfully deleted meeting {meeting_id} from database")
+        _service(db).delete_meeting(meeting_id)
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error deleting meeting {meeting_id} from database: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete meeting from database")
-
-    return  # Should return 204 No Content
+    return
 
 
 @router.post("/bulk/delete", response_model=schemas.BulkOperationResponse)
 def bulk_delete_meetings(request: schemas.BulkDeleteRequest, db: Session = Depends(get_db)):
-    """
-    Delete multiple meetings in a single transaction.
-
-    Args:
-        request: Contains list of meeting IDs to delete
-
-    Returns:
-        BulkOperationResponse with success/failure counts and any errors
-    """
-    success_count = 0
-    failed_count = 0
-    failed_ids = []
-    errors = {}
-
-    # Start transaction
-    try:
-        for meeting_id in request.meeting_ids:
-            try:
-                db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-                if not db_meeting:
-                    failed_count += 1
-                    failed_ids.append(meeting_id)
-                    errors[meeting_id] = "Meeting not found"
-                    continue
-
-                # Delete associated file if it exists
-                try:
-                    if db_meeting.filepath and os.path.exists(db_meeting.filepath):
-                        os.remove(db_meeting.filepath)
-                except OSError as e:
-                    print(f"Warning: Could not delete file for meeting {meeting_id}: {e}")
-
-                # Delete from database
-                crud.delete_meeting(db, meeting_id=meeting_id)
-                success_count += 1
-
-            except Exception as e:
-                failed_count += 1
-                failed_ids.append(meeting_id)
-                errors[meeting_id] = str(e)
-                print(f"Error deleting meeting {meeting_id}: {e}")
-
-        # Commit transaction if any successes
-        if success_count > 0:
-            db.commit()
-
-        return schemas.BulkOperationResponse(
-            success_count=success_count,
-            failed_count=failed_count,
-            failed_ids=failed_ids,
-            errors=errors if errors else None,
-        )
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Bulk delete failed: {str(e)}")
+    """Delete multiple meetings in a single transaction."""
+    return _service(db).bulk_delete(request.meeting_ids)
 
 
 @router.post("/bulk/update", response_model=schemas.BulkOperationResponse)
 def bulk_update_meetings(request: schemas.BulkUpdateRequest, db: Session = Depends(get_db)):
-    """
-    Update multiple meetings with the same changes in a single transaction.
-
-    Args:
-        request: Contains list of meeting IDs and the updates to apply
-
-    Returns:
-        BulkOperationResponse with success/failure counts and any errors
-    """
-    success_count = 0
-    failed_count = 0
-    failed_ids = []
-    errors = {}
-
-    try:
-        for meeting_id in request.meeting_ids:
-            try:
-                db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-                if not db_meeting:
-                    failed_count += 1
-                    failed_ids.append(meeting_id)
-                    errors[meeting_id] = "Meeting not found"
-                    continue
-
-                # Apply updates
-                update_data = request.updates.model_dump(exclude_unset=True)
-                for key, value in update_data.items():
-                    setattr(db_meeting, key, value)
-
-                success_count += 1
-
-            except Exception as e:
-                failed_count += 1
-                failed_ids.append(meeting_id)
-                errors[meeting_id] = str(e)
-                print(f"Error updating meeting {meeting_id}: {e}")
-
-        # Commit transaction if any successes
-        if success_count > 0:
-            db.commit()
-
-        return schemas.BulkOperationResponse(
-            success_count=success_count,
-            failed_count=failed_count,
-            failed_ids=failed_ids,
-            errors=errors if errors else None,
-        )
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Bulk update failed: {str(e)}")
+    """Update multiple meetings with the same changes in a single transaction."""
+    return _service(db).bulk_update(request.meeting_ids, request.updates)
 
 
-# Speaker CRUD endpoints
+# =============================================================================
+# Speaker Endpoints
+# =============================================================================
+
+
 @router.post("/{meeting_id}/speakers", response_model=schemas.Speaker)
 def add_speaker(meeting_id: int, speaker: schemas.SpeakerCreate, db: Session = Depends(get_db)):
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    db_speaker = models.Speaker(meeting_id=meeting_id, name=speaker.name, label=speaker.label)
-    db.add(db_speaker)
-    db.commit()
-    db.refresh(db_speaker)
-    return db_speaker
+    return _service(db).add_speaker(meeting_id, speaker.name, speaker.label)
 
 
 @router.get("/{meeting_id}/speakers", response_model=list[schemas.Speaker])
 def get_speakers(meeting_id: int, db: Session = Depends(get_db)):
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    return db_meeting.speakers
+    return _service(db).get_speakers(meeting_id)
 
 
 @router.put("/speakers/{speaker_id}", response_model=schemas.Speaker)
 def update_speaker(speaker_id: int, speaker: schemas.SpeakerCreate, db: Session = Depends(get_db)):
-    from ...core.processing.transcript_formatter import update_speaker_name_in_transcript
-
-    db_speaker = db.query(models.Speaker).filter(models.Speaker.id == speaker_id).first()
-    if not db_speaker:
-        raise HTTPException(status_code=404, detail="Speaker not found")
-
-    # Store old values for updating transcript and action items
-    old_name = db_speaker.name
-    old_label = db_speaker.label
-
-    # Update speaker
-    db_speaker.name = speaker.name
-    db_speaker.label = speaker.label
-
-    # Update transcript text and action items if speaker name changed
-    if old_name != speaker.name or old_label != speaker.label:
-        # Get the meeting with all related data
-        meeting = db.query(models.Meeting).filter(models.Meeting.id == db_speaker.meeting_id).first()
-        if meeting and meeting.transcription:
-            # Update transcript text: replace speaker references
-            if meeting.transcription.full_text:
-                updated_text = meeting.transcription.full_text
-
-                # Replace old label if it exists
-                if old_label and old_label != speaker.name:
-                    updated_text = update_speaker_name_in_transcript(updated_text, old_label, speaker.name)
-
-                # Replace old name if it's different from both the label and the new name
-                if old_name and old_name != speaker.name and old_name != old_label:
-                    updated_text = update_speaker_name_in_transcript(updated_text, old_name, speaker.name)
-
-                meeting.transcription.full_text = updated_text
-
-            # Update action items owner field
-            for action_item in meeting.transcription.action_items:
-                # Update if action item owner matches old speaker name or label (case-insensitive)
-                if action_item.owner and (
-                    (old_name and action_item.owner.lower() == old_name.lower())
-                    or (old_label and action_item.owner.lower() == old_label.lower())
-                ):
-                    action_item.owner = speaker.name
-
-    db.commit()
-    db.refresh(db_speaker)
-    return db_speaker
+    return _service(db).update_speaker(speaker_id, speaker.name, speaker.label)
 
 
 @router.delete("/speakers/{speaker_id}", status_code=204)
 def delete_speaker(speaker_id: int, db: Session = Depends(get_db)):
-    db_speaker = db.query(models.Speaker).filter(models.Speaker.id == speaker_id).first()
-    if not db_speaker:
-        raise HTTPException(status_code=404, detail="Speaker not found")
-    db.delete(db_speaker)
-    db.commit()
+    _service(db).delete_speaker(speaker_id)
     return
 
 
-# Manual Action Item CRUD endpoints
+# =============================================================================
+# Action Item Endpoints
+# =============================================================================
+
+
 @router.get("/action-items/", response_model=list[schemas.ActionItemWithMeeting])
 def list_all_action_items(skip: int = 0, limit: int = 1000, status: str | None = None, db: Session = Depends(get_db)):
-    """
-    Retrieve all action items across all meetings.
-
-    Returns action items with associated meeting context for Kanban boards
-    and calendar views. Supports filtering by status and pagination.
-
-    **Parameters:**
-    - **skip**: Number of items to skip (default: 0)
-    - **limit**: Maximum items to return (max: 1000, default: 1000)
-    - **status**: Filter by status: 'pending', 'in-progress', or 'completed'
-
-    **Returns:**
-    List of action items with meeting metadata (meeting_id, meeting_title, meeting_date)
-
-    **Example:**
-    ```
-    GET /api/v1/meetings/action-items/?status=pending&limit=50
-    ```
-    """
-    action_items = crud.get_all_action_items(db, skip=skip, limit=limit, status=status)
-
-    # Enrich with meeting information
-    enriched_items = []
-    for item in action_items:
-        item_dict = {**item.__dict__, "meeting_id": None, "meeting_title": None, "meeting_date": None}
-
-        # Get meeting info from transcription
-        if item.transcription_id:
-            transcription = (
-                db.query(models.Transcription).filter(models.Transcription.id == item.transcription_id).first()
-            )
-            if transcription and transcription.meeting:
-                item_dict["meeting_id"] = transcription.meeting.id
-                item_dict["meeting_title"] = transcription.meeting.filename
-                item_dict["meeting_date"] = transcription.meeting.meeting_date
-
-        enriched_items.append(schemas.ActionItemWithMeeting(**item_dict))
-
-    return enriched_items
+    """Retrieve all action items across all meetings."""
+    return _service(db).list_action_items(skip=skip, limit=limit, status=status)
 
 
 @router.post("/transcriptions/{transcription_id}/action-items", response_model=schemas.ActionItem)
 def add_action_item(transcription_id: int, action_item: schemas.ActionItemCreate, db: Session = Depends(get_db)):
-    return crud.create_action_item(db, transcription_id, action_item, is_manual=True)
+    return _service(db).add_action_item(transcription_id, action_item)
 
 
 @router.put("/action-items/{item_id}", response_model=schemas.ActionItem)
 def update_action_item(item_id: int, action_item: schemas.ActionItemUpdate, db: Session = Depends(get_db)):
-    updated_item = crud.update_action_item(db, item_id, action_item)
-
-    # If the item is synced to Google Calendar, update the event
-    if updated_item.synced_to_calendar and updated_item.google_calendar_event_id:
-        try:
-            from ...core.integrations.google_calendar import GoogleCalendarService
-
-            calendar_service = GoogleCalendarService(db)
-            if calendar_service.is_connected():
-                # Get meeting title for context
-                transcription = (
-                    db.query(models.Transcription)
-                    .filter(models.Transcription.id == updated_item.transcription_id)
-                    .first()
-                )
-                meeting_title = None
-                if transcription and transcription.meeting:
-                    meeting_title = transcription.meeting.filename
-
-                calendar_service.update_event(updated_item.google_calendar_event_id, updated_item, meeting_title)
-        except Exception as e:
-            print(f"Error updating Google Calendar event: {e}")
-            # Don't fail the request if calendar sync fails
-
-    return updated_item
+    return _service(db).update_action_item(item_id, action_item)
 
 
 @router.delete("/action-items/{item_id}", status_code=204)
 def delete_action_item(item_id: int, db: Session = Depends(get_db)):
-    # Get the item before deletion to check if it's synced to Google Calendar
-    action_item = crud.get_action_item(db, item_id)
-
-    # If synced to Google Calendar, delete the event first
-    if action_item and action_item.synced_to_calendar and action_item.google_calendar_event_id:
-        try:
-            from ...core.integrations.google_calendar import GoogleCalendarService
-
-            calendar_service = GoogleCalendarService(db)
-            if calendar_service.is_connected():
-                calendar_service.delete_event(action_item.google_calendar_event_id)
-        except Exception as e:
-            print(f"Error deleting Google Calendar event: {e}")
-            # Continue with database deletion even if calendar delete fails
-
-    crud.delete_action_item(db, item_id)
+    _service(db).delete_action_item(item_id)
     return
 
 
-# Meeting tags/folder update endpoint
+# =============================================================================
+# Tags / Folder / Notes
+# =============================================================================
+
+
 @router.put("/{meeting_id}/tags-folder", response_model=schemas.Meeting)
 def update_meeting_tags_folder(
     meeting_id: int, tags: str | None = Body(None), folder: str | None = Body(None), db: Session = Depends(get_db)
 ):
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-    if tags is not None:
-        db_meeting.tags = tags
-    if folder is not None:
-        db_meeting.folder = folder
-    db.commit()
-    db.refresh(db_meeting)
-
-    if tags is not None:
-        try:
-            from app.modules.projects.service import ProjectService
-
-            ProjectService(db).sync_meeting_to_projects_by_tags(meeting_id)
-        except Exception as e:
-            print(f"Warning: Failed to auto-sync meeting {meeting_id} to projects: {e}")
-    return db_meeting
+    return _service(db).update_tags_folder(meeting_id, tags, folder)
 
 
 @router.put("/{meeting_id}/notes", response_model=schemas.Meeting)
 def update_meeting_notes(meeting_id: int, notes: str | None = Body(None, embed=True), db: Session = Depends(get_db)):
     """Update notes for a meeting and sync meeting links."""
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Check if notes actually changed
-    notes_changed = db_meeting.notes != notes
-
-    db_meeting.notes = notes
-    db.commit()
-    db.refresh(db_meeting)
-
-    # Sync meeting links from notes
-    sync_meeting_links_from_notes(db, meeting_id, notes)
-
-    # Only trigger embedding recomputation if notes actually changed
-    # This avoids unnecessary recomputation on every save
-    if notes_changed and notes:  # Only if there's actual content to index
-        from ...tasks import update_notes_embeddings
-
-        update_notes_embeddings.delay(meeting_id, notes)
-
-    return db_meeting
+    return _service(db).update_notes(meeting_id, notes)
 
 
-def sync_meeting_links_from_notes(db: Session, source_meeting_id: int, notes: str | None):
-    """
-    Extract meeting references from notes and sync with meeting_links table.
-    Removes old links and adds new ones based on current notes content.
-    """
-    if not notes:
-        # If notes are empty, remove all links from this meeting
-        db.query(models.MeetingLink).filter(models.MeetingLink.source_meeting_id == source_meeting_id).delete()
-        db.commit()
-        return
-
-    # Extract meeting IDs from notes
-    meeting_ids = set()
-
-    # Pattern 1: #meeting-123 or #123
-    pattern1 = r"#(?:meeting-)?(\d+)"
-    matches = re.finditer(pattern1, notes, re.IGNORECASE)
-    for match in matches:
-        meeting_ids.add(int(match.group(1)))
-
-    # Pattern 2: meeting:123
-    pattern2 = r"meeting:\s*(\d+)"
-    matches = re.finditer(pattern2, notes, re.IGNORECASE)
-    for match in matches:
-        meeting_ids.add(int(match.group(1)))
-
-    # Pattern 3: [[123]]
-    pattern3 = r"\[\[(\d+)\]\]"
-    matches = re.finditer(pattern3, notes, re.IGNORECASE)
-    for match in matches:
-        meeting_ids.add(int(match.group(1)))
-
-    # Remove self-references
-    meeting_ids.discard(source_meeting_id)
-
-    # Get existing links for this meeting
-    existing_links = (
-        db.query(models.MeetingLink).filter(models.MeetingLink.source_meeting_id == source_meeting_id).all()
-    )
-
-    existing_target_ids = {link.target_meeting_id for link in existing_links}
-
-    # Find links to add and remove
-    to_add = meeting_ids - existing_target_ids
-    to_remove = existing_target_ids - meeting_ids
-
-    # Remove outdated links
-    if to_remove:
-        db.query(models.MeetingLink).filter(
-            models.MeetingLink.source_meeting_id == source_meeting_id,
-            models.MeetingLink.target_meeting_id.in_(to_remove),
-        ).delete(synchronize_session=False)
-
-    # Add new links (verify target meetings exist)
-    for target_id in to_add:
-        target_meeting = db.query(models.Meeting).filter(models.Meeting.id == target_id).first()
-
-        if target_meeting:
-            new_link = models.MeetingLink(source_meeting_id=source_meeting_id, target_meeting_id=target_id)
-            db.add(new_link)
-
-    db.commit()
+# =============================================================================
+# Chat Endpoints
+# =============================================================================
 
 
 @router.post("/{meeting_id}/chat", response_model=chat_schemas.ChatResponse)
 async def chat_with_meeting_endpoint(meeting_id: int, request: chat_schemas.ChatRequest, db: Session = Depends(get_db)):
-    """
-    Chat with a meeting's transcription.
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    if not db_meeting.transcription or not db_meeting.transcription.full_text:
-        raise HTTPException(status_code=404, detail="Transcription not available for this meeting")
-
-    # Save user message to database
-    chat_crud.create_chat_message(db, meeting_id, "user", request.query)
-
-    chat_history = request.chat_history or []
-
-    model_config = None
-    if db_meeting.model_configuration_id:
-        model_config = settings_crud.get_model_configuration(db, db_meeting.model_configuration_id)
-    if not model_config:
-        model_config = settings_crud.get_default_model_configuration(db)
-
-    llm_config = None
-    if model_config:
-        llm_config = chat.model_config_to_llm_config(model_config, use_analysis=False)
-
-    # Check if tools should be enabled (default to True)
-    enable_tools = getattr(request, "enable_tools", True)
-
-    response_text, sources, follow_ups = await rag.generate_rag_response(
-        db,
-        query=request.query,
-        meeting_id=meeting_id,
-        chat_history=chat_history,
-        top_k=request.top_k or 5,
-        llm_config=llm_config,
-        use_full_transcript=request.use_full_transcript or False,
-        full_transcript=db_meeting.transcription.full_text if request.use_full_transcript else None,
-        enable_tools=enable_tools,
-        allow_iterative_research=True,
-    )
-
-    chat_crud.create_chat_message(db, meeting_id, "assistant", response_text)
-
-    return chat_schemas.ChatResponse(response=response_text, sources=sources, follow_up_suggestions=follow_ups)
+    """Chat with a meeting's transcription."""
+    return await _service(db).chat_with_meeting(meeting_id, request)
 
 
 @router.get("/{meeting_id}/chat/history", response_model=chat_schemas.ChatHistoryResponse)
 def get_chat_history_endpoint(meeting_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Get chat history for a meeting with pagination.
-
-    Args:
-        meeting_id: ID of the meeting
-        skip: Number of messages to skip (default: 0)
-        limit: Maximum number of messages to return (default: 100)
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    chat_messages = chat_crud.get_chat_history(db, meeting_id, skip=skip, limit=limit)
-    return chat_schemas.ChatHistoryResponse(history=chat_messages)
+    """Get chat history for a meeting with pagination."""
+    return _service(db).get_chat_history(meeting_id, skip=skip, limit=limit)
 
 
 @router.delete("/{meeting_id}/chat/history")
 def clear_chat_history_endpoint(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Clear chat history for a meeting.
-    """
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
+    """Clear chat history for a meeting."""
+    return _service(db).clear_chat_history(meeting_id)
 
-    chat_crud.clear_chat_history(db, meeting_id)
-    return {"message": "Chat history cleared successfully"}
+
+# =============================================================================
+# Download / Export
+# =============================================================================
 
 
 @router.get("/{meeting_id}/download/{format}")
 def download_meeting(meeting_id: int, format: str, db: Session = Depends(get_db)):
-    """
-    Download meeting data in the specified format (json, txt, docx, pdf).
-    """
-    # Validate format
-    allowed_formats = ["json", "txt", "docx", "pdf"]
-    if format.lower() not in allowed_formats:
-        raise HTTPException(status_code=400, detail=f"Invalid format. Allowed formats: {', '.join(allowed_formats)}")
-
-    # Get meeting data
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if not db_meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Check if meeting has transcription
-    if not db_meeting.transcription:
-        raise HTTPException(
-            status_code=404, detail="Meeting transcription not available. Processing may still be in progress."
-        )
-
-    # Prepare the data dictionary
-    data = {
-        "filename": db_meeting.filename,
-        "created_at": db_meeting.created_at,
-        "status": db_meeting.status,
-        "summary": db_meeting.transcription.summary or "No summary available",
-        "transcript": db_meeting.transcription.full_text or "No transcript available",
-        "notes": db_meeting.notes or "",
-        "action_items": [],
-    }
-
-    # Add action items with detailed information
-    if db_meeting.transcription.action_items:
-        for item in db_meeting.transcription.action_items:
-            action_item_data = {
-                "task": item.task,
-                "owner": item.owner or "Unassigned",
-                "due_date": item.due_date or "No due date",
-                "status": item.status or "pending",
-                "priority": item.priority or "medium",
-                "notes": item.notes or "",
-            }
-            data["action_items"].append(action_item_data)
-
-    # Add speakers information if available
-    if db_meeting.speakers:
-        data["speakers"] = [{"name": speaker.name, "label": speaker.label or ""} for speaker in db_meeting.speakers]
-
-    # Add tags and folder if available
-    if db_meeting.tags:
-        data["tags"] = db_meeting.tags
-    if db_meeting.folder:
-        data["folder"] = db_meeting.folder
-
-    # Add model configuration info if available
-    if db_meeting.model_configuration:
-        data["model_info"] = {
-            "name": db_meeting.model_configuration.name,
-            "transcription_language": db_meeting.transcription_language,
-            "number_of_speakers": db_meeting.number_of_speakers,
-        }
-
-    # Create a temporary file for export
-    temp_dir = tempfile.mkdtemp()
-    base_name = db_meeting.filename.replace(" ", "_")
-    # Remove extension from filename if present
-    base_name = Path(base_name).stem
-
-    try:
-        # Export to the specified format
-        export_path = None
-        if format.lower() == "json":
-            export_path = export_to_json(data, os.path.join(temp_dir, f"{base_name}.json"))
-        elif format.lower() == "txt":
-            export_path = export_to_txt(data, os.path.join(temp_dir, f"{base_name}.txt"))
-        elif format.lower() == "docx":
-            export_path = export_to_docx(data, os.path.join(temp_dir, f"{base_name}.docx"))
-            if export_path is None:
-                raise HTTPException(
-                    status_code=500, detail="DOCX export not available. python-docx library may not be installed."
-                )
-        elif format.lower() == "pdf":
-            export_path = export_to_pdf(data, os.path.join(temp_dir, f"{base_name}.pdf"))
-            if export_path is None:
-                raise HTTPException(
-                    status_code=500, detail="PDF export not available. reportlab library may not be installed."
-                )
-
-        if not export_path or not os.path.exists(export_path):
-            raise HTTPException(status_code=500, detail="Failed to generate export file")
-
-        # Determine media type
-        media_types = {
-            "json": "application/json",
-            "txt": "text/plain",
-            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "pdf": "application/pdf",
-        }
-
-        # Return the file as a download
-        return FileResponse(
-            path=str(export_path),
-            media_type=media_types[format.lower()],
-            filename=f"{base_name}.{format.lower()}",
-            background=None,  # Don't clean up immediately
-        )
-
-    except Exception as e:
-        # Clean up temporary directory on error
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=f"Error generating export: {str(e)}")
+    """Download meeting data in the specified format (json, txt, docx, pdf)."""
+    return _service(db).get_export_file_response(meeting_id, format)
 
 
-# ============================================================================
+# =============================================================================
 # Attachment Endpoints
-# ============================================================================
+# =============================================================================
 
 
 @router.post("/{meeting_id}/attachments", response_model=schemas.Attachment)
@@ -983,372 +257,78 @@ async def upload_attachment(
     description: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
-    """
-    Upload an attachment file for a meeting.
-
-    Args:
-        meeting_id: ID of the meeting to attach the file to
-        file: File to upload
-        description: Optional description of the attachment
-        db: Database session
-
-    Returns:
-        The created attachment record
-    """
-    # Verify meeting exists
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Create attachments directory if it doesn't exist
-    attachments_dir = Path(config.upload.upload_dir) / "attachments"
-    attachments_dir.mkdir(parents=True, exist_ok=True)
-
-    # Sanitize filename
-    original_filename = file.filename or "attachment"
-    safe_filename = re.sub(r"[^\w\s.-]", "", original_filename)
-
-    # Create unique filename with meeting_id prefix and proper timestamp
-    import time
-
-    timestamp = str(int(time.time() * 1000))  # Current timestamp in milliseconds
-    unique_filename = f"{meeting_id}_{timestamp}_{safe_filename}"
-    file_path = attachments_dir / unique_filename
-
-    # Save file
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
-
-    # Get file size and mime type
-    file_size = os.path.getsize(file_path)
-    mime_type = file.content_type or "application/octet-stream"
-
-    # Create attachment record
-    attachment = crud.create_attachment(
-        db=db,
-        meeting_id=meeting_id,
-        filename=original_filename,
-        filepath=str(file_path),
-        file_size=file_size,
-        mime_type=mime_type,
-        description=description,
-    )
-
-    # Trigger embedding computation only for the new attachment
-    # This avoids recomputing embeddings for the entire meeting
-    from ...tasks import index_attachment
-
-    index_attachment.delay(attachment.id)
-
-    return attachment
+    """Upload an attachment file for a meeting."""
+    return _service(db).upload_attachment(meeting_id, file, description)
 
 
 @router.get("/{meeting_id}/attachments", response_model=list[schemas.Attachment])
 def get_meeting_attachments(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Get all attachments for a meeting.
-
-    Args:
-        meeting_id: ID of the meeting
-        db: Database session
-
-    Returns:
-        List of attachments for the meeting
-    """
-    # Verify meeting exists
-    db_meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if db_meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    attachments = crud.get_meeting_attachments(db, meeting_id=meeting_id)
-    return attachments
+    """Get all attachments for a meeting."""
+    return _service(db).get_attachments(meeting_id)
 
 
 @router.get("/attachments/{attachment_id}/download")
 async def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    """
-    Download an attachment file.
-
-    Args:
-        attachment_id: ID of the attachment to download
-        db: Database session
-
-    Returns:
-        The attachment file
-    """
-    # Get attachment record
-    attachment = crud.get_attachment(db, attachment_id=attachment_id)
-    if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # Verify file exists
-    file_path = Path(attachment.filepath)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Attachment file not found on disk")
-
-    # Return file
-    return FileResponse(path=str(file_path), media_type=attachment.mime_type, filename=attachment.filename)
+    """Download an attachment file."""
+    return _service(db).get_attachment_file_response(attachment_id)
 
 
 @router.get("/attachments/{attachment_id}/preview")
 async def preview_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    """
-    Preview an attachment file in-browser (for PDFs and other previewable types).
-
-    Args:
-        attachment_id: ID of the attachment to preview
-        db: Database session
-
-    Returns:
-        The attachment file with inline content disposition for browser preview
-    """
-    # Get attachment record
-    attachment = crud.get_attachment(db, attachment_id=attachment_id)
-    if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # Verify file exists
-    file_path = Path(attachment.filepath)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Attachment file not found on disk")
-
-    # Return file with inline disposition for browser preview
-    return FileResponse(
-        path=str(file_path),
-        media_type=attachment.mime_type,
-        filename=attachment.filename,
-        headers={"Content-Disposition": f'inline; filename="{attachment.filename}"'},
-    )
+    """Preview an attachment file in-browser."""
+    return _service(db).get_attachment_file_response(attachment_id, inline=True)
 
 
 @router.put("/attachments/{attachment_id}", response_model=schemas.Attachment)
 def update_attachment_description(
     attachment_id: int, description: str = Body(..., embed=True), db: Session = Depends(get_db)
 ):
-    """
-    Update the description of an attachment.
-
-    Args:
-        attachment_id: ID of the attachment to update
-        description: New description
-        db: Database session
-
-    Returns:
-        The updated attachment record
-    """
-    # Get attachment
-    attachment = crud.get_attachment(db, attachment_id=attachment_id)
-    if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # Update description
-    updated_attachment = crud.update_attachment(db=db, attachment_id=attachment_id, description=description)
-
-    return updated_attachment
+    """Update the description of an attachment."""
+    return _service(db).update_attachment_description(attachment_id, description)
 
 
 @router.delete("/attachments/{attachment_id}", status_code=204)
 def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    """
-    Delete an attachment and its file.
-
-    Args:
-        attachment_id: ID of the attachment to delete
-        db: Database session
-
-    Returns:
-        No content on success
-    """
-    # Get attachment
-    attachment = crud.get_attachment(db, attachment_id=attachment_id)
-    if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-
-    meeting_id = attachment.meeting_id  # Store meeting_id before deletion
-
-    # Delete file from disk
-    file_path = Path(attachment.filepath)
-    if file_path.exists():
-        try:
-            file_path.unlink()
-        except Exception as e:
-            # Log error but continue with database deletion
-            print(f"Warning: Failed to delete attachment file: {str(e)}")
-
-    # Delete database record
-    crud.delete_attachment(db=db, attachment_id=attachment_id)
-
-    # Remove embeddings for deleted attachment from vector store
-    # This is more efficient than recomputing all embeddings
-    from ...tasks import remove_attachment_embeddings
-
-    remove_attachment_embeddings.delay(meeting_id, attachment_id)
-
+    """Delete an attachment and its file."""
+    _service(db).delete_attachment(attachment_id)
     return None
+
+
+# =============================================================================
+# Audio Endpoints
+# =============================================================================
 
 
 @router.get("/{meeting_id}/audio")
 def stream_meeting_audio(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Stream the meeting audio file for playback.
-    Returns the MP3 audio file that can be streamed to the frontend.
+    """Stream the meeting audio file for playback."""
+    return _service(db).get_audio_file_response(meeting_id)
 
-    Args:
-        meeting_id: ID of the meeting
-        db: Database session
 
-    Returns:
-        FileResponse with the audio file
-    """
-    # Get meeting record
-    meeting = crud.get_meeting(db, meeting_id=meeting_id)
-    if meeting is None:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Check if audio file exists
-    if not meeting.audio_filepath:
-        raise HTTPException(status_code=404, detail="Audio file not available for this meeting")
-
-    audio_path = Path(meeting.audio_filepath)
-    if not audio_path.exists():
-        raise HTTPException(status_code=404, detail="Audio file not found on disk")
-
-    # Return audio file with streaming support
-    return FileResponse(
-        path=str(audio_path),
-        media_type="audio/mpeg",
-        filename=f"{meeting.filename}_audio.mp3",
-        headers={"Accept-Ranges": "bytes", "Content-Disposition": f'inline; filename="{meeting.filename}_audio.mp3"'},
-    )
+# =============================================================================
+# Misc / Admin Endpoints
+# =============================================================================
 
 
 @router.get("/tags/all", response_model=list[str])
 def get_all_tags(db: Session = Depends(get_db)):
     """Get all unique tags from meetings and global chat sessions."""
-    tags_set = set()
-
-    # Get tags from meetings
-    meetings = crud.get_meetings(db)
-    for meeting in meetings:
-        if meeting.tags:
-            for tag in meeting.tags.split(","):
-                tag = tag.strip()
-                if tag:
-                    tags_set.add(tag)
-
-    # Get tags from global chat sessions
-    # Note: list_global_chat_sessions is in chat module, but we are in meetings module.
-    # We should probably import it from chat module or move this endpoint to a general router.
-    # For now, let's import it from the main crud which aggregates everything, or from chat module directly.
-    # But wait, we are in backend/app/modules/meetings/router.py
-    # We can import from ..chat.crud
-    from ..chat import crud as chat_crud
-
-    sessions = chat_crud.list_global_chat_sessions(db)
-    for session in sessions:
-        if session.tags:
-            for tag in session.tags.split(","):
-                tag = tag.strip()
-                if tag:
-                    tags_set.add(tag)
-
-    return sorted(tags_set)
+    return _service(db).get_all_tags()
 
 
 @router.get("/speakers/all", response_model=list[str])
 def get_all_speakers(db: Session = Depends(get_db)):
-    """
-    Retrieve all unique speaker names across all meetings.
-    """
-    speakers = crud.get_all_unique_speakers(db)
-    # Filter out empty names and return the list directly (already strings from repository)
-    return [s for s in speakers if s]
+    """Retrieve all unique speaker names across all meetings."""
+    return _service(db).get_all_speakers()
 
 
 @router.post("/{meeting_id}/generate-audio", response_model=schemas.TaskStatus)
 def generate_audio_for_meeting(meeting_id: int, db: Session = Depends(get_db)):
-    """
-    Generate MP3 audio file for a meeting that's missing it.
-
-    This endpoint is useful for backfilling audio for meetings processed before
-    the audio_filepath feature was added.
-
-    Args:
-        meeting_id: ID of the meeting to generate audio for
-        db: Database session
-
-    Returns:
-        TaskStatus with the task ID if queued, or status if already exists
-    """
-    meeting = crud.get_meeting(db, meeting_id)
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    if meeting.audio_filepath and Path(meeting.audio_filepath).exists():
-        return schemas.TaskStatus(
-            status="already_exists",
-            audio_filepath=meeting.audio_filepath,
-            message="Audio file already exists for this meeting",
-        )
-
-    if not meeting.filepath or not Path(meeting.filepath).exists():
-        raise HTTPException(status_code=404, detail="Source file not found. Cannot generate audio.")
-
-    # Queue the audio generation task
-    from ...tasks import generate_audio_for_existing_meeting
-
-    task = generate_audio_for_existing_meeting.delay(meeting_id)
-
-    return schemas.TaskStatus(
-        status="queued", task_id=task.id, message=f"Audio generation task queued for meeting {meeting_id}"
-    )
+    """Generate MP3 audio file for a meeting that is missing it."""
+    return _service(db).generate_audio(meeting_id)
 
 
 @router.post("/admin/regenerate-all-audio", response_model=schemas.BatchTaskStatus)
 def regenerate_all_audio(force: bool = False, db: Session = Depends(get_db)):
-    """
-    Admin endpoint to regenerate audio for all meetings missing audio files.
-
-    This endpoint queues audio generation tasks for all completed meetings that
-    don't have an audio_filepath or where the audio file is missing.
-
-    Args:
-        force: If True, regenerate audio even if audio_filepath exists but file is missing
-        db: Database session
-
-    Returns:
-        BatchTaskStatus with count and task IDs
-    """
-    from ...tasks import generate_audio_for_existing_meeting
-
-    # Find meetings without audio
-    query = db.query(models.Meeting).filter(models.Meeting.status == MeetingStatus.COMPLETED.value)
-
-    if force:
-        # Include meetings where audio_filepath exists but file is missing
-        meetings = [m for m in query.all() if not m.audio_filepath or not Path(m.audio_filepath).exists()]
-    else:
-        # Only meetings without audio_filepath
-        meetings = query.filter(models.Meeting.audio_filepath.is_(None)).all()
-
-    if not meetings:
-        return schemas.BatchTaskStatus(
-            status="completed", count=0, task_ids=[], message="No meetings found that need audio generation"
-        )
-
-    task_ids = []
-    for meeting in meetings:
-        # Verify source file exists before queuing
-        if meeting.filepath and Path(meeting.filepath).exists():
-            task = generate_audio_for_existing_meeting.delay(meeting.id)
-            task_ids.append(task.id)
-
-    return schemas.BatchTaskStatus(
-        status="queued",
-        count=len(task_ids),
-        task_ids=task_ids,
-        message=f"Queued audio generation for {len(task_ids)} meetings",
-    )
+    """Admin endpoint to regenerate audio for all meetings missing audio files."""
+    return _service(db).regenerate_all_audio(force)

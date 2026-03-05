@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ... import crud
 from ...core.base.cache import clear_cache, get_cache_info
 from ...core.integrations.calendar import generate_ics_calendar
 from ...core.integrations.export import export_meeting_data
 from ...core.processing.checkpoint import CheckpointManager
 from ...database import get_db
+from ..meetings.repository import MeetingRepository
 
 router = APIRouter(
     prefix="/admin",
@@ -36,7 +36,7 @@ def export_meeting(
     """Export meeting data in specified formats."""
 
     # Get meeting and transcription
-    meeting = crud.get_meeting(db, meeting_id)
+    meeting = MeetingRepository(db).get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -74,7 +74,7 @@ def generate_meeting_calendar(meeting_id: int, db: Session = Depends(get_db)):
     """Generate ICS calendar file for meeting action items."""
 
     # Get meeting and transcription
-    meeting = crud.get_meeting(db, meeting_id)
+    meeting = MeetingRepository(db).get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -146,7 +146,7 @@ def get_meeting_checkpoints(meeting_id: int, db: Session = Depends(get_db)):
     """Get checkpoint information for a specific meeting."""
 
     # Verify meeting exists
-    meeting = crud.get_meeting(db, meeting_id)
+    meeting = MeetingRepository(db).get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -165,7 +165,7 @@ def clear_meeting_checkpoints(meeting_id: int, db: Session = Depends(get_db)):
     """Clear all checkpoints for a specific meeting."""
 
     # Verify meeting exists
-    meeting = crud.get_meeting(db, meeting_id)
+    meeting = MeetingRepository(db).get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -183,7 +183,7 @@ def validate_meeting_checkpoints(meeting_id: int, db: Session = Depends(get_db))
     """Validate all checkpoints for a specific meeting."""
 
     # Verify meeting exists
-    meeting = crud.get_meeting(db, meeting_id)
+    meeting = MeetingRepository(db).get_by_id(meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ...core.integrations.google_drive import GoogleDriveService
 from ...database import get_db
-from . import crud_drive
+from .repository import GoogleDriveRepository
 
 router = APIRouter(
     prefix="/google-drive",
@@ -115,7 +115,7 @@ def disconnect_google_drive(db: Session = Depends(get_db)):
 def get_google_drive_status(db: Session = Depends(get_db)):
     """Get the current status of Google Drive integration."""
     service = GoogleDriveService(db)
-    config = crud_drive.get_google_drive_sync_config(db)
+    config = GoogleDriveRepository(db).get_sync_config()
 
     return GoogleDriveStatusResponse(
         authenticated=service.is_authenticated(),
@@ -142,8 +142,7 @@ def update_google_drive_config(config: GoogleDriveSyncConfigRequest, db: Session
         raise HTTPException(status_code=400, detail="Sync folder ID is required when enabling sync")
 
     # Save configuration to database
-    db_config = crud_drive.save_google_drive_sync_config(
-        db,
+    db_config = GoogleDriveRepository(db).save_sync_config(
         sync_folder_id=config.sync_folder_id,
         processed_folder_id=config.processed_folder_id,
         enabled=config.enabled,
@@ -186,7 +185,7 @@ def trigger_sync(db: Session = Depends(get_db)):
     from ...tasks import sync_google_drive_folder
 
     service = GoogleDriveService(db)
-    config = crud_drive.get_google_drive_sync_config(db)
+    config = GoogleDriveRepository(db).get_sync_config()
 
     if not service.is_authenticated():
         raise HTTPException(status_code=401, detail="Not authenticated with Google Drive")
@@ -203,5 +202,5 @@ def trigger_sync(db: Session = Depends(get_db)):
 @router.get("/processed-files", response_model=list[ProcessedFileInfo])
 def get_processed_files(limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db)):
     """Get a list of files that have been processed from Google Drive."""
-    files = crud_drive.get_processed_files(db, limit=limit)
+    files = GoogleDriveRepository(db).get_processed_files(limit=limit)
     return files

@@ -197,3 +197,20 @@ class UserMappingRepository(BaseRepository[models.UserMapping, schemas.UserMappi
             Total count of active mappings
         """
         return self.db.query(func.count(self.model.id)).filter(self.model.is_active == True).scalar()
+
+    def list_all(self, skip: int = 0, limit: int = 100, is_active: bool | None = None) -> list[models.UserMapping]:
+        """
+        List user mappings with optional active filter.
+
+        Args:
+            skip: Pagination offset
+            limit: Maximum records to return
+            is_active: If provided, filter by active status; if None, return all
+
+        Returns:
+            List of user mappings
+        """
+        q = self.db.query(self.model)
+        if is_active is not None:
+            q = q.filter(self.model.is_active == is_active)
+        return q.offset(skip).limit(limit).all()

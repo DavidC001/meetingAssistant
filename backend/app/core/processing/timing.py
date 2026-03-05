@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from ...modules.meetings import crud
+from ...modules.meetings.repository import DiarizationTimingRepository
 from ..base.utils import get_file_metadata
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class DiarizationProgressTracker:
             self.audio_duration = None
 
         # Get average processing rate from historical data
-        self.avg_processing_rate = crud.get_average_diarization_rate(db)
+        self.avg_processing_rate = DiarizationTimingRepository(db).get_average_rate()
 
         # Calculate estimated total processing time
         if self.audio_duration and self.avg_processing_rate:
@@ -121,8 +121,7 @@ class DiarizationProgressTracker:
 
                 file_size = os.path.getsize(self.audio_path) if os.path.exists(self.audio_path) else None
 
-                crud.create_diarization_timing(
-                    self.db,
+                DiarizationTimingRepository(self.db).create_timing(
                     meeting_id=self.meeting_id,
                     audio_duration_seconds=self.audio_duration,
                     processing_time_seconds=total_time,
@@ -158,7 +157,7 @@ def estimate_diarization_time(db: Session, audio_path: str) -> float | None:
             return None
 
         # Get average processing rate
-        avg_rate = crud.get_average_diarization_rate(db)
+        avg_rate = DiarizationTimingRepository(db).get_average_rate()
 
         if avg_rate:
             return audio_duration * avg_rate

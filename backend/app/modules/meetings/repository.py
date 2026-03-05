@@ -15,7 +15,7 @@ Usage:
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import asc, or_
+from sqlalchemy import asc, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.base import BaseRepository, NotFoundError
@@ -82,9 +82,160 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         """Get all completed meetings."""
         return self.get_by_status(models.MeetingStatus.COMPLETED, skip, limit)
 
+    def list_by_statuses(self, statuses: list[models.MeetingStatus]) -> list[models.Meeting]:
+        """Get all meetings whose status is in the provided list."""
+        status_values = [s.value for s in statuses]
+        return self.db.query(models.Meeting).filter(models.Meeting.status.in_(status_values)).all()
+
+    def list_completed_without_audio(self) -> list[models.Meeting]:
+        """Get completed meetings that have no audio_filepath."""
+        return (
+            self.db.query(models.Meeting)
+            .filter(
+                models.Meeting.status == models.MeetingStatus.COMPLETED.value,
+                models.Meeting.audio_filepath.is_(None),
+            )
+            .all()
+        )
+
+    def list_completed_with_audio(self) -> list[models.Meeting]:
+        """Get completed meetings that have an audio_filepath set."""
+        return (
+            self.db.query(models.Meeting)
+            .filter(
+                models.Meeting.status == models.MeetingStatus.COMPLETED.value,
+                models.Meeting.audio_filepath.isnot(None),
+            )
+            .all()
+        )
+
+    def get_distinct_folders_all(self) -> list[str]:
+        """Get all distinct non-empty folder names across meetings of any status."""
+        rows = self.db.query(models.Meeting.folder).filter(models.Meeting.folder.isnot(None)).distinct().all()
+        return [r[0] for r in rows if r[0]]
+
+    def get_latest(self, meeting_ids: list[int] | None = None) -> models.Meeting | None:
+        """Return the most recently dated/created meeting, optionally scoped to meeting_ids."""
+        query = self.db.query(models.Meeting)
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        return query.order_by(models.Meeting.meeting_date.desc().nullslast(), models.Meeting.created_at.desc()).first()
+
+    def get_latest_by_folder(self, folder: str, meeting_ids: list[int] | None = None) -> models.Meeting | None:
+        """Return the most recent meeting in a given folder."""
+        query = self.db.query(models.Meeting).filter(models.Meeting.folder == folder)
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        return query.order_by(models.Meeting.meeting_date.desc().nullslast(), models.Meeting.created_at.desc()).first()
+
+    def get_latest_by_speaker_names(
+        self, speaker_names: list[str], meeting_ids: list[int] | None = None
+    ) -> models.Meeting | None:
+        """Return the most recent meeting that contains any of the given speaker names."""
+        query = (
+            self.db.query(models.Meeting)
+            .join(models.Speaker)
+            .filter(func.lower(models.Speaker.name).in_([n.lower() for n in speaker_names]))
+        )
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        return query.order_by(models.Meeting.meeting_date.desc().nullslast(), models.Meeting.created_at.desc()).first()
+
+    def list_with_transcriptions(self, meeting_ids: list[int] | None = None, limit: int = 50) -> list:
+        """Return (Meeting, Transcription) pairs where full_text is available."""
+        query = (
+            self.db.query(models.Meeting, models.Transcription)
+            .join(models.Transcription, models.Transcription.meeting_id == models.Meeting.id)
+            .filter(models.Transcription.full_text.isnot(None))
+        )
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        return (
+            query.order_by(models.Meeting.meeting_date.desc().nullslast(), models.Meeting.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def search_for_llm(
+        self,
+        search: str | None = None,
+        folder: str | None = None,
+        meeting_ids: list[int] | None = None,
+        limit: int = 20,
+    ) -> list[models.Meeting]:
+        """Search meetings by text (filename/folder/speaker) and/or folder, for LLM tool use."""
+        base_query = self.db.query(models.Meeting)
+        if meeting_ids:
+            base_query = base_query.filter(models.Meeting.id.in_(meeting_ids))
+        if folder:
+            base_query = base_query.filter(func.lower(models.Meeting.folder) == folder.lower())
+
+        if not search:
+            return (
+                base_query.order_by(models.Meeting.meeting_date.desc().nullslast(), models.Meeting.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+
+        search_lower = search.lower()
+        name_match = base_query.filter(
+            func.lower(models.Meeting.filename).contains(search_lower)
+            | func.lower(models.Meeting.folder).contains(search_lower)
+        )
+        speaker_match = base_query.join(models.Speaker, models.Speaker.meeting_id == models.Meeting.id).filter(
+            func.lower(models.Speaker.name).contains(search_lower)
+            | func.lower(func.coalesce(models.Speaker.label, "")).contains(search_lower)
+        )
+        seen: set[int] = set()
+        combined: list[models.Meeting] = []
+        for m in name_match.all():
+            if m.id not in seen:
+                seen.add(m.id)
+                combined.append(m)
+        for m in speaker_match.all():
+            if m.id not in seen:
+                seen.add(m.id)
+                combined.append(m)
+        combined.sort(
+            key=lambda m: (m.meeting_date or m.created_at) if (m.meeting_date or m.created_at) else datetime.min,
+            reverse=True,
+        )
+        return combined[:limit]
+
     def get_by_folder(self, folder: str, skip: int = 0, limit: int = 100) -> list[models.Meeting]:
         """Get meetings in a specific folder."""
         return self.get_multi(skip=skip, limit=limit, filters={"folder": folder})
+
+    def get_unique_folders(self) -> list[str]:
+        """Get list of unique non-empty folders from completed meetings."""
+        from sqlalchemy import distinct
+
+        rows = (
+            self.db.query(distinct(models.Meeting.folder))
+            .filter(models.Meeting.folder.isnot(None))
+            .filter(models.Meeting.folder != "")
+            .filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
+            .all()
+        )
+        return [r[0] for r in rows if r[0]]
+
+    def get_unique_tags(self) -> list[str]:
+        """Get sorted list of unique tags from completed meetings."""
+        rows = (
+            self.db.query(models.Meeting.tags)
+            .filter(models.Meeting.tags.isnot(None))
+            .filter(models.Meeting.tags != "")
+            .filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
+            .all()
+        )
+        tags_set: set[str] = set()
+        for (tags_str,) in rows:
+            if tags_str:
+                for tag in tags_str.split(","):
+                    tag = tag.strip()
+                    if tag:
+                        tags_set.add(tag)
+        return sorted(tags_set)
 
     def get_by_filters(self, folder: str | None = None, tags: str | None = None) -> list[int]:
         """
@@ -257,6 +408,30 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         self.db.commit()
         return meeting
 
+    # -------------------------------------------------------------------------
+    # Meeting Link helpers
+    # -------------------------------------------------------------------------
+
+    def get_meeting_links(self, source_meeting_id: int) -> list[models.MeetingLink]:
+        """Get all outgoing meeting links for a source meeting."""
+        return self.db.query(models.MeetingLink).filter(models.MeetingLink.source_meeting_id == source_meeting_id).all()
+
+    def delete_meeting_links(self, source_meeting_id: int) -> None:
+        """Delete all outgoing meeting links for a source meeting."""
+        self.db.query(models.MeetingLink).filter(models.MeetingLink.source_meeting_id == source_meeting_id).delete()
+        self.db.commit()
+
+    def delete_meeting_links_to_targets(self, source_meeting_id: int, target_ids: set) -> None:
+        """Delete outgoing meeting links to specific target meetings."""
+        self.db.query(models.MeetingLink).filter(
+            models.MeetingLink.source_meeting_id == source_meeting_id,
+            models.MeetingLink.target_meeting_id.in_(target_ids),
+        ).delete(synchronize_session=False)
+
+    def add_meeting_link(self, source_meeting_id: int, target_meeting_id: int) -> None:
+        """Add a directed link from one meeting to another."""
+        self.db.add(models.MeetingLink(source_meeting_id=source_meeting_id, target_meeting_id=target_meeting_id))
+
 
 # =============================================================================
 # Action Item Repository
@@ -286,16 +461,65 @@ class ActionItemRepository(BaseRepository[models.ActionItem, schemas.ActionItemC
         """Get all action items for a transcription."""
         return self.db.query(models.ActionItem).filter(models.ActionItem.transcription_id == transcription_id).all()
 
+    def list_with_meetings(
+        self,
+        meeting_ids: list[int] | None = None,
+        status: str | None = None,
+        limit: int = 30,
+    ) -> list:
+        """Return (ActionItem, Meeting) pairs joined through Transcription."""
+        query = (
+            self.db.query(models.ActionItem, models.Meeting)
+            .join(models.Transcription, models.ActionItem.transcription_id == models.Transcription.id)
+            .join(models.Meeting, models.Transcription.meeting_id == models.Meeting.id)
+        )
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        if status:
+            query = query.filter(models.ActionItem.status == status)
+        return query.order_by(models.ActionItem.due_date.asc().nullslast()).limit(limit).all()
+
+    def get_upcoming_with_meetings(
+        self,
+        meeting_ids: list[int] | None = None,
+        before_date=None,
+        now=None,
+        include_overdue: bool = True,
+    ) -> list:
+        """Return (ActionItem, Meeting) pairs for upcoming/overdue deadlines."""
+        from sqlalchemy import DateTime, cast
+
+        due_date_expr = cast(models.ActionItem.due_date, DateTime)
+        query = (
+            self.db.query(models.ActionItem, models.Meeting)
+            .join(models.Transcription, models.ActionItem.transcription_id == models.Transcription.id)
+            .join(models.Meeting, models.Transcription.meeting_id == models.Meeting.id)
+            .filter(models.ActionItem.due_date.isnot(None))
+            .filter(models.ActionItem.status.in_(["pending", "in_progress"]))
+        )
+        if meeting_ids:
+            query = query.filter(models.Meeting.id.in_(meeting_ids))
+        if before_date is not None:
+            if include_overdue:
+                query = query.filter(due_date_expr <= before_date)
+            elif now is not None:
+                query = query.filter(due_date_expr >= now, due_date_expr <= before_date)
+        return query.order_by(due_date_expr.asc()).all()
+
     def create_action_item(
-        self, transcription_id: int, item_data: schemas.ActionItemCreate, is_manual: bool = True
+        self, transcription_id: int | None, item_data: schemas.ActionItemCreate, is_manual: bool = True
     ) -> models.ActionItem:
-        """Create a new action item."""
+        """Create a new action item. Pass transcription_id=None for standalone tasks."""
         db_item = models.ActionItem(
             transcription_id=transcription_id,
             task=item_data.task,
             owner=item_data.owner,
             due_date=item_data.due_date,
+            status=getattr(item_data, "status", None) or "pending",
+            priority=getattr(item_data, "priority", None),
+            notes=getattr(item_data, "notes", None),
             is_manual=is_manual,
+            synced_to_calendar=False,
         )
         self.db.add(db_item)
         self.db.commit()
@@ -334,6 +558,35 @@ class ActionItemRepository(BaseRepository[models.ActionItem, schemas.ActionItemC
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def get_by_ids(self, ids: list[int]) -> list[models.ActionItem]:
+        """Fetch action items by a list of IDs."""
+        if not ids:
+            return []
+        return self.db.query(models.ActionItem).filter(models.ActionItem.id.in_(ids)).all()
+
+    def get_pending_due_before(self, date_str: str) -> list[models.ActionItem]:
+        """Get pending action items whose due_date is on or before date_str."""
+        return (
+            self.db.query(models.ActionItem)
+            .filter(
+                models.ActionItem.status == "pending",
+                models.ActionItem.due_date <= date_str,
+            )
+            .all()
+        )
+
+    def get_completed_in_range_or_ids(self, start: str, end: str, saved_ids: list[int]) -> list[models.ActionItem]:
+        """Get completed action items whose due_date is in [start, end] OR whose id is in saved_ids."""
+        condition = models.ActionItem.due_date.between(start, end)
+        if saved_ids:
+            condition = or_(condition, models.ActionItem.id.in_(saved_ids))
+        return self.db.query(models.ActionItem).filter(models.ActionItem.status == "completed", condition).all()
+
+    def get_distinct_owners(self) -> list[str]:
+        """Return a sorted list of distinct non-null action item owners."""
+        rows = self.db.query(models.ActionItem.owner).distinct().filter(models.ActionItem.owner.isnot(None)).all()
+        return sorted(r[0] for r in rows)
 
 
 # =============================================================================
@@ -409,6 +662,25 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
     def get_by_meeting(self, meeting_id: int) -> models.Transcription | None:
         """Get transcription for a meeting."""
         return self.db.query(models.Transcription).filter(models.Transcription.meeting_id == meeting_id).first()
+
+    def get_meeting_title(self, transcription_id: int) -> str | None:
+        """Get meeting filename/title for a given transcription ID."""
+        transcription = self.get(transcription_id)
+        if transcription and transcription.meeting:
+            return transcription.meeting.filename
+        return None
+
+    def get_meeting_info(self, transcription_id: int) -> dict | None:
+        """Return a dict with meeting_id, meeting_title, and meeting_date for a transcription."""
+        transcription = self.get(transcription_id)
+        if transcription and transcription.meeting:
+            mtg = transcription.meeting
+            return {
+                "meeting_id": mtg.id,
+                "meeting_title": mtg.filename,
+                "meeting_date": mtg.meeting_date,
+            }
+        return None
 
     def create_with_action_items(
         self,
@@ -493,6 +765,13 @@ class DocumentChunkRepository(BaseRepository[models.DocumentChunk, Any, Any]):
             self.db.refresh(chunk)
         return chunks
 
+    def delete_by_attachment(self, attachment_id: int) -> None:
+        """Delete all document chunks associated with an attachment."""
+        self.db.query(models.DocumentChunk).filter(models.DocumentChunk.attachment_id == attachment_id).delete(
+            synchronize_session=False
+        )
+        self.db.flush()
+
 
 # =============================================================================
 # Diarization Timing Repository
@@ -567,6 +846,21 @@ class SpeakerRepository(BaseRepository[models.Speaker, Any, Any]):
         super().__init__(models.Speaker, db)
 
     def get_unique_names(self) -> list[str]:
-        """Get all unique speaker names."""
+        """Get all unique speaker names across all completed meetings."""
         results = self.db.query(models.Speaker.name).distinct().order_by(models.Speaker.name).all()
         return [row[0] for row in results]
+
+    def get_all_distinct_names(self) -> list[str]:
+        """Get all distinct non-null speaker names across all meetings."""
+        results = self.db.query(models.Speaker.name).filter(models.Speaker.name.isnot(None)).distinct().all()
+        return [row[0] for row in results]
+
+    def delete_by_meeting_id(self, meeting_id: int) -> int:
+        """Delete all speakers for a given meeting. Returns the count deleted."""
+        count = (
+            self.db.query(models.Speaker)
+            .filter(models.Speaker.meeting_id == meeting_id)
+            .delete(synchronize_session=False)
+        )
+        self.db.flush()
+        return count

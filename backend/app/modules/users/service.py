@@ -13,6 +13,7 @@ Usage:
 
 from sqlalchemy.orm import Session
 
+from ..meetings.repository import ActionItemRepository
 from . import models, schemas
 from .repository import UserMappingRepository
 
@@ -195,3 +196,16 @@ class UserMappingService:
             results.append(mapping)
 
         return results
+
+    def list_all(self, skip: int = 0, limit: int = 100, is_active: bool | None = None) -> list[models.UserMapping]:
+        """List user mappings with optional is_active filter."""
+        return UserMappingRepository(self.db).list_all(skip, limit, is_active)
+
+    def create_mapping(self, mapping: schemas.UserMappingCreate) -> models.UserMapping:
+        """Create a new user mapping. Delegates to create_or_update."""
+        return self.create_or_update_mapping(name=mapping.name, email=mapping.email)
+
+    def get_unmapped_action_owners(self) -> list[str]:
+        """Return unique action item owner names that have no user mapping."""
+        owner_names = ActionItemRepository(self.db).get_distinct_owners()
+        return [name for name in owner_names if not self.get_mapping_by_name(name)]
