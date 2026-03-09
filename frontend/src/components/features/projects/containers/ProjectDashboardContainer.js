@@ -42,6 +42,7 @@ import { useProjectMeetings } from '../hooks/useProjectMeetings';
 import { ProjectOverview } from '../presentation/ProjectOverview';
 import { ProjectMeetingsTable } from '../presentation/ProjectMeetingsTable';
 import { ProjectMembersList } from '../presentation/ProjectMembersList';
+import MeetingPicker from '../MeetingPicker';
 import KanbanBoard from '../../kanban/KanbanBoard';
 import ProjectGantt from '../ProjectGantt';
 import ProjectChat from '../ProjectChat';
@@ -310,6 +311,16 @@ const ProjectDashboardContainer = () => {
               />
             )}
           />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Meetings ({detail.editSelectedMeetings.length} selected)
+            </Typography>
+            <MeetingPicker
+              selectedMeetings={detail.editSelectedMeetings}
+              onSelectionChange={detail.setEditSelectedMeetings}
+              preloadedMeetings={detail.allMeetings}
+            />
+          </Box>
         </Stack>
       </FormDialog>
 

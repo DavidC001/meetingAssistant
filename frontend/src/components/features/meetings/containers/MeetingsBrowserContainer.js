@@ -145,18 +145,22 @@ const MeetingsBrowserContainer = () => {
           {filteredMeetings.map((meeting) => (
             <Grid item xs={12} sm={6} md={4} key={meeting.id}>
               <Box sx={{ position: 'relative' }}>
-                <Checkbox
-                  checked={selectedMeetings.includes(meeting.id)}
-                  onChange={() => handleToggleSelection(meeting.id)}
-                  sx={{
-                    position: 'absolute',
-                    top: 8,
-                    left: 8,
-                    zIndex: 1,
-                    bgcolor: 'background.paper',
-                    '&:hover': { bgcolor: 'background.paper' },
+                <Box
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleToggleSelection(meeting.id);
                   }}
-                />
+                  sx={{ position: 'absolute', top: 8, left: 8, zIndex: 10 }}
+                >
+                  <Checkbox
+                    checked={selectedMeetings.includes(meeting.id)}
+                    sx={{
+                      bgcolor: 'background.paper',
+                      '&:hover': { bgcolor: 'background.paper' },
+                    }}
+                  />
+                </Box>
                 <MeetingCard meeting={meeting} variant="grid" {...meetingActions} />
               </Box>
             </Grid>
@@ -291,11 +295,18 @@ const MeetingsBrowserContainer = () => {
           <Autocomplete
             multiple
             freeSolo
+            autoSelect
             options={availableFilters.tags}
             value={bulkTags}
             onChange={(e, value) => setBulkTags(value)}
             renderInput={(params) => (
-              <TextField {...params} label="Tags" fullWidth sx={{ mt: 2 }} />
+              <TextField
+                {...params}
+                label="Tags"
+                placeholder="Type and press Enter"
+                fullWidth
+                sx={{ mt: 2 }}
+              />
             )}
           />
         </DialogContent>

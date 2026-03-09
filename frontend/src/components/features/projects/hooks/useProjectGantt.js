@@ -60,12 +60,6 @@ const useProjectGantt = (projectId) => {
   const [links, setLinks] = useState([]);
   const tasksRef = useRef([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [priorityColors] = useState(() => {
-    const stored = localStorage.getItem(`project-${projectId}-priority-colors`);
-    return stored
-      ? JSON.parse(stored)
-      : { high: '#e53935', medium: '#fb8c00', low: '#43a047', none: '#90a4ae' };
-  });
 
   const defaultRange = useMemo(() => getDefaultDateRange(), []);
   const [dateRangeStart, setDateRangeStart] = useState(formatDateForInput(defaultRange.start));
@@ -95,11 +89,7 @@ const useProjectGantt = (projectId) => {
   useEffect(() => {
     if (ganttData) convertToGanttTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ganttData, filterType, dateRangeStart, dateRangeEnd, refreshKey, priorityColors]);
-
-  useEffect(() => {
-    localStorage.setItem(`project-${projectId}-priority-colors`, JSON.stringify(priorityColors));
-  }, [priorityColors, projectId]);
+  }, [ganttData, filterType, dateRangeStart, dateRangeEnd, refreshKey]);
 
   useEffect(() => {
     tasksRef.current = tasks;
@@ -172,24 +162,29 @@ const useProjectGantt = (projectId) => {
     const convertedTasks = filteredItems
       .map((item) => {
         const startDate = new Date(item.start_date);
-        const endDate = item.end_date
+        let endDate = item.end_date
           ? new Date(item.end_date)
           : new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
-        const priorityValue = (item.metadata?.priority || '').toLowerCase();
-        const priorityColor = priorityColors[priorityValue] || null;
+        // Enforce a minimum bar width of 1 day for point-in-time items (e.g. meetings
+        // with no duration) so they appear as a visible bar, not a hairline.
+        if (endDate <= startDate) {
+          endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+        }
         return {
           id: item.id,
           text: item.name,
           start: startDate,
           end: endDate,
           progress: item.progress * 100,
+          // Pass all non-milestone items as the standard SVAR 'task' type so
+          // the library renders them correctly.  Visual distinction is handled
+          // by useGanttBarColors in ProjectGanttContainer.
           type: item.type === 'milestone' ? 'milestone' : 'task',
           parent: 0,
           kind: item.type,
-          color:
-            item.type === 'action_item'
-              ? priorityColor || item.color || undefined
-              : item.color || undefined,
+          // Use the backend-provided color directly — it is status-based
+          // for action items and fixed green for meetings.
+          color: item.color || undefined,
           metadata: item.metadata,
         };
       })

@@ -3,7 +3,7 @@
  * Main container component that manages meeting details with hooks and presentational components
  */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -22,10 +22,10 @@ import {
 import AudioPlayer from '../presentation/AudioPlayer';
 import FloatingChat from '../containers/FloatingChatContainer';
 import { useMeetingDetail, useSpeakers } from '../hooks';
+import MeetingActionItemsContainer from './MeetingActionItemsContainer';
 import {
   ProcessingStatus,
   MeetingOverview,
-  MeetingActionItems,
   NotesEditor,
   AttachmentsGrid,
   TranscriptViewer,
@@ -37,6 +37,9 @@ import { EmbeddingConfigService } from '../../../../services/settingsService';
 import { Sync as SyncIcon } from '@mui/icons-material';
 
 // TabPanel component
+// IMPORTANT: children must always be rendered (not conditional) so that
+// stateful containers (e.g. KanbanBoard) stay mounted when the user switches
+// tabs and their local optimistic state is preserved.
 const TabPanel = (props) => {
   const { children, value, index, ...other } = props;
   return (
@@ -47,7 +50,7 @@ const TabPanel = (props) => {
       aria-labelledby={`meeting-tab-${index}`}
       {...other}
     >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      <Box sx={{ py: 3 }}>{children}</Box>
     </div>
   );
 };
@@ -72,13 +75,21 @@ export const MeetingDetailsContainer = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [reembedConfirmOpen, setReembedConfirmOpen] = useState(false);
   const [isReembedding, setIsReembedding] = useState(false);
+  // Keep a ref to the latest fetchMeetingDetails so handleActionItemsChanged
+  // can be a stable (empty-dep) callback. This prevents KanbanBoardContainer
+  // from receiving a new onActionItemsChanged prop on every render, which was
+  // causing stale-closure issues in useActionItems callbacks.
+  const fetchMeetingDetailsRef = useRef(meetingDetail.fetchMeetingDetails);
+  fetchMeetingDetailsRef.current = meetingDetail.fetchMeetingDetails;
+  const handleActionItemsChanged = useCallback(() => {
+    fetchMeetingDetailsRef.current?.();
+  }, []); // stable — never re-created
 
-  // Stable reference so useActionItems can use initialItems directly in its dep array
-  // (keyed on transcription id — only re-creates when the transcription record changes)
+  // Always track the latest action_items from the meeting cache so that
+  // on a fresh mount (tab switch back) the kanban is seeded with fresh data.
   const actionItems = useMemo(
     () => meetingDetail.meeting?.transcription?.action_items ?? [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [meetingDetail.meeting?.transcription?.id]
+    [meetingDetail.meeting?.transcription?.action_items]
   );
 
   // Derive all speaker names for autocomplete
@@ -130,6 +141,8 @@ export const MeetingDetailsContainer = () => {
       const speakerObj = speakers.speakers.find((s) => (s.name || s.speaker_name) === oldName);
       if (speakerObj) {
         await speakers.updateSpeaker({ ...speakerObj, name: newName });
+        // Refresh meeting cache so action item owners reflect the new name
+        meetingDetail.fetchMeetingDetails();
       }
 
       // Trigger re-embedding in the background
@@ -140,7 +153,7 @@ export const MeetingDetailsContainer = () => {
         // non-critical: silently ignore recompute errors
       }
     },
-    [speakers, meetingId]
+    [speakers, meetingId, meetingDetail]
   );
 
   // Re-embed handler (called from confirm dialog and inline rename)
@@ -169,10 +182,12 @@ export const MeetingDetailsContainer = () => {
         setSegments((prev) =>
           prev.map((seg) => (seg.speaker === oldName ? { ...seg, speaker: newName } : seg))
         );
+        // Refresh meeting cache so action item owners reflect the new name
+        meetingDetail.fetchMeetingDetails();
       }
       return success;
     },
-    [speakers]
+    [speakers, meetingDetail]
   );
 
   if (meetingDetail.isLoading) {
@@ -373,9 +388,10 @@ export const MeetingDetailsContainer = () => {
 
       {/* Action Items Tab */}
       <TabPanel value={activeTab} index={2}>
-        <MeetingActionItems
+        <MeetingActionItemsContainer
           transcriptionId={meeting.transcription?.id}
           initialItems={actionItems}
+          onActionItemsChanged={handleActionItemsChanged}
         />
       </TabPanel>
 

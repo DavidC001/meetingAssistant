@@ -99,6 +99,11 @@ class ProjectRepository:
         rows = self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).all()
         return [row[0] for row in rows]
 
+    def get_project_ids_for_meeting(self, meeting_id: int) -> list[int]:
+        """Return a plain list of project IDs that are linked to a given meeting."""
+        rows = self.db.query(ProjectMeeting.project_id).filter(ProjectMeeting.meeting_id == meeting_id).all()
+        return [row[0] for row in rows]
+
     def get_completed_meeting_ids(self, project_id: int) -> list[int]:
         """Return IDs of COMPLETED meetings linked to a project."""
         meeting_ids = self.get_meeting_ids_subquery(project_id)

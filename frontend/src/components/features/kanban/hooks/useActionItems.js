@@ -11,7 +11,7 @@ import logger from '../../../../utils/logger';
 const normalizeItems = (items) =>
   (items || []).map((item) => ({
     ...item,
-    task: item.task || item.description || item.title || '',
+    task: item.task || '',
     status: (item.status || 'pending').replace('_', '-'),
   }));
 
@@ -25,6 +25,7 @@ export const useActionItems = ({
   timeHorizon = 'all',
   showCompleted = true,
   searchQuery = '',
+  onActionItemsChanged = null,
 }) => {
   const isMeetingMode = mode === 'meeting';
   const isProjectMode = mode === 'project';
@@ -35,12 +36,16 @@ export const useActionItems = ({
   const [loading, setLoading] = useState(!isMeetingMode);
   const [error, setError] = useState(null);
 
-  // Sync when the parent re-fetches the meeting (meeting mode only)
+  // Seed items from parent on mount or when the meeting changes.
+  // Deliberately NOT re-running when initialItems reference changes so that
+  // local optimistic updates (create/delete/edit) are not overwritten when
+  // the parent silently re-fetches meeting data in the background.
   useEffect(() => {
     if (!isMeetingMode) return;
     setActionItems(normalizeItems(initialItems));
     setLoading(false);
-  }, [isMeetingMode, initialItems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMeetingMode, transcriptionId]); // reset only when the meeting itself changes
 
   // Fetch action items based on mode and filters
   const fetchActionItems = useCallback(async () => {
@@ -62,7 +67,7 @@ export const useActionItems = ({
       // Normalize items
       const normalizedItems = rawItems.map((item) => ({
         ...item,
-        task: item.task || item.description || item.title || '',
+        task: item.task || '',
         status: (item.status || 'pending').replace('_', '-'),
       }));
 
@@ -218,7 +223,7 @@ export const useActionItems = ({
         // Normalize the created item the same way as fetchActionItems does
         const normalizedItem = {
           ...createdItem,
-          task: createdItem.task || createdItem.description || createdItem.title || '',
+          task: createdItem.task || '',
           status: (createdItem.status || 'pending').replace('_', '-'),
         };
 
@@ -237,6 +242,7 @@ export const useActionItems = ({
 
         setActionItems((prev) => [...prev, normalizedItem]);
         setError(null);
+        if (isMeetingMode && onActionItemsChanged) onActionItemsChanged();
         return createdItem;
       } catch (err) {
         logger.error('Error creating action item:', err);
@@ -244,7 +250,7 @@ export const useActionItems = ({
         return null;
       }
     },
-    [isMeetingMode, isProjectMode, transcriptionId, projectId]
+    [isMeetingMode, isProjectMode, transcriptionId, projectId, onActionItemsChanged]
   );
 
   // Update action item
@@ -261,6 +267,7 @@ export const useActionItems = ({
 
         setActionItems((prev) => prev.map((item) => (item.id === itemId ? updated : item)));
         setError(null);
+        if (isMeetingMode && onActionItemsChanged) onActionItemsChanged();
         return true;
       } catch (err) {
         logger.error('Error updating action item:', err);
@@ -285,6 +292,7 @@ export const useActionItems = ({
 
         setActionItems((prev) => prev.filter((item) => item.id !== itemId));
         setError(null);
+        if (isMeetingMode && onActionItemsChanged) onActionItemsChanged();
         return true;
       } catch (err) {
         logger.error('Error deleting action item:', err);
@@ -293,7 +301,7 @@ export const useActionItems = ({
         return false;
       }
     },
-    [isMeetingMode, isProjectMode, projectId, actionItems]
+    [isMeetingMode, isProjectMode, projectId, actionItems, onActionItemsChanged]
   );
 
   // Permanently delete action item (global mode only)
@@ -304,6 +312,7 @@ export const useActionItems = ({
         await ActionItemService.delete(itemId);
         setActionItems((prev) => prev.filter((item) => item.id !== itemId));
         setError(null);
+        if (isMeetingMode && onActionItemsChanged) onActionItemsChanged();
         return true;
       } catch (err) {
         logger.error('Error deleting action item permanently:', err);
@@ -312,7 +321,7 @@ export const useActionItems = ({
         return false;
       }
     },
-    [actionItems]
+    [actionItems, isMeetingMode, onActionItemsChanged]
   );
 
   // Link action item to project (global mode only)

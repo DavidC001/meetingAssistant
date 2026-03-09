@@ -1,4 +1,5 @@
 export { MeetingDetailsContainer } from './MeetingDetailsContainer';
+export { default as MeetingActionItemsContainer } from './MeetingActionItemsContainer';
 export { default as MeetingsListContainer } from './MeetingsListContainer';
 export { default as MeetingsBrowserContainer } from './MeetingsBrowserContainer';
 export { default as MeetingsGraphContainer } from './MeetingsGraphContainer';

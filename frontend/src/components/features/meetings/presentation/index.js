@@ -4,7 +4,6 @@
 
 export { ProcessingStatus } from './ProcessingStatus';
 export { MeetingOverview } from './MeetingOverview';
-export { default as MeetingActionItems } from './MeetingActionItems';
 export { NotesEditor } from './NotesEditor';
 export { AttachmentsGrid } from './AttachmentsGrid';
 export { TranscriptViewer } from './TranscriptViewer';

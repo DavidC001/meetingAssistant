@@ -8,6 +8,71 @@ import TaskDetailDialog from '../presentation/TaskDetailDialog';
 import AddActionItemDialog from '../presentation/AddActionItemDialog';
 import '../ProjectGanttTooltip.css';
 
+// SVAR Gantt does not support per-task colors via props.  Its CSS uses
+// `background-color: var(--wx-gantt-task-color)` with high specificity
+// (0,3,0), making stylesheet overrides unreliable.
+//
+// Instead we apply colors directly on the DOM via a MutationObserver.
+// We must color the `.wx-bar` itself AND its inner `.wx-progress-percent`
+// and `.wx-segment` children.  The progress overlay sits on top of the
+// bar, so without coloring it too the default SVAR blue shows through
+// whenever progress > 0%.
+function useGanttBarColors(wrapperRef, tasks) {
+  const colorMapRef = useRef(new Map());
+
+  // Rebuild the id→color lookup whenever tasks change.
+  useEffect(() => {
+    const map = new Map();
+    (tasks || []).forEach((t) => {
+      if (t.color) map.set(String(t.id), t.color);
+    });
+    colorMapRef.current = map;
+  }, [tasks]);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    let rafId = null;
+
+    function applyColors() {
+      const map = colorMapRef.current;
+      if (map.size === 0) return;
+      el.querySelectorAll('.wx-bar[data-id]').forEach((bar) => {
+        const color = map.get(bar.getAttribute('data-id'));
+        if (color) {
+          // Color the bar itself
+          bar.style.setProperty('background-color', color, 'important');
+          // Color the progress overlay and segments inside the bar so
+          // they don't show the default SVAR blue on top.
+          bar.querySelectorAll('.wx-progress-percent, .wx-segment').forEach((child) => {
+            child.style.setProperty('background-color', color, 'important');
+          });
+        }
+      });
+    }
+
+    // Coalesce rapid mutations into a single rAF paint.
+    function scheduleApply() {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyColors();
+      });
+    }
+
+    // Apply once now (bars may already exist) then watch for changes.
+    applyColors();
+    const observer = new MutationObserver(scheduleApply);
+    observer.observe(el, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [wrapperRef, tasks]);
+}
+
 const ProjectGanttContainer = ({ projectId }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -51,6 +116,9 @@ const ProjectGanttContainer = ({ projectId }) => {
     handleSelectTask,
     getTypeCounts,
   } = useProjectGantt(projectId);
+
+  // Apply per-task bar colors directly on the DOM (bypasses CSS specificity).
+  useGanttBarColors(ganttWrapperRef, tasks);
 
   // Today line
   const updateTodayLine = useCallback(() => {
@@ -209,7 +277,7 @@ const ProjectGanttContainer = ({ projectId }) => {
                   top: todayLineStyle.top,
                   height: todayLineStyle.height,
                   width: '2px',
-                  bgcolor: '#f44336',
+                  bgcolor: '#EF5350',
                   zIndex: 6,
                   pointerEvents: 'none',
                 }}

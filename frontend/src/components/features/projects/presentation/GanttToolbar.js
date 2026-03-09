@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Box,
   Button,
-  Chip,
+  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -12,6 +12,35 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+
+// Centralized Gantt color palette — must stay in sync with backend get_gantt_data().
+const GANTT_COLORS = {
+  meeting: '#5C6BC0',
+  milestonePending: '#FF7043',
+  milestoneCompleted: '#8D6E63',
+  actionPending: '#FFA726',
+  actionInProgress: '#26A69A',
+  actionCompleted: '#66BB6A',
+  actionCancelled: '#78909C',
+  todayLine: '#EF5350',
+};
+
+const LegendDot = ({ color, label }) => (
+  <Stack direction="row" spacing={0.75} alignItems="center">
+    <Box
+      sx={{
+        width: 12,
+        height: 12,
+        borderRadius: '50%',
+        bgcolor: color,
+        flexShrink: 0,
+      }}
+    />
+    <Typography variant="caption" sx={{ lineHeight: 1 }}>
+      {label}
+    </Typography>
+  </Stack>
+);
 
 /**
  * Toolbar above the Gantt chart: type filter, date range pickers, presets, legend.
@@ -109,18 +138,34 @@ const GanttToolbar = ({
     </Paper>
 
     {/* Legend */}
-    <Paper sx={{ p: 2, mb: 2 }}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Typography variant="caption" sx={{ mr: 1 }}>
-          Legend:
+    <Paper sx={{ px: 2, py: 1.5, mb: 2 }}>
+      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        {/* Item Types */}
+        <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>
+          Types:
         </Typography>
-        <Chip label="Meetings" size="small" sx={{ bgcolor: '#4CAF50', color: 'white' }} />
-        <Chip label="Milestones" size="small" sx={{ bgcolor: '#9C27B0', color: 'white' }} />
-        <Chip label="Action Items" size="small" sx={{ bgcolor: '#2196F3', color: 'white' }} />
-        <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-          <Box sx={{ width: 20, height: 3, bgcolor: '#f44336', mr: 0.5 }} />
+        <LegendDot color={GANTT_COLORS.meeting} label="Meetings" />
+        <LegendDot color={GANTT_COLORS.milestonePending} label="Milestones" />
+        <LegendDot color={GANTT_COLORS.milestoneCompleted} label="Milestones (done)" />
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+        {/* Action Item Statuses */}
+        <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>
+          Action Items:
+        </Typography>
+        <LegendDot color={GANTT_COLORS.actionPending} label="Pending" />
+        <LegendDot color={GANTT_COLORS.actionInProgress} label="In Progress" />
+        <LegendDot color={GANTT_COLORS.actionCompleted} label="Completed" />
+        <LegendDot color={GANTT_COLORS.actionCancelled} label="Cancelled" />
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
+        {/* Today marker */}
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Box sx={{ width: 18, height: 3, bgcolor: GANTT_COLORS.todayLine, borderRadius: 1 }} />
           <Typography variant="caption">Today</Typography>
-        </Box>
+        </Stack>
       </Stack>
     </Paper>
   </>

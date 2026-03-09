@@ -19,15 +19,25 @@ import { VideoCall as VideoCallIcon } from '@mui/icons-material';
 import { MeetingService } from '../../../../services';
 import { format } from 'date-fns';
 
-const MeetingPicker = ({ selectedMeetings, onSelectionChange, maxHeight = '400px' }) => {
+const MeetingPicker = ({
+  selectedMeetings,
+  onSelectionChange,
+  maxHeight = '400px',
+  preloadedMeetings = null,
+}) => {
   const [meetings, setMeetings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!preloadedMeetings);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    loadMeetings();
-  }, []);
+    if (preloadedMeetings) {
+      setMeetings(preloadedMeetings);
+      setLoading(false);
+    } else {
+      loadMeetings();
+    }
+  }, [preloadedMeetings]);
 
   const loadMeetings = async () => {
     try {

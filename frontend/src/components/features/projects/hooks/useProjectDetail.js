@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { projectService } from '../../../../services/projectService';
 import { downloadBlob, MeetingService } from '../../../../services';
 import logger from '../../../../utils/logger';
+import meetingService from '../../../../services/meetingService';
 
 export const useProjectDetail = (projectId) => {
   const navigate = useNavigate();
@@ -27,6 +28,8 @@ export const useProjectDetail = (projectId) => {
     status: 'active',
     tags: [],
   });
+  const [editSelectedMeetings, setEditSelectedMeetings] = useState([]);
+  const [allMeetings, setAllMeetings] = useState([]);
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -73,7 +76,7 @@ export const useProjectDetail = (projectId) => {
   }, [project, loadAvailableTags]);
 
   // Edit actions
-  const openEditDialog = useCallback(() => {
+  const openEditDialog = useCallback(async () => {
     if (!project) return;
     setEditFormData({
       name: project.name,
@@ -81,8 +84,22 @@ export const useProjectDetail = (projectId) => {
       status: project.status || 'active',
       tags: project.tags || [],
     });
+    // Load all available meetings and pre-select the ones already in this project
+    try {
+      const [allMeetingsData, projectMeetingsData] = await Promise.all([
+        meetingService.getAll({ skip: 0, limit: 500 }),
+        projectService.getProjectMeetings(projectId),
+      ]);
+      const meetings = allMeetingsData?.data || allMeetingsData || [];
+      const completed = meetings.filter((m) => m.status === 'completed');
+      setAllMeetings(completed);
+      const currentIds = (projectMeetingsData?.data || projectMeetingsData || []).map((m) => m.id);
+      setEditSelectedMeetings(currentIds);
+    } catch (err) {
+      logger.warn('Failed to load meetings for project edit dialog', err);
+    }
     setEditDialogOpen(true);
-  }, [project]);
+  }, [project, projectId]);
 
   const closeEditDialog = useCallback(() => setEditDialogOpen(false), []);
 
@@ -93,13 +110,14 @@ export const useProjectDetail = (projectId) => {
         description: editFormData.description || null,
         status: editFormData.status,
         tags: editFormData.tags,
+        meeting_ids: editSelectedMeetings.length > 0 ? editSelectedMeetings : undefined,
       });
       setEditDialogOpen(false);
       await loadProject();
     } catch (err) {
       setError('Failed to update project: ' + (err.response?.data?.detail || err.message));
     }
-  }, [projectId, editFormData, loadProject]);
+  }, [projectId, editFormData, editSelectedMeetings, loadProject]);
 
   // Delete actions
   const openDeleteDialog = useCallback(() => setDeleteDialogOpen(true), []);
@@ -158,6 +176,9 @@ export const useProjectDetail = (projectId) => {
     editDialogOpen,
     editFormData,
     setEditFormData,
+    editSelectedMeetings,
+    setEditSelectedMeetings,
+    allMeetings,
     openEditDialog,
     closeEditDialog,
     handleUpdateProject,

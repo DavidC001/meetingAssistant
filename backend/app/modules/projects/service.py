@@ -211,6 +211,7 @@ class ProjectService:
 
         self.db.add(ProjectMeeting(project_id=project_id, meeting_id=meeting_id))
         self.db.commit()
+        self._apply_project_tags_to_meetings(project, [meeting_id])
         return {"project_id": project_id, "meeting_id": meeting_id}
 
     def remove_meeting_from_project(self, project_id: int, meeting_id: int) -> None:
@@ -458,7 +459,29 @@ class ProjectService:
         return self.repository.get_completed_meeting_ids(project.id)
 
     def _sync_project_meetings(self, project: Project, meeting_ids: list[int]) -> None:
+        existing_ids = set(self.repository.get_meeting_ids_list(project.id))
         self.repository.sync_meetings(project, meeting_ids)
+        new_ids = set(meeting_ids) - existing_ids
+        if new_ids:
+            self._apply_project_tags_to_meetings(project, list(new_ids))
+
+    def _apply_project_tags_to_meetings(self, project: Project, meeting_ids: list[int]) -> None:
+        """Merge project tags into each newly linked meeting's comma-separated tags field."""
+        if not project.tags or not meeting_ids:
+            return
+        project_tags_set = {str(t).strip() for t in project.tags if t and str(t).strip()}
+        if not project_tags_set:
+            return
+        for meeting_id in meeting_ids:
+            meeting = self.repository.get_meeting_by_id(meeting_id)
+            if not meeting:
+                continue
+            existing_tags: set[str] = set()
+            if meeting.tags and isinstance(meeting.tags, str):
+                existing_tags = {t.strip() for t in meeting.tags.split(",") if t.strip()}
+            new_tags = existing_tags | project_tags_set
+            meeting.tags = ", ".join(sorted(new_tags))
+        self.db.commit()
 
     def _parse_datetime(self, value: str | datetime | None) -> datetime | None:
         if not value:
@@ -504,7 +527,11 @@ class ProjectService:
         return trend
 
     def sync_meeting_to_projects_by_tags(self, meeting_id: int) -> None:
-        """Auto-link a meeting to projects based on matching tags and sync action items."""
+        """Auto-link a meeting to projects based on matching tags and sync action items.
+
+        Uses exact (case-insensitive) tag matching. Removes stale project links when
+        the meeting's tags no longer match a previously linked project.
+        """
         import logging
 
         logger = logging.getLogger(__name__)
@@ -515,75 +542,68 @@ class ProjectService:
             return
 
         # Parse meeting tags - stored as comma-separated string
-        meeting_tags = []
+        meeting_tags: set[str] = set()
         if meeting.tags:
             if isinstance(meeting.tags, str):
-                # Parse comma-separated string, normalize to lowercase
-                meeting_tags = [t.strip().lower() for t in meeting.tags.split(",") if t.strip()]
+                meeting_tags = {t.strip().lower() for t in meeting.tags.split(",") if t.strip()}
             elif isinstance(meeting.tags, list):
-                meeting_tags = [str(t).strip().lower() for t in meeting.tags if t]
+                meeting_tags = {str(t).strip().lower() for t in meeting.tags if t}
             elif isinstance(meeting.tags, dict):
-                # Extract tag values if it's a dict
-                meeting_tags = [str(v).strip().lower() for v in meeting.tags.values() if v]
-
-        if not meeting_tags:
-            logger.info(f"Meeting {meeting_id} has no tags, skipping project sync")
-            return
+                meeting_tags = {str(v).strip().lower() for v in meeting.tags.values() if v}
 
         logger.info(f"Syncing meeting {meeting_id} with tags {meeting_tags} to projects")
 
-        # Find all projects with matching tags
+        # Determine which projects should be linked based on exact tag match
         all_projects = self.repository.list(status="active")
-        matched_projects = 0
+        projects_to_link: set[int] = set()
 
         for project in all_projects:
             if not project.tags:
                 continue
 
             # Parse project tags - stored as JSON array
-            project_tags = []
+            project_tags: set[str] = set()
             if isinstance(project.tags, list):
-                project_tags = [str(t).strip().lower() for t in project.tags if t]
+                project_tags = {str(t).strip().lower() for t in project.tags if t}
             elif isinstance(project.tags, str):
-                project_tags = [project.tags.strip().lower()]
+                project_tags = {project.tags.strip().lower()}
 
             if not project_tags:
                 continue
 
-            # Check for partial or exact matches (case-insensitive)
-            # Meeting tag "UKC" should match project tag "UKC_concepts_thesis"
-            matched = False
-            for meeting_tag in meeting_tags:
-                for project_tag in project_tags:
-                    if meeting_tag in project_tag or project_tag in meeting_tag:
-                        matched = True
-                        break
-                if matched:
-                    break
+            # Exact case-insensitive match only - avoid false positives from substring matching
+            if meeting_tags & project_tags:
+                projects_to_link.add(project.id)
 
-            if matched:
-                matched_projects += 1
-                logger.info(f"Linking meeting {meeting_id} to project {project.id} ({project.name})")
+        # Get projects currently linked to this meeting
+        currently_linked_ids = set(self.repository.get_project_ids_for_meeting(meeting_id))
 
-                # Link meeting to project if not already linked
-                existing = self.repository.check_meeting_in_project(project.id, meeting_id)
-                if not existing:
-                    self.db.add(ProjectMeeting(project_id=project.id, meeting_id=meeting_id))
-                    logger.info(f"Created project_meeting link: project {project.id} <-> meeting {meeting_id}")
+        # Add new links
+        action_items = self.repository.get_action_items_by_meeting(meeting_id)
+        for project_id in projects_to_link - currently_linked_ids:
+            self.db.add(ProjectMeeting(project_id=project_id, meeting_id=meeting_id))
+            logger.info(f"Created project_meeting link: project {project_id} <-> meeting {meeting_id}")
+            for action_item in action_items:
+                existing_ai = self.pai_repo.get(project_id, action_item.id)
+                if not existing_ai:
+                    self.db.add(ProjectActionItem(project_id=project_id, action_item_id=action_item.id))
 
-                # Also link all action items from this meeting to the project
-                action_items = self.repository.get_action_items_by_meeting(meeting_id)
-
-                logger.info(f"Found {len(action_items)} action items for meeting {meeting_id}")
-
-                for action_item in action_items:
-                    existing_ai = self.pai_repo.get(project.id, action_item.id)
-                    if not existing_ai:
-                        self.db.add(ProjectActionItem(project_id=project.id, action_item_id=action_item.id))
-                        logger.info(f"Linked action item {action_item.id} to project {project.id}")
+        # Remove stale links (projects no longer matching meeting tags)
+        for project_id in currently_linked_ids - projects_to_link:
+            self.repository.remove_meeting_link(project_id, meeting_id)
+            logger.info(f"Removed stale project_meeting link: project {project_id} <-> meeting {meeting_id}")
+            # Also unlink action items from that project
+            for action_item in action_items:
+                existing_ai = self.pai_repo.get(project_id, action_item.id)
+                if existing_ai:
+                    self.db.delete(existing_ai)
 
         self.db.commit()
-        logger.info(f"Tag sync complete for meeting {meeting_id}: linked to {matched_projects} projects")
+        logger.info(
+            f"Tag sync complete for meeting {meeting_id}: "
+            f"linked to {len(projects_to_link)} projects, "
+            f"removed {len(currently_linked_ids - projects_to_link)} stale links"
+        )
 
     def sync_project_members(self, project_id: int) -> list[schemas.ProjectMember]:
         """Auto-detect and sync members from meeting speakers."""
@@ -856,7 +876,7 @@ class ProjectService:
                         end_date=end_date,
                         progress=1.0,  # Meetings are always complete
                         dependencies=dependency_map.get(f"meeting-{meeting.id}", []),
-                        color="#4CAF50",
+                        color="#5C6BC0",  # Indigo — unique to meetings
                         metadata={"meeting_id": meeting.id, "folder": meeting.folder, "status": meeting.status},
                     )
                 )
@@ -865,7 +885,7 @@ class ProjectService:
             milestones = self.milestone_repository.list_by_project(project_id)
             for milestone in milestones:
                 progress = 1.0 if milestone.status == "completed" else 0.0
-                color = "#9C27B0" if milestone.status == "completed" else "#FF9800"
+                color = "#8D6E63" if milestone.status == "completed" else "#FF7043"
 
                 # Use due_date or created_at
                 milestone_date = milestone.due_date or milestone.created_at
@@ -961,10 +981,10 @@ class ProjectService:
                     1.0 if item.get("status") == "completed" else 0.5 if item.get("status") == "in_progress" else 0.0
                 )
                 color_map = {
-                    "completed": "#4CAF50",
-                    "in_progress": "#2196F3",
-                    "pending": "#FFC107",
-                    "cancelled": "#9E9E9E",
+                    "completed": "#66BB6A",
+                    "in_progress": "#26A69A",
+                    "pending": "#FFA726",
+                    "cancelled": "#78909C",
                 }
 
                 gantt_items.append(
@@ -976,7 +996,7 @@ class ProjectService:
                         end_date=due_date,
                         progress=progress,
                         dependencies=dependency_map.get(f"action-{item.get('id')}", []),
-                        color=color_map.get(item.get("status", "pending"), "#FFC107"),
+                        color=color_map.get(item.get("status", "pending"), "#FFA726"),
                         metadata={
                             "action_item_id": item.get("id"),
                             "meeting_id": item.get("meeting_id"),

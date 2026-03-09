@@ -47,6 +47,7 @@ const KanbanBoardContainer = ({
   headerTitle,
   headerSubtitle,
   defaultOwner = '',
+  onActionItemsChanged,
 }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -96,6 +97,7 @@ const KanbanBoardContainer = ({
     timeHorizon,
     showCompleted,
     searchQuery,
+    onActionItemsChanged,
   });
 
   // Dialog states
@@ -187,6 +189,9 @@ const KanbanBoardContainer = ({
   };
 
   const handleAddSave = async (form, projectIds = []) => {
+    // Close the dialog immediately (optimistic) so the user always sees feedback.
+    // Errors from the async operation are surfaced via the kanban error state.
+    setAddDialogOpen(false);
     const payload = {
       task: form.task,
       owner: form.owner || null,
@@ -194,11 +199,7 @@ const KanbanBoardContainer = ({
       due_date: form.due_date || null,
       status: form.status,
     };
-
-    const success = await createActionItem(payload, projectIds);
-    if (success) {
-      setAddDialogOpen(false);
-    }
+    await createActionItem(payload, projectIds);
   };
 
   // Add existing handler
@@ -231,15 +232,18 @@ const KanbanBoardContainer = ({
 
   const handleDeleteConfirm = async () => {
     if (!selectedTask) return;
-
-    if (deleteType === 'global') {
-      await deleteActionItemPermanently(selectedTask.id);
-    } else {
-      await deleteActionItem(selectedTask.id);
-    }
-
+    // Capture before closing so the async call still knows what to delete.
+    const taskId = selectedTask.id;
+    const type = deleteType;
+    // Close dialogs immediately (optimistic) — removal from the list is
+    // handled by the optimistic setActionItems filter inside the hook.
     setDeleteConfirmOpen(false);
     handleMenuClose();
+    if (type === 'global') {
+      await deleteActionItemPermanently(taskId);
+    } else {
+      await deleteActionItem(taskId);
+    }
   };
 
   // Get total tasks count

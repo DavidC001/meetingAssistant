@@ -66,16 +66,6 @@ export const useSpeakers = (meetingId) => {
         const data = await SpeakerService.update(speaker.id, speaker);
         setSpeakers((prev) => prev.map((s) => (s.id === data.id ? data : s)));
         setEditingSpeaker(null);
-
-        // Refresh the transcript to update speaker labels
-        if (meetingId) {
-          try {
-            // Optionally refresh meeting details to get updated transcript
-          } catch (err) {
-            logger.error('Error refreshing meeting after speaker update:', err);
-          }
-        }
-
         return true;
       } catch (err) {
         logger.error('Error updating speaker:', err);

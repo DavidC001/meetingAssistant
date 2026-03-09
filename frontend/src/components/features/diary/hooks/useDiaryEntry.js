@@ -16,7 +16,7 @@ const useDiaryEntry = () => {
 
   // Form fields
   const [content, setContent] = useState('');
-  const [previewMode, setPreviewMode] = useState(false);
+  const [previewMode, setPreviewMode] = useState(true);
   const [productivity, setProductivity] = useState('');
 
   // Time tracking
