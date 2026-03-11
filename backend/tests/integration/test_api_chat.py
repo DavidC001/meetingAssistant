@@ -13,24 +13,25 @@ class TestChatAPI:
 
     def test_get_chat_history_empty(self, client, sample_meeting):
         """Test getting chat history when no messages exist."""
-        response = client.get(f"/api/v1/meetings/{sample_meeting.id}/chat")
+        response = client.get(f"/api/v1/meetings/{sample_meeting.id}/chat/history")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert "history" in data
+        assert isinstance(data["history"], list)
+        assert len(data["history"]) == 0
 
     def test_post_chat_message(self, client, sample_meeting, mock_openai):
         """Test posting a chat message."""
-        message_data = {"message": "What was discussed in this meeting?"}
+        message_data = {"query": "What was discussed in this meeting?", "top_k": 5}
 
         response = client.post(f"/api/v1/meetings/{sample_meeting.id}/chat", json=message_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "content" in data
-        assert "role" in data
-        assert data["role"] == "assistant"
+        assert "response" in data
+        assert isinstance(data["response"], str)
+        assert "sources" in data
 
     def test_clear_chat_history(self, client, sample_meeting, db):
         """Test clearing chat history."""
@@ -42,16 +43,16 @@ class TestChatAPI:
         service.create_message(sample_meeting.id, "assistant", "Test response 1")
 
         # Clear the history
-        response = client.delete(f"/api/v1/meetings/{sample_meeting.id}/chat")
+        response = client.delete(f"/api/v1/meetings/{sample_meeting.id}/chat/history")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "message" in data
 
         # Verify history is cleared
-        get_response = client.get(f"/api/v1/meetings/{sample_meeting.id}/chat")
+        get_response = client.get(f"/api/v1/meetings/{sample_meeting.id}/chat/history")
         assert get_response.status_code == status.HTTP_200_OK
-        assert len(get_response.json()) == 0
+        assert len(get_response.json()["history"]) == 0
 
 
 @pytest.mark.integration
@@ -163,7 +164,6 @@ class TestGlobalChatAPI:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "content" in data
-        assert "role" in data
         assert data["role"] == "assistant"
 
     def test_get_available_folders(self, client, sample_meeting):

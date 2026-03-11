@@ -58,25 +58,22 @@ export const useSpeakers = (meetingId) => {
   /**
    * Update speaker
    */
-  const updateSpeaker = useCallback(
-    async (speaker) => {
-      if (!speaker) return false;
-      try {
-        setIsLoading(true);
-        const data = await SpeakerService.update(speaker.id, speaker);
-        setSpeakers((prev) => prev.map((s) => (s.id === data.id ? data : s)));
-        setEditingSpeaker(null);
-        return true;
-      } catch (err) {
-        logger.error('Error updating speaker:', err);
-        setError('Failed to update speaker');
-        return false;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [meetingId]
-  );
+  const updateSpeaker = useCallback(async (speaker) => {
+    if (!speaker) return false;
+    try {
+      setIsLoading(true);
+      const data = await SpeakerService.update(speaker.id, speaker);
+      setSpeakers((prev) => prev.map((s) => (s.id === data.id ? data : s)));
+      setEditingSpeaker(null);
+      return true;
+    } catch (err) {
+      logger.error('Error updating speaker:', err);
+      setError('Failed to update speaker');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   /**
    * Delete speaker

@@ -226,6 +226,15 @@ class MeetingService:
     def list_meetings(self, skip: int = 0, limit: int = 100) -> list[models.Meeting]:
         return self.repo.get_all(skip=skip, limit=limit)
 
+    def get_unique_folders(self) -> list[str]:
+        return self.repo.get_unique_folders()
+
+    def get_unique_tags(self) -> list[str]:
+        return self.repo.get_unique_tags()
+
+    def get_meetings_by_filters(self, folder: str | None = None, tags: str | None = None) -> list[int]:
+        return self.repo.get_by_filters(folder=folder, tags=tags)
+
     def get_meeting(self, meeting_id: int) -> models.Meeting | None:
         return self.repo.get_by_id(meeting_id)
 
@@ -367,6 +376,59 @@ class MeetingService:
             print(f"Error deleting file {db_meeting.filepath}: {e}")
 
         self.repo.delete_meeting(meeting_id)
+
+    def get_action_items(
+        self,
+        status: str | None = None,
+        skip: int = 0,
+        limit: int = 1000,
+    ) -> list[models.ActionItem]:
+        if status:
+            return self.action_item_repo.get_by_status(status, skip=skip, limit=limit)
+        return self.action_item_repo.get_all(skip=skip, limit=limit)
+
+    def get_action_item(self, item_id: int) -> models.ActionItem | None:
+        return self.action_item_repo.get(item_id)
+
+    def create_action_item(
+        self,
+        action_item: schemas.ActionItemCreate,
+        transcription_id: int | None = None,
+        is_manual: bool = True,
+    ) -> models.ActionItem:
+        return self.action_item_repo.create_action_item(
+            transcription_id=transcription_id,
+            item_data=action_item,
+            is_manual=is_manual,
+        )
+
+    def update_calendar_sync(
+        self,
+        item_id: int,
+        event_id: str | None = None,
+        synced: bool = False,
+    ) -> models.ActionItem | None:
+        return self.action_item_repo.update_calendar_sync(item_id, event_id=event_id, synced=synced)
+
+    def get_meeting_title(self, transcription_id: int) -> str | None:
+        return self.transcription_repo.get_meeting_title(transcription_id)
+
+    def get_distinct_action_item_owners(self) -> list[str]:
+        return self.action_item_repo.get_distinct_owners()
+
+    def get_action_items_by_ids(self, ids: list[int]) -> list[models.ActionItem]:
+        return self.action_item_repo.get_by_ids(ids)
+
+    def get_pending_action_items_due_before(self, date_str: str) -> list[models.ActionItem]:
+        return self.action_item_repo.get_pending_due_before(date_str)
+
+    def get_completed_action_items_in_range_or_ids(
+        self,
+        start: str,
+        end: str,
+        saved_ids: list[int],
+    ) -> list[models.ActionItem]:
+        return self.action_item_repo.get_completed_in_range_or_ids(start, end, saved_ids)
 
     def bulk_delete(self, meeting_ids: list[int]) -> schemas.BulkOperationResponse:
         success_count = 0

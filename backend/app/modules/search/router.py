@@ -12,15 +12,17 @@ router = APIRouter(
 )
 
 
+def _service(db: Session) -> SearchService:
+    return SearchService(db)
+
+
 @router.post("/", response_model=schemas.SearchResponse)
 def search(search_query: schemas.SearchQuery, db: Session = Depends(get_db)):
     """Perform a global search across all meetings."""
-    service = SearchService(db)
-    return service.unified_search(search_query)
+    return _service(db).unified_search(search_query)
 
 
 @router.get("/quick")
 def quick_search(q: str = Query(..., min_length=1), limit: int = Query(10, le=50), db: Session = Depends(get_db)):
     """Quick search for autocomplete/suggestions."""
-    service = SearchService(db)
-    return service.quick_search(q, limit)
+    return _service(db).quick_search(q, limit)

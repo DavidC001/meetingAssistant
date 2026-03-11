@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 
+def _service(db: Session) -> GraphService:
+    return GraphService(db)
+
+
 @router.get("/data")
 def get_graph_data(db: Session = Depends(get_db)):
     """
@@ -24,8 +28,7 @@ def get_graph_data(db: Session = Depends(get_db)):
     - edges: List of edges (relationships between nodes)
     """
     try:
-        service = GraphService(db)
-        return service.get_graph_data()
+        return _service(db).get_graph_data()
     except Exception as e:
         logger.error(f"Error generating graph data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error generating graph data: {str(e)}")
@@ -35,8 +38,7 @@ def get_graph_data(db: Session = Depends(get_db)):
 def create_meeting_link(meeting_id: int, target_meeting_id: int, db: Session = Depends(get_db)):
     """Manually create a link between two meetings."""
     try:
-        service = GraphService(db)
-        return service.create_meeting_link(meeting_id, target_meeting_id)
+        return _service(db).create_meeting_link(meeting_id, target_meeting_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -48,8 +50,7 @@ def create_meeting_link(meeting_id: int, target_meeting_id: int, db: Session = D
 def delete_meeting_link(meeting_id: int, target_meeting_id: int, db: Session = Depends(get_db)):
     """Delete a link between two meetings."""
     try:
-        service = GraphService(db)
-        return service.delete_meeting_link(meeting_id, target_meeting_id)
+        return _service(db).delete_meeting_link(meeting_id, target_meeting_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

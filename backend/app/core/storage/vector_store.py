@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ... import models
+from .repository import VectorStoreRepository
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ class VectorStore:
 class ProjectVectorStore:
     """Vector store for project note/document chunks."""
 
+    @staticmethod
+    def _repository(db: Session) -> VectorStoreRepository:
+        return VectorStoreRepository(db)
+
     def add_documents(
         self,
         db: Session,
@@ -93,25 +98,16 @@ class ProjectVectorStore:
         return records
 
     def delete_by_project_id(self, db: Session, project_id: int) -> None:
-        db.query(models.ProjectDocumentChunk).filter(models.ProjectDocumentChunk.project_id == project_id).delete()
-        db.commit()
+        self._repository(db).delete_project_chunks_by_project_id(project_id)
 
     def delete_by_note_id(self, db: Session, note_id: int) -> None:
-        db.query(models.ProjectDocumentChunk).filter(models.ProjectDocumentChunk.note_id == note_id).delete()
-        db.commit()
+        self._repository(db).delete_project_chunks_by_note_id(note_id)
 
     def delete_note_content_by_note_id(self, db: Session, note_id: int) -> None:
-        db.query(models.ProjectDocumentChunk).filter(
-            models.ProjectDocumentChunk.note_id == note_id,
-            models.ProjectDocumentChunk.attachment_id.is_(None),
-        ).delete()
-        db.commit()
+        self._repository(db).delete_project_note_content_by_note_id(note_id)
 
     def delete_by_attachment_id(self, db: Session, attachment_id: int) -> None:
-        db.query(models.ProjectDocumentChunk).filter(
-            models.ProjectDocumentChunk.attachment_id == attachment_id
-        ).delete()
-        db.commit()
+        self._repository(db).delete_project_chunks_by_attachment_id(attachment_id)
 
     def similarity_search(
         self,
@@ -124,26 +120,21 @@ class ProjectVectorStore:
     ) -> list[ProjectRetrievedChunk]:
         if not query_embedding:
             return []
-        similarity_filters = filters or {}
-        query = db.query(
-            models.ProjectDocumentChunk,
-            (1 - models.ProjectDocumentChunk.embedding.cosine_distance(query_embedding)).label("similarity"),
+        results = self._repository(db).search_project_chunks(
+            query_embedding,
+            project_id=project_id,
+            top_k=top_k,
+            filters=filters,
         )
-        if project_id is not None:
-            query = query.filter(models.ProjectDocumentChunk.project_id == project_id)
-        if "content_type" in similarity_filters:
-            query = query.filter(models.ProjectDocumentChunk.content_type == similarity_filters["content_type"])
-        if "note_id" in similarity_filters:
-            query = query.filter(models.ProjectDocumentChunk.note_id == similarity_filters["note_id"])
-        query = query.order_by(models.ProjectDocumentChunk.embedding.cosine_distance(query_embedding).asc()).limit(
-            top_k
-        )
-        results = query.all()
         return [ProjectRetrievedChunk(chunk=row[0], similarity=float(row[1])) for row in results]
 
 
 class PgVectorStore(VectorStore):
     """PostgreSQL vector store powered by pgvector."""
+
+    @staticmethod
+    def _repository(db: Session) -> VectorStoreRepository:
+        return VectorStoreRepository(db)
 
     def add_documents(
         self,
@@ -178,8 +169,7 @@ class PgVectorStore(VectorStore):
         return records
 
     def delete_by_meeting_id(self, db: Session, meeting_id: int) -> None:
-        db.query(models.DocumentChunk).filter(models.DocumentChunk.meeting_id == meeting_id).delete()
-        db.commit()
+        self._repository(db).delete_document_chunks_by_meeting_id(meeting_id)
 
     def similarity_search(
         self,
@@ -193,20 +183,13 @@ class PgVectorStore(VectorStore):
     ) -> list[RetrievedChunk]:
         if not query_embedding:
             return []
-        similarity_filters = filters or {}
-        query = db.query(
-            models.DocumentChunk,
-            (1 - models.DocumentChunk.embedding.cosine_distance(query_embedding)).label("similarity"),
+        results = self._repository(db).search_document_chunks(
+            query_embedding,
+            meeting_id=meeting_id,
+            top_k=top_k,
+            filters=filters,
+            meeting_ids=meeting_ids,
         )
-        if meeting_id is not None:
-            query = query.filter(models.DocumentChunk.meeting_id == meeting_id)
-        elif meeting_ids is not None:
-            # Filter by list of meeting IDs (for global chat filtering)
-            query = query.filter(models.DocumentChunk.meeting_id.in_(meeting_ids))
-        if "content_type" in similarity_filters:
-            query = query.filter(models.DocumentChunk.content_type == similarity_filters["content_type"])
-        query = query.order_by(models.DocumentChunk.embedding.cosine_distance(query_embedding).asc()).limit(top_k)
-        results = query.all()
         return [RetrievedChunk(chunk=row[0], similarity=float(row[1])) for row in results]
 
 

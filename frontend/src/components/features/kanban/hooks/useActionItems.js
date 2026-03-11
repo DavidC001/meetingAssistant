@@ -276,7 +276,7 @@ export const useActionItems = ({
         return false;
       }
     },
-    [isMeetingMode, isProjectMode, actionItems]
+    [isMeetingMode, isProjectMode, actionItems, onActionItemsChanged]
   );
 
   // Delete action item (global mode) or unlink from project (project mode)

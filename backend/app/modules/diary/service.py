@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from app.modules.meetings.models import ActionItem
-from app.modules.meetings.repository import ActionItemRepository
+from app.modules.meetings.service import MeetingService
 
 from .repository import DiaryRepository
 from .schemas import ActionItemsDailySummary, ActionItemSnapshot, DiaryReminderResponse
@@ -49,6 +49,10 @@ class DiaryService:
     # Default work days (0=Monday to 4=Friday)
     DEFAULT_WORK_DAYS = [0, 1, 2, 3, 4]
 
+    def __init__(self, db: Session):
+        self.db = db
+        self.meeting_service = MeetingService(db)
+
     @staticmethod
     def is_work_day(check_date: date, work_days: list[int] | None = None) -> bool:
         """Check if a date is a work day."""
@@ -83,8 +87,7 @@ class DiaryService:
 
         return DiaryRepository.get_missing_work_day_dates(db, start_date, end_date, work_days)
 
-    @staticmethod
-    def check_reminder(db: Session, work_days: list[int] | None = None) -> DiaryReminderResponse:
+    def check_reminder(self, work_days: list[int] | None = None) -> DiaryReminderResponse:
         """Check if a reminder should be shown for missing diary entry."""
         if work_days is None:
             work_days = DiaryService.DEFAULT_WORK_DAYS
@@ -99,12 +102,12 @@ class DiaryService:
         previous_work_day = DiaryService.get_previous_work_day(today, work_days)
 
         # Check if diary entry exists for previous work day
-        entry = DiaryRepository.get_entry_by_date(db, previous_work_day)
+        entry = DiaryRepository.get_entry_by_date(self.db, previous_work_day)
 
         # Check if entry is missing or has no content
         if not entry or (not entry.content and not entry.reminder_dismissed):
             # Get action items summary for that day
-            action_items_summary = DiaryService.get_action_items_for_date(db, previous_work_day)
+            action_items_summary = self.get_action_items_for_date(previous_work_day)
 
             return DiaryReminderResponse(
                 should_show_reminder=True,
@@ -119,8 +122,7 @@ class DiaryService:
 
         return DiaryReminderResponse(should_show_reminder=False)
 
-    @staticmethod
-    def get_action_items_for_date(db: Session, target_date: date) -> ActionItemsDailySummary:
+    def get_action_items_for_date(self, target_date: date) -> ActionItemsDailySummary:
         """
         Get action items activity for a specific date.
 
@@ -141,26 +143,28 @@ class DiaryService:
         end_range = (target_date + timedelta(days=7)).isoformat()
 
         # Get ALL items that are currently in progress (global status)
-        in_progress_items = ActionItemRepository(db).get_by_status("in-progress")
+        in_progress_items = self.meeting_service.get_action_items(status="in-progress")
 
         # Get completed items that are either:
         # 1. Due within the date range around target_date, OR
         # 2. Already saved in this diary entry
-        diary_entry = DiaryRepository.get_entry_by_date(db, target_date)
+        diary_entry = DiaryRepository.get_entry_by_date(self.db, target_date)
         saved_completed_ids = (
             diary_entry.action_items_completed if diary_entry and diary_entry.action_items_completed else []
         )
 
-        completed_items = ActionItemRepository(db).get_completed_in_range_or_ids(
-            start_range, end_range, saved_completed_ids
+        completed_items = self.meeting_service.get_completed_action_items_in_range_or_ids(
+            start_range,
+            end_range,
+            saved_completed_ids,
         )
 
         # If no due_date filter matched, get items that were actually completed in this diary
         if saved_completed_ids and not completed_items:
-            completed_items = ActionItemRepository(db).get_by_ids(saved_completed_ids)
+            completed_items = self.meeting_service.get_action_items_by_ids(saved_completed_ids)
 
         # Get pending items that are due today or overdue
-        pending_items = ActionItemRepository(db).get_pending_due_before(today_str)
+        pending_items = self.meeting_service.get_pending_action_items_due_before(today_str)
 
         # Convert to snapshot format
         in_progress_snapshots = [DiaryService._action_item_to_snapshot(item) for item in in_progress_items]
@@ -197,53 +201,45 @@ class DiaryService:
     # Data-access delegation methods (keep router free of repository imports)
     # ------------------------------------------------------------------
 
-    @staticmethod
     def get_entries(
-        db: Session,
+        self,
         start_date: date | None = None,
         end_date: date | None = None,
         skip: int = 0,
         limit: int = 50,
     ):
         """Fetch paginated diary entries."""
-        return DiaryRepository.get_entries(db, start_date=start_date, end_date=end_date, skip=skip, limit=limit)
+        return DiaryRepository.get_entries(self.db, start_date=start_date, end_date=end_date, skip=skip, limit=limit)
 
-    @staticmethod
     def count_entries(
-        db: Session,
+        self,
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> int:
         """Count diary entries matching the date range."""
-        return DiaryRepository.count_entries(db, start_date=start_date, end_date=end_date)
+        return DiaryRepository.count_entries(self.db, start_date=start_date, end_date=end_date)
 
-    @staticmethod
-    def get_entry_by_date(db: Session, entry_date: date):
+    def get_entry_by_date(self, entry_date: date):
         """Get diary entry for a specific date."""
-        return DiaryRepository.get_entry_by_date(db, entry_date)
+        return DiaryRepository.get_entry_by_date(self.db, entry_date)
 
-    @staticmethod
-    def create_entry(db: Session, entry_data):
+    def create_entry(self, entry_data):
         """Create a new diary entry."""
-        return DiaryRepository.create_entry(db, entry_data)
+        return DiaryRepository.create_entry(self.db, entry_data)
 
-    @staticmethod
-    def update_entry(db: Session, entry, entry_data):
+    def update_entry(self, entry, entry_data):
         """Update an existing diary entry."""
-        return DiaryRepository.update_entry(db, entry, entry_data)
+        return DiaryRepository.update_entry(self.db, entry, entry_data)
 
-    @staticmethod
-    def delete_entry(db: Session, entry) -> bool:
+    def delete_entry(self, entry) -> bool:
         """Delete a diary entry."""
-        return DiaryRepository.delete_entry(db, entry)
+        return DiaryRepository.delete_entry(self.db, entry)
 
-    @staticmethod
-    def dismiss_reminder(db: Session, entry_date: date):
+    def dismiss_reminder(self, entry_date: date):
         """Dismiss the reminder for a specific date."""
-        return DiaryRepository.dismiss_reminder(db, entry_date)
+        return DiaryRepository.dismiss_reminder(self.db, entry_date)
 
-    @staticmethod
-    def generate_diary_template(db: Session, target_date: date) -> str:
+    def generate_diary_template(self, target_date: date) -> str:
         """Generate a diary template with standard sections."""
         template_lines = [
             f"# Work Diary - {target_date.strftime('%A, %B %d, %Y')}",
@@ -266,3 +262,81 @@ class DiaryService:
         ]
 
         return "\n".join(template_lines)
+
+    @staticmethod
+    def get_default_date_range(
+        start_date: date | None,
+        end_date: date | None,
+        days: int = 30,
+    ) -> tuple[date, date]:
+        if not end_date:
+            end_date = date.today()
+        if not start_date:
+            start_date = end_date - timedelta(days=days)
+        return start_date, end_date
+
+    def get_statistics_summary(self, start_date: date | None, end_date: date | None) -> dict:
+        start_date, end_date = self.get_default_date_range(start_date, end_date)
+        entries = self.get_entries(start_date, end_date, skip=0, limit=1000)
+
+        if not entries:
+            return {
+                "total_entries": 0,
+                "date_range": {"start": start_date, "end": end_date},
+                "average_hours_worked": 0,
+                "total_hours_worked": 0,
+                "mood_distribution": {},
+                "total_action_items_completed": 0,
+                "average_arrival_time": None,
+                "average_departure_time": None,
+                "most_productive_days": [],
+            }
+
+        total_hours = sum(entry.hours_worked or 0 for entry in entries)
+        avg_hours = total_hours / len(entries) if entries else 0
+
+        mood_counts = {}
+        for entry in entries:
+            if entry.mood:
+                mood_counts[entry.mood] = mood_counts.get(entry.mood, 0) + 1
+
+        total_completed = sum(len(entry.action_items_completed or []) for entry in entries)
+        arrivals = [entry.arrival_time for entry in entries if entry.arrival_time]
+        departures = [entry.departure_time for entry in entries if entry.departure_time]
+        productive_days = sorted(
+            [(entry.date, len(entry.action_items_completed or [])) for entry in entries],
+            key=lambda value: value[1],
+            reverse=True,
+        )[:5]
+
+        return {
+            "total_entries": len(entries),
+            "date_range": {"start": start_date, "end": end_date},
+            "average_hours_worked": round(avg_hours, 2),
+            "total_hours_worked": round(total_hours, 2),
+            "mood_distribution": mood_counts,
+            "total_action_items_completed": total_completed,
+            "average_arrival_time": arrivals[0] if arrivals else None,
+            "average_departure_time": departures[0] if departures else None,
+            "most_productive_days": [{"date": day, "items_completed": count} for day, count in productive_days],
+        }
+
+    def get_statistics_timeline(self, start_date: date | None, end_date: date | None) -> dict:
+        start_date, end_date = self.get_default_date_range(start_date, end_date)
+        entries = self.get_entries(start_date, end_date, skip=0, limit=1000)
+
+        timeline = []
+        for entry in sorted(entries, key=lambda item: item.date):
+            timeline.append(
+                {
+                    "date": entry.date,
+                    "hours_worked": entry.hours_worked or 0,
+                    "action_items_completed": len(entry.action_items_completed or []),
+                    "action_items_worked_on": len(entry.action_items_worked_on or []),
+                    "mood": entry.mood,
+                    "arrival_time": entry.arrival_time,
+                    "departure_time": entry.departure_time,
+                }
+            )
+
+        return {"date_range": {"start": start_date, "end": end_date}, "timeline": timeline}

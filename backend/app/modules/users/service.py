@@ -13,7 +13,7 @@ Usage:
 
 from sqlalchemy.orm import Session
 
-from ..meetings.repository import ActionItemRepository
+from ..meetings.service import MeetingService
 from . import models, schemas
 from .repository import UserMappingRepository
 
@@ -126,7 +126,7 @@ class UserMappingService:
         if not mapping:
             return None
 
-        return self.repo.update(mapping_id, update_data)
+        return self.repo.update(db_obj=mapping, obj_in=update_data)
 
     def delete_mapping(self, mapping_id: int) -> bool:
         """
@@ -207,5 +207,5 @@ class UserMappingService:
 
     def get_unmapped_action_owners(self) -> list[str]:
         """Return unique action item owner names that have no user mapping."""
-        owner_names = ActionItemRepository(self.db).get_distinct_owners()
+        owner_names = MeetingService(self.db).get_distinct_action_item_owners()
         return [name for name in owner_names if not self.get_mapping_by_name(name)]

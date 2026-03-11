@@ -482,7 +482,7 @@ def model_config_to_llm_config(model_config, purpose: str, db: Session) -> LLMCo
     Convert a ModelConfiguration to LLMConfig for a specific purpose.
     purpose: "chat" or "analysis"
     """
-    from ... import models  # Import here to avoid circular imports
+    from ...modules.settings.repository import SettingsRepository
 
     if purpose == "chat":
         provider = model_config.chat_provider
@@ -500,9 +500,7 @@ def model_config_to_llm_config(model_config, purpose: str, db: Session) -> LLMCo
     # Get the API key if an ID is provided
     api_key = None
     if api_key_id:
-        api_key_obj = (
-            db.query(models.APIKey).filter(models.APIKey.id == api_key_id, models.APIKey.is_active == True).first()
-        )
+        api_key_obj = SettingsRepository(db).get_active_api_key_by_id(api_key_id)
         if api_key_obj:
             api_key = config.api.get(api_key_obj.environment_variable)
 

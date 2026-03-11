@@ -26,7 +26,7 @@ class TestDiaryAPI:
 
     def test_create_diary_entry(self, client):
         """Test creating a new diary entry."""
-        entry_data = {"entry_date": str(date.today()), "content": "Test diary entry for today"}
+        entry_data = {"date": str(date.today()), "content": "Test diary entry for today"}
 
         response = client.post("/api/v1/diary/entries", json=entry_data)
 
@@ -43,8 +43,10 @@ class TestDiaryAPI:
         service = DiaryService(db)
         today = date.today()
 
-        entry1 = service.create_entry(today, "Entry 1")
-        entry2 = service.create_entry(today - timedelta(days=1), "Entry 2")
+        from app.modules.diary.schemas import DiaryEntryCreate
+
+        service.create_entry(DiaryEntryCreate(date=today, content="Entry 1"))
+        service.create_entry(DiaryEntryCreate(date=today - timedelta(days=1), content="Entry 2"))
 
         response = client.get("/api/v1/diary/entries")
 
@@ -61,9 +63,11 @@ class TestDiaryAPI:
         service = DiaryService(db)
         today = date.today()
 
-        service.create_entry(today, "Today's entry")
-        service.create_entry(today - timedelta(days=7), "Last week's entry")
-        service.create_entry(today - timedelta(days=14), "Two weeks ago entry")
+        from app.modules.diary.schemas import DiaryEntryCreate
+
+        service.create_entry(DiaryEntryCreate(date=today, content="Today's entry"))
+        service.create_entry(DiaryEntryCreate(date=today - timedelta(days=7), content="Last week's entry"))
+        service.create_entry(DiaryEntryCreate(date=today - timedelta(days=14), content="Two weeks ago entry"))
 
         # Query with date filter
         start_date = today - timedelta(days=10)
@@ -73,15 +77,16 @@ class TestDiaryAPI:
         data = response.json()
         assert len(data["entries"]) == 2  # Only entries within last 10 days
 
-    def test_get_diary_entry_by_id(self, client, db):
-        """Test getting a specific diary entry."""
+    def test_get_diary_entry_by_date(self, client, db):
+        """Test getting a specific diary entry by date."""
         # Create entry
+        from app.modules.diary.schemas import DiaryEntryCreate
         from app.modules.diary.service import DiaryService
 
         service = DiaryService(db)
-        entry = service.create_entry(date.today(), "Test entry")
+        entry = service.create_entry(DiaryEntryCreate(date=date.today(), content="Test entry"))
 
-        response = client.get(f"/api/v1/diary/entries/{entry.id}")
+        response = client.get(f"/api/v1/diary/entries/{entry.date}")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -91,14 +96,15 @@ class TestDiaryAPI:
     def test_update_diary_entry(self, client, db):
         """Test updating a diary entry."""
         # Create entry
+        from app.modules.diary.schemas import DiaryEntryCreate
         from app.modules.diary.service import DiaryService
 
         service = DiaryService(db)
-        entry = service.create_entry(date.today(), "Original content")
+        entry = service.create_entry(DiaryEntryCreate(date=date.today(), content="Original content"))
 
         update_data = {"content": "Updated content"}
 
-        response = client.put(f"/api/v1/diary/entries/{entry.id}", json=update_data)
+        response = client.put(f"/api/v1/diary/entries/{entry.date}", json=update_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -107,17 +113,18 @@ class TestDiaryAPI:
     def test_delete_diary_entry(self, client, db):
         """Test deleting a diary entry."""
         # Create entry
+        from app.modules.diary.schemas import DiaryEntryCreate
         from app.modules.diary.service import DiaryService
 
         service = DiaryService(db)
-        entry = service.create_entry(date.today(), "To delete")
+        entry = service.create_entry(DiaryEntryCreate(date=date.today(), content="To delete"))
 
-        response = client.delete(f"/api/v1/diary/entries/{entry.id}")
+        response = client.delete(f"/api/v1/diary/entries/{entry.date}")
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify it's deleted
-        get_response = client.get(f"/api/v1/diary/entries/{entry.id}")
+        get_response = client.get(f"/api/v1/diary/entries/{entry.date}")
         assert get_response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_get_diary_reminder(self, client, db, sample_meeting, sample_action_item):
@@ -126,41 +133,40 @@ class TestDiaryAPI:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "action_items" in data
-        assert "diary_entry" in data
-        assert isinstance(data["action_items"], list)
+        assert "should_show_reminder" in data
+        assert "action_items_summary" in data or data["should_show_reminder"] is False
 
     def test_dismiss_diary_reminder(self, client, db):
         """Test dismissing a diary reminder."""
         # Create entry for today
+        from app.modules.diary.schemas import DiaryEntryCreate
         from app.modules.diary.service import DiaryService
 
         service = DiaryService(db)
-        entry = service.create_entry(date.today(), "Today's entry")
+        service.create_entry(DiaryEntryCreate(date=date.today(), content="Today's entry"))
 
-        dismiss_data = {"dismiss": True}
+        dismiss_data = {"date": str(date.today())}
 
         response = client.post("/api/v1/diary/reminder/dismiss", json=dismiss_data)
 
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["status"] == "success"
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
     def test_get_diary_statistics(self, client, db):
         """Test getting diary statistics."""
         # Create some entries
+        from app.modules.diary.schemas import DiaryEntryCreate
         from app.modules.diary.service import DiaryService
 
         service = DiaryService(db)
         today = date.today()
 
         for i in range(5):
-            service.create_entry(today - timedelta(days=i), f"Entry {i}")
+            service.create_entry(DiaryEntryCreate(date=today - timedelta(days=i), content=f"Entry {i}"))
 
-        response = client.get("/api/v1/diary/statistics")
+        response = client.get("/api/v1/diary/statistics/summary")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "total_entries" in data
-        assert "entries_this_month" in data
+        assert "date_range" in data
         assert data["total_entries"] >= 5

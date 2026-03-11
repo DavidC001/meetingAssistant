@@ -21,6 +21,10 @@ from .service import DiaryService
 router = APIRouter(prefix="/api/v1/diary", tags=["diary"])
 
 
+def _service(db: Session) -> DiaryService:
+    return DiaryService(db)
+
+
 @router.get("/entries", response_model=DiaryEntriesListResponse)
 async def list_diary_entries(
     start_date: date | None = Query(None, description="Start date for filtering (YYYY-MM-DD)"),
@@ -32,9 +36,9 @@ async def list_diary_entries(
     """List diary entries with pagination and date range filter."""
     skip = (page - 1) * page_size
 
-    entries = DiaryService.get_entries(db, start_date=start_date, end_date=end_date, skip=skip, limit=page_size)
-
-    total = DiaryService.count_entries(db, start_date=start_date, end_date=end_date)
+    service = _service(db)
+    entries = service.get_entries(start_date=start_date, end_date=end_date, skip=skip, limit=page_size)
+    total = service.count_entries(start_date=start_date, end_date=end_date)
 
     return DiaryEntriesListResponse(entries=entries, total=total, page=page, page_size=page_size)
 
@@ -46,7 +50,8 @@ async def get_diary_entry(
     db: Session = Depends(get_db),
 ):
     """Get diary entry for specific date (YYYY-MM-DD)."""
-    entry = DiaryService.get_entry_by_date(db, entry_date)
+    service = _service(db)
+    entry = service.get_entry_by_date(entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
@@ -66,7 +71,7 @@ async def get_diary_entry(
     }
 
     if include_action_items:
-        action_items_summary = DiaryService.get_action_items_for_date(db, entry_date)
+        action_items_summary = service.get_action_items_for_date(entry_date)
         entry_dict["action_items_summary"] = action_items_summary
 
     return DiaryEntryWithActionItems(**entry_dict)
@@ -75,7 +80,7 @@ async def get_diary_entry(
 @router.get("/template/{entry_date}")
 async def get_diary_template(entry_date: date, db: Session = Depends(get_db)):
     """Get diary template for a specific date."""
-    template = DiaryService.generate_diary_template(db, entry_date)
+    template = _service(db).generate_diary_template(entry_date)
     return {"template": template}
 
 
@@ -87,39 +92,42 @@ async def create_diary_entry(
 ):
     """Create diary entry for a date."""
     # Check if entry already exists
-    existing_entry = DiaryService.get_entry_by_date(db, entry_data.date)
+    service = _service(db)
+    existing_entry = service.get_entry_by_date(entry_data.date)
     if existing_entry:
         raise HTTPException(status_code=400, detail=f"Diary entry already exists for {entry_data.date}")
 
     # Auto-generate content if requested and no content provided
     if auto_generate and not entry_data.content:
-        entry_data.content = DiaryService.generate_diary_template(db, entry_data.date)
+        entry_data.content = service.generate_diary_template(entry_data.date)
 
-    entry = DiaryService.create_entry(db, entry_data)
+    entry = service.create_entry(entry_data)
     return entry
 
 
 @router.put("/entries/{entry_date}", response_model=DiaryEntry)
 async def update_diary_entry(entry_date: date, entry_data: DiaryEntryUpdate, db: Session = Depends(get_db)):
     """Update diary entry."""
-    entry = DiaryService.get_entry_by_date(db, entry_date)
+    service = _service(db)
+    entry = service.get_entry_by_date(entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
 
-    updated_entry = DiaryService.update_entry(db, entry, entry_data)
+    updated_entry = service.update_entry(entry, entry_data)
     return updated_entry
 
 
 @router.delete("/entries/{entry_date}", status_code=204)
 async def delete_diary_entry(entry_date: date, db: Session = Depends(get_db)):
     """Delete diary entry."""
-    entry = DiaryService.get_entry_by_date(db, entry_date)
+    service = _service(db)
+    entry = service.get_entry_by_date(entry_date)
 
     if not entry:
         raise HTTPException(status_code=404, detail="Diary entry not found for this date")
 
-    DiaryService.delete_entry(db, entry)
+    service.delete_entry(entry)
     return None
 
 
@@ -133,14 +141,14 @@ async def check_diary_reminder(db: Session = Depends(get_db)):
     - Previous work day has no diary entry
     - Reminder not dismissed for that day
     """
-    reminder_response = DiaryService.check_reminder(db)
+    reminder_response = _service(db).check_reminder()
     return reminder_response
 
 
 @router.post("/reminder/dismiss", status_code=204)
 async def dismiss_diary_reminder(dismiss_request: ReminderDismissRequest, db: Session = Depends(get_db)):
     """Dismiss reminder for specific date."""
-    DiaryService.dismiss_reminder(db, dismiss_request.date)
+    _service(db).dismiss_reminder(dismiss_request.date)
     return None
 
 
@@ -155,7 +163,7 @@ async def get_action_items_summary(entry_date: date, db: Session = Depends(get_d
     - Items created on that day
     - Items whose status changed during the day
     """
-    summary = DiaryService.get_action_items_for_date(db, entry_date)
+    summary = _service(db).get_action_items_for_date(entry_date)
     return summary
 
 
@@ -166,10 +174,11 @@ async def snapshot_action_items(entry_date: date, db: Session = Depends(get_db))
     # For now, it's a placeholder for the snapshot functionality
 
     # Get or create diary entry for the date
-    entry = DiaryService.get_entry_by_date(db, entry_date)
+    service = _service(db)
+    entry = service.get_entry_by_date(entry_date)
     if not entry:
         entry_data = DiaryEntryCreate(date=entry_date, is_work_day=DiaryService.is_work_day(entry_date))
-        entry = DiaryService.create_entry(db, entry_data)
+        entry = service.create_entry(entry_data)
 
     # This would trigger the snapshot logic
     # For now, just return success
@@ -193,66 +202,7 @@ async def get_statistics_summary(
     - Arrival/departure patterns
     """
 
-    # Default to last 30 days if not specified
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        from datetime import timedelta
-
-        start_date = end_date - timedelta(days=30)
-
-    # Get entries in range
-    entries = DiaryService.get_entries(db, start_date, end_date, skip=0, limit=1000)
-
-    if not entries:
-        return {
-            "total_entries": 0,
-            "date_range": {"start": start_date, "end": end_date},
-            "average_hours_worked": 0,
-            "total_hours_worked": 0,
-            "mood_distribution": {},
-            "total_action_items_completed": 0,
-            "average_arrival_time": None,
-            "average_departure_time": None,
-            "most_productive_days": [],
-        }
-
-    # Calculate statistics
-    total_hours = sum(e.hours_worked or 0 for e in entries)
-    avg_hours = total_hours / len(entries) if entries else 0
-
-    # Mood distribution
-    mood_counts = {}
-    for e in entries:
-        if e.mood:
-            mood_counts[e.mood] = mood_counts.get(e.mood, 0) + 1
-
-    # Total action items completed
-    total_completed = sum(len(e.action_items_completed or []) for e in entries)
-
-    # Average arrival/departure times
-    arrivals = [e.arrival_time for e in entries if e.arrival_time]
-    departures = [e.departure_time for e in entries if e.departure_time]
-
-    avg_arrival = arrivals[0] if arrivals else None  # Simplified
-    avg_departure = departures[0] if departures else None  # Simplified
-
-    # Most productive days (most completed items)
-    productive_days = sorted(
-        [(e.date, len(e.action_items_completed or [])) for e in entries], key=lambda x: x[1], reverse=True
-    )[:5]
-
-    return {
-        "total_entries": len(entries),
-        "date_range": {"start": start_date, "end": end_date},
-        "average_hours_worked": round(avg_hours, 2),
-        "total_hours_worked": round(total_hours, 2),
-        "mood_distribution": mood_counts,
-        "total_action_items_completed": total_completed,
-        "average_arrival_time": avg_arrival,
-        "average_departure_time": avg_departure,
-        "most_productive_days": [{"date": d, "items_completed": count} for d, count in productive_days],
-    }
+    return _service(db).get_statistics_summary(start_date, end_date)
 
 
 @router.get("/statistics/timeline")
@@ -262,27 +212,4 @@ async def get_statistics_timeline(
     db: Session = Depends(get_db),
 ):
     """Get daily timeline of hours worked and action items."""
-    from datetime import timedelta
-
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        start_date = end_date - timedelta(days=30)
-
-    entries = DiaryService.get_entries(db, start_date, end_date, skip=0, limit=1000)
-
-    timeline = []
-    for entry in sorted(entries, key=lambda e: e.date):
-        timeline.append(
-            {
-                "date": entry.date,
-                "hours_worked": entry.hours_worked or 0,
-                "action_items_completed": len(entry.action_items_completed or []),
-                "action_items_worked_on": len(entry.action_items_worked_on or []),
-                "mood": entry.mood,
-                "arrival_time": entry.arrival_time,
-                "departure_time": entry.departure_time,
-            }
-        )
-
-    return {"date_range": {"start": start_date, "end": end_date}, "timeline": timeline}
+    return _service(db).get_statistics_timeline(start_date, end_date)

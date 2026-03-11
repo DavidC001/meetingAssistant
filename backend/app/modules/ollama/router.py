@@ -18,6 +18,10 @@ router = APIRouter(
 )
 
 
+def _service() -> OllamaService:
+    return OllamaService()
+
+
 class OllamaConfig(BaseModel):
     """Configuration for Ollama container."""
 
@@ -44,8 +48,7 @@ _STATUS_MESSAGES = {
 @router.get("/status", response_model=OllamaStatus)
 async def get_ollama_status():
     """Get the current status of the Ollama container."""
-    service = OllamaService()
-    status = service.get_status()
+    status = _service().get_status()
     return OllamaStatus(status=status, message=_STATUS_MESSAGES.get(status, "Unknown status"))
 
 
@@ -53,8 +56,7 @@ async def get_ollama_status():
 async def start_ollama(config: OllamaConfig):
     """Start the Ollama Docker container."""
     try:
-        service = OllamaService()
-        return service.start(model=config.model, port=config.port)
+        return _service().start(model=config.model, port=config.port)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="Timeout while starting Ollama container")
     except RuntimeError as e:
@@ -67,8 +69,7 @@ async def start_ollama(config: OllamaConfig):
 async def stop_ollama():
     """Stop the Ollama Docker container."""
     try:
-        service = OllamaService()
-        return service.stop()
+        return _service().stop()
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=500, detail="Timeout while stopping Ollama container")
     except RuntimeError as e:
@@ -81,8 +82,7 @@ async def stop_ollama():
 async def remove_ollama():
     """Remove the Ollama Docker container."""
     try:
-        service = OllamaService()
-        return service.remove()
+        return _service().remove()
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:

@@ -44,6 +44,10 @@ class UserMappingRepository(BaseRepository[models.UserMapping, schemas.UserMappi
         """Initialize the repository with a database session."""
         super().__init__(models.UserMapping, db)
 
+    def get_by_id(self, mapping_id: int) -> models.UserMapping | None:
+        """Backward-compatible alias for BaseRepository.get."""
+        return self.get(mapping_id)
+
     def get_all_active(self, skip: int = 0, limit: int = 100) -> list[models.UserMapping]:
         """
         Get all active user mappings.

@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import os
+import re
+import shutil
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.config import get_app_config
 from app.core.llm import chat as llm_chat
 from app.core.llm.providers import ProviderFactory
 from app.core.storage import rag
-from app.models import ActionItem, Meeting, Transcription
-from app.modules.meetings.repository import TranscriptionRepository
+from app.models import ActionItem, Meeting
+from app.modules.meetings.service import MeetingService
 from app.modules.settings.service import SettingsService
 
 from . import schemas
@@ -34,12 +40,15 @@ class ProjectService:
 
     def __init__(self, db: Session):
         self.db = db
+        self.config = get_app_config()
         self.repository = ProjectRepository(db)
         self.milestone_repository = ProjectMilestoneRepository(db)
         self.member_repository = ProjectMemberRepository(db)
         self.chat_repository = ProjectChatRepository(db)
         self.note_repository = ProjectNoteRepository(db)
+        self.attachment_repository = ProjectNoteAttachmentRepository(db)
         self.pai_repo = ProjectActionItemRepository(db)
+        self.meeting_service = MeetingService(db)
 
     def link_action_item_to_project(self, project_id: int, action_item_id: int) -> None:
         """Link an existing action item to a project. Raises ValueError if already linked."""
@@ -637,6 +646,255 @@ class ProjectService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to sync members: {str(e)}")
 
+    def get_project_members(self, project_id: int) -> list[schemas.ProjectMember]:
+        self.get_project(project_id)
+        members = self.member_repository.list_by_project(project_id)
+        return [schemas.ProjectMember.model_validate(member) for member in members]
+
+    def add_project_member(self, project_id: int, member: schemas.ProjectMemberCreate) -> schemas.ProjectMember:
+        self.get_project(project_id)
+        member_data = member.model_dump()
+        member_data["is_auto_detected"] = False
+        new_member = self.member_repository.create(project_id, member_data)
+        return schemas.ProjectMember.model_validate(new_member)
+
+    def update_project_member(
+        self, project_id: int, member_id: int, update: schemas.ProjectMemberUpdate
+    ) -> schemas.ProjectMember:
+        self.get_project(project_id)
+        member = self.member_repository.get(member_id)
+        if not member or member.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Member not found")
+        updated_member = self.member_repository.update(member, update.model_dump(exclude_unset=True))
+        return schemas.ProjectMember.model_validate(updated_member)
+
+    def remove_project_member(self, project_id: int, member_id: int) -> None:
+        self.get_project(project_id)
+        member = self.member_repository.get(member_id)
+        if not member or member.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Member not found")
+        self.member_repository.delete(member)
+
+    def get_project_milestones(self, project_id: int) -> list[schemas.ProjectMilestone]:
+        self.get_project(project_id)
+        milestones = self.milestone_repository.list_by_project(project_id)
+        return [schemas.ProjectMilestone.model_validate(milestone) for milestone in milestones]
+
+    def create_milestone(self, project_id: int, milestone: schemas.ProjectMilestoneCreate) -> schemas.ProjectMilestone:
+        self.get_project(project_id)
+        new_milestone = self.milestone_repository.create(project_id, milestone.model_dump())
+        return schemas.ProjectMilestone.model_validate(new_milestone)
+
+    def update_milestone(
+        self, project_id: int, milestone_id: int, update: schemas.ProjectMilestoneUpdate
+    ) -> schemas.ProjectMilestone:
+        self.get_project(project_id)
+        milestone = self.milestone_repository.get(milestone_id)
+        if not milestone or milestone.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        updated_milestone = self.milestone_repository.update(milestone, update.model_dump(exclude_unset=True))
+        return schemas.ProjectMilestone.model_validate(updated_milestone)
+
+    def complete_milestone(self, project_id: int, milestone_id: int) -> schemas.ProjectMilestone:
+        self.get_project(project_id)
+        milestone = self.milestone_repository.get(milestone_id)
+        if not milestone or milestone.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        completed_milestone = self.milestone_repository.complete(milestone)
+        return schemas.ProjectMilestone.model_validate(completed_milestone)
+
+    def delete_milestone(self, project_id: int, milestone_id: int) -> None:
+        self.get_project(project_id)
+        milestone = self.milestone_repository.get(milestone_id)
+        if not milestone or milestone.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        self.milestone_repository.delete(milestone)
+
+    def get_chat_sessions(self, project_id: int) -> list[schemas.ProjectChatSession]:
+        self.get_project(project_id)
+        sessions = self.chat_repository.list_sessions(project_id)
+        result = []
+        for session in sessions:
+            messages = self.chat_repository.list_messages(session.id)
+            result.append(
+                schemas.ProjectChatSession(
+                    id=session.id,
+                    project_id=session.project_id,
+                    title=session.title,
+                    created_at=session.created_at,
+                    updated_at=session.updated_at,
+                    message_count=len(messages),
+                )
+            )
+        return result
+
+    def create_chat_session(
+        self, project_id: int, session_data: schemas.ProjectChatSessionCreate
+    ) -> schemas.ProjectChatSession:
+        self.get_project(project_id)
+        session = self.chat_repository.create_session(project_id, session_data.title)
+        return schemas.ProjectChatSession(
+            id=session.id,
+            project_id=session.project_id,
+            title=session.title,
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+            message_count=0,
+        )
+
+    def update_chat_session(
+        self, project_id: int, session_id: int, payload: schemas.ProjectChatSessionUpdate
+    ) -> schemas.ProjectChatSession:
+        self.get_project(project_id)
+        session = self.chat_repository.get_session(session_id)
+        if not session or session.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        updated = self.chat_repository.update_session(session, title=payload.title)
+        messages = self.chat_repository.list_messages(session.id)
+        return schemas.ProjectChatSession(
+            id=updated.id,
+            project_id=updated.project_id,
+            title=updated.title,
+            created_at=updated.created_at,
+            updated_at=updated.updated_at,
+            message_count=len(messages),
+        )
+
+    def get_chat_messages(self, project_id: int, session_id: int) -> list[schemas.ProjectChatMessage]:
+        self.get_project(project_id)
+        session = self.chat_repository.get_session(session_id)
+        if not session or session.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        messages = self.chat_repository.list_messages(session_id)
+        return [schemas.ProjectChatMessage.model_validate(message) for message in messages]
+
+    def delete_chat_session(self, project_id: int, session_id: int) -> None:
+        self.get_project(project_id)
+        session = self.chat_repository.get_session(session_id)
+        if not session or session.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+        self.chat_repository.delete_session(session)
+
+    def get_project_notes(self, project_id: int) -> list[schemas.ProjectNote]:
+        self.get_project(project_id)
+        notes = self.note_repository.list_by_project(project_id)
+        return [schemas.ProjectNote.model_validate(note) for note in notes]
+
+    def get_project_note(self, project_id: int, note_id: int):
+        self.get_project(project_id)
+        note = self.note_repository.get(note_id)
+        if not note or note.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Note not found")
+        return note
+
+    def create_note(self, project_id: int, note: schemas.ProjectNoteCreate) -> schemas.ProjectNote:
+        self.get_project(project_id)
+        new_note = self.note_repository.create(project_id, note.model_dump())
+        try:
+            from ...tasks import index_project_note
+
+            index_project_note.delay(new_note.id)
+        except Exception:
+            pass
+        return schemas.ProjectNote.model_validate(new_note)
+
+    def update_note(self, project_id: int, note_id: int, update: schemas.ProjectNoteUpdate) -> schemas.ProjectNote:
+        note = self.get_project_note(project_id, note_id)
+        updated_note = self.note_repository.update(note, update.model_dump(exclude_unset=True))
+        try:
+            from ...tasks import index_project_note
+
+            index_project_note.delay(updated_note.id)
+        except Exception:
+            pass
+        return schemas.ProjectNote.model_validate(updated_note)
+
+    def delete_note(self, project_id: int, note_id: int) -> None:
+        note = self.get_project_note(project_id, note_id)
+        self.note_repository.delete(note)
+        try:
+            from ...tasks import remove_project_note_embeddings
+
+            remove_project_note_embeddings.delay(note_id)
+        except Exception:
+            pass
+
+    def list_note_attachments(self, project_id: int, note_id: int) -> list[schemas.ProjectNoteAttachment]:
+        self.get_project_note(project_id, note_id)
+        attachments = self.attachment_repository.list_by_note(note_id)
+        return [schemas.ProjectNoteAttachment.model_validate(attachment) for attachment in attachments]
+
+    def get_note_attachment(self, attachment_id: int):
+        attachment = self.attachment_repository.get(attachment_id)
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Attachment not found")
+        return attachment
+
+    async def upload_note_attachment(
+        self,
+        project_id: int,
+        note_id: int,
+        file: UploadFile,
+        description: str | None = None,
+    ) -> schemas.ProjectNoteAttachment:
+        self.get_project_note(project_id, note_id)
+        attachments_dir = Path(self.config.upload.upload_dir) / "project_notes" / str(project_id)
+        attachments_dir.mkdir(parents=True, exist_ok=True)
+
+        original_filename = file.filename or "attachment"
+        safe_filename = re.sub(r"[^\w\s.-]", "", original_filename)
+        timestamp = str(int(time.time() * 1000))
+        unique_filename = f"{project_id}_{note_id}_{timestamp}_{safe_filename}"
+        file_path = attachments_dir / unique_filename
+
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(exc)}")
+
+        attachment = self.attachment_repository.create(
+            project_id,
+            note_id,
+            {
+                "filename": original_filename,
+                "filepath": str(file_path),
+                "file_size": os.path.getsize(file_path),
+                "mime_type": file.content_type or "application/octet-stream",
+                "description": description,
+            },
+        )
+
+        try:
+            from ...tasks import index_project_note_attachment
+
+            index_project_note_attachment.delay(attachment.id)
+        except Exception:
+            pass
+
+        return schemas.ProjectNoteAttachment.model_validate(attachment)
+
+    def update_note_attachment_description(self, attachment_id: int, description: str) -> schemas.ProjectNoteAttachment:
+        attachment = self.get_note_attachment(attachment_id)
+        updated = self.attachment_repository.update(attachment, {"description": description})
+        return schemas.ProjectNoteAttachment.model_validate(updated)
+
+    def delete_note_attachment(self, attachment_id: int) -> None:
+        attachment = self.get_note_attachment(attachment_id)
+        try:
+            file_path = Path(attachment.filepath)
+            if file_path.exists():
+                file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        self.attachment_repository.delete(attachment)
+        try:
+            from ...tasks import remove_project_attachment_embeddings
+
+            remove_project_attachment_embeddings.delay(attachment_id)
+        except Exception:
+            pass
+
     def _compute_project_metrics(self, project_id: int) -> dict:
         """Compute metrics for a project."""
         meeting_count = self.repository.count_meetings_by_project(project_id)
@@ -698,8 +956,6 @@ class ProjectService:
         milestones = self.milestone_repository.list_by_project(project_id)
         members = self.member_repository.list_by_project(project_id)
         notes = self.note_repository.list_by_project(project_id)
-        attachment_repo = ProjectNoteAttachmentRepository(self.db)
-
         milestones_data = [
             {
                 "id": milestone.id,
@@ -729,7 +985,7 @@ class ProjectService:
 
         notes_data = []
         for note in notes:
-            attachments = attachment_repo.list_by_note(note.id)
+            attachments = self.attachment_repository.list_by_note(note.id)
             notes_data.append(
                 {
                     "id": note.id,
@@ -1054,18 +1310,7 @@ class ProjectService:
         if not meeting:
             raise HTTPException(status_code=400, detail="No meetings available to attach action item")
 
-        transcription_repo = TranscriptionRepository(self.db)
-        transcription = transcription_repo.get_by_meeting(meeting.id)
-
-        if not transcription:
-            transcription = Transcription(
-                meeting_id=meeting.id,
-                summary="",
-                full_text="",
-            )
-            self.db.add(transcription)
-            self.db.commit()
-            self.db.refresh(transcription)
+        transcription = self.meeting_service.ensure_transcription_for_meeting(meeting.id)
 
         start_date = data.start_date
         due_date_value = data.due_date

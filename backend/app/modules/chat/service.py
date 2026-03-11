@@ -11,6 +11,7 @@ Usage:
     message = chat_service.create_chat_message(meeting_id, role, content)
 """
 
+from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
@@ -237,3 +238,16 @@ class GlobalChatService:
             Total count of messages
         """
         return self.message_repo.count_by_session(session_id)
+
+    @staticmethod
+    def truncate_title(title: str | None, max_length: int = 60) -> str:
+        title_fallback = (title or "").strip()
+        if not title_fallback:
+            return "New chat"
+        if len(title_fallback) > max_length:
+            return f"{title_fallback[: max_length - 3]}..."
+        return title_fallback
+
+    def build_recent_history(self, session_id: int, limit: int = 6) -> list[dict[str, str]]:
+        existing_messages = self.get_messages(session_id)
+        return [{"role": message.role, "content": message.content} for message in existing_messages[-limit:]]

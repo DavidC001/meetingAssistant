@@ -5,6 +5,8 @@ This module sets up the FastAPI application with proper configuration,
 database initialization, and route registration.
 """
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -43,86 +45,89 @@ except Exception as e:
     logger.error("environment_validation_failed", error=str(e))
     raise
 
-# Ensure pgvector extension is available before creating tables
-try:
-    with engine.connect() as connection:
-        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        connection.commit()
-except Exception as exc:  # pragma: no cover - best effort for non-Postgres setups
-    logger.warning("Could not ensure pgvector extension: %s", exc)
+if os.getenv("SKIP_STARTUP_DB_INIT", "").lower() in {"1", "true", "yes"}:
+    logger.info("Skipping startup DB initialization due to SKIP_STARTUP_DB_INIT")
+else:
+    # Ensure pgvector extension is available before creating tables
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            connection.commit()
+    except Exception as exc:  # pragma: no cover - best effort for non-Postgres setups
+        logger.warning("Could not ensure pgvector extension: %s", exc)
 
-# Create all tables in the database (for new installations)
-Base.metadata.create_all(bind=engine)
+    # Create all tables in the database (for new installations)
+    Base.metadata.create_all(bind=engine)
 
-# Run database migrations (for existing installations)
-try:
-    with engine.connect() as connection:
-        # Make transcription_id nullable in action_items table if needed
-        connection.execute(
-            text(
-                """
-            DO $$
-            BEGIN
-                -- Check if the column exists and is NOT NULL
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'action_items'
-                    AND column_name = 'transcription_id'
-                    AND is_nullable = 'NO'
-                ) THEN
-                    -- Alter the column to be nullable
-                    ALTER TABLE action_items ALTER COLUMN transcription_id DROP NOT NULL;
-                    RAISE NOTICE 'Made transcription_id nullable in action_items table';
-                END IF;
-            END $$;
-        """
+    # Run database migrations (for existing installations)
+    try:
+        with engine.connect() as connection:
+            # Make transcription_id nullable in action_items table if needed
+            connection.execute(
+                text(
+                    """
+                DO $$
+                BEGIN
+                    -- Check if the column exists and is NOT NULL
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'action_items'
+                        AND column_name = 'transcription_id'
+                        AND is_nullable = 'NO'
+                    ) THEN
+                        -- Alter the column to be nullable
+                        ALTER TABLE action_items ALTER COLUMN transcription_id DROP NOT NULL;
+                        RAISE NOTICE 'Made transcription_id nullable in action_items table';
+                    END IF;
+                END $$;
+            """
+                )
             )
-        )
 
-        # Fix action_items_worked_on and action_items_completed columns in diary_entries
-        # They should be JSON, not integer
-        connection.execute(
-            text(
-                """
-            DO $$
-            BEGIN
-                -- Check if action_items_worked_on exists and is not JSON type
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'diary_entries'
-                    AND column_name = 'action_items_worked_on'
-                    AND data_type != 'json'
-                ) THEN
-                    ALTER TABLE diary_entries DROP COLUMN action_items_worked_on;
-                    ALTER TABLE diary_entries ADD COLUMN action_items_worked_on JSON;
-                    RAISE NOTICE 'Fixed action_items_worked_on column type to JSON';
-                END IF;
+            # Fix action_items_worked_on and action_items_completed columns in diary_entries
+            # They should be JSON, not integer
+            connection.execute(
+                text(
+                    """
+                DO $$
+                BEGIN
+                    -- Check if action_items_worked_on exists and is not JSON type
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'diary_entries'
+                        AND column_name = 'action_items_worked_on'
+                        AND data_type != 'json'
+                    ) THEN
+                        ALTER TABLE diary_entries DROP COLUMN action_items_worked_on;
+                        ALTER TABLE diary_entries ADD COLUMN action_items_worked_on JSON;
+                        RAISE NOTICE 'Fixed action_items_worked_on column type to JSON';
+                    END IF;
 
-                -- Check if action_items_completed exists and is not JSON type
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_name = 'diary_entries'
-                    AND column_name = 'action_items_completed'
-                    AND data_type != 'json'
-                ) THEN
-                    ALTER TABLE diary_entries DROP COLUMN action_items_completed;
-                    ALTER TABLE diary_entries ADD COLUMN action_items_completed JSON;
-                    RAISE NOTICE 'Fixed action_items_completed column type to JSON';
-                END IF;
-            END $$;
-        """
+                    -- Check if action_items_completed exists and is not JSON type
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'diary_entries'
+                        AND column_name = 'action_items_completed'
+                        AND data_type != 'json'
+                    ) THEN
+                        ALTER TABLE diary_entries DROP COLUMN action_items_completed;
+                        ALTER TABLE diary_entries ADD COLUMN action_items_completed JSON;
+                        RAISE NOTICE 'Fixed action_items_completed column type to JSON';
+                    END IF;
+                END $$;
+            """
+                )
             )
-        )
 
-        connection.commit()
-        logger.info("Database migrations completed successfully")
-except Exception as exc:
-    logger.error("Error running database migrations: %s", exc)
-    # Don't fail startup if migration fails - might already be applied
-    pass
+            connection.commit()
+            logger.info("Database migrations completed successfully")
+    except Exception as exc:
+        logger.error("Error running database migrations: %s", exc)
+        # Don't fail startup if migration fails - might already be applied
+        pass
 
 # Create FastAPI application with comprehensive configuration
 app = FastAPI(

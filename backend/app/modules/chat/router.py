@@ -9,8 +9,7 @@ from ...core.llm import chat as llm_chat
 from ...core.llm.providers import ProviderFactory
 from ...core.storage import rag
 from ...database import get_db
-from ...dependencies import get_global_chat_service
-from ..meetings.repository import MeetingRepository
+from ..meetings.service import MeetingService
 from ..settings.service import SettingsService
 from . import schemas
 from .service import GlobalChatService
@@ -21,12 +20,12 @@ router = APIRouter(
 )
 
 
+def _service(db: Session) -> GlobalChatService:
+    return GlobalChatService(db)
+
+
 async def _generate_chat_title(db: Session, message: str) -> str:
-    title_fallback = (message or "").strip()
-    if not title_fallback:
-        return "New chat"
-    if len(title_fallback) > 60:
-        title_fallback = f"{title_fallback[:57]}..."
+    title_fallback = GlobalChatService.truncate_title(message)
 
     try:
         model_config = SettingsService(db).get_default_model_configuration()
@@ -49,16 +48,15 @@ async def _generate_chat_title(db: Session, message: str) -> str:
         title = (response or "").strip().strip('"').strip("'")
         if not title:
             return title_fallback
-        if len(title) > 60:
-            return f"{title[:57]}..."
-        return title
+        return GlobalChatService.truncate_title(title)
     except Exception:
         return title_fallback
 
 
 @router.post("/sessions", response_model=schemas.GlobalChatSession)
 def create_session(
-    payload: schemas.GlobalChatSessionCreate, service: GlobalChatService = Depends(get_global_chat_service)
+    payload: schemas.GlobalChatSessionCreate,
+    db: Session = Depends(get_db),
 ):
     """
     Create a new global chat session.
@@ -85,13 +83,13 @@ def create_session(
     }
     ```
     """
-    return service.create_session(
+    return _service(db).create_session(
         title=payload.title, tags=payload.tags, filter_folder=payload.filter_folder, filter_tags=payload.filter_tags
     )
 
 
 @router.get("/sessions", response_model=list[schemas.GlobalChatSession])
-def list_sessions(skip: int = 0, limit: int = 100, service: GlobalChatService = Depends(get_global_chat_service)):
+def list_sessions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     List all global chat sessions with pagination.
 
@@ -111,12 +109,15 @@ def list_sessions(skip: int = 0, limit: int = 100, service: GlobalChatService = 
     GET /api/v1/global-chat/sessions?skip=0&limit=20
     ```
     """
-    return service.list_sessions(skip=skip, limit=limit)
+    return _service(db).list_sessions(skip=skip, limit=limit)
 
 
 @router.get("/sessions/{session_id}", response_model=schemas.GlobalChatSessionDetail)
 def get_session(
-    session_id: int, skip: int = 0, limit: int = 100, service: GlobalChatService = Depends(get_global_chat_service)
+    session_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
 ):
     """
     Get a global chat session with its messages.
@@ -126,6 +127,7 @@ def get_session(
         skip: Number of messages to skip (default: 0)
         limit: Maximum number of messages to return (default: 100)
     """
+    service = _service(db)
     session = service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -134,7 +136,8 @@ def get_session(
 
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: int, service: GlobalChatService = Depends(get_global_chat_service)):
+def delete_session(session_id: int, db: Session = Depends(get_db)):
+    service = _service(db)
     deleted = service.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -145,8 +148,9 @@ def delete_session(session_id: int, service: GlobalChatService = Depends(get_glo
 def update_session(
     session_id: int,
     payload: schemas.GlobalChatSessionUpdate,
-    service: GlobalChatService = Depends(get_global_chat_service),
+    db: Session = Depends(get_db),
 ):
+    service = _service(db)
     session = service.update_session(
         session_id=session_id,
         title=payload.title,
@@ -162,13 +166,13 @@ def update_session(
 @router.get("/filters/folders")
 def get_available_folders(db: Session = Depends(get_db)):
     """Get list of unique folders from completed meetings"""
-    return MeetingRepository(db).get_unique_folders()
+    return MeetingService(db).get_unique_folders()
 
 
 @router.get("/filters/tags")
 def get_available_filter_tags(db: Session = Depends(get_db)):
     """Get list of unique tags from completed meetings for filtering"""
-    return MeetingRepository(db).get_unique_tags()
+    return MeetingService(db).get_unique_tags()
 
 
 @router.post("/sessions/{session_id}/messages", response_model=schemas.GlobalChatMessage)
@@ -176,8 +180,8 @@ async def send_message(
     session_id: int,
     payload: schemas.GlobalChatMessageCreate,
     db: Session = Depends(get_db),
-    service: GlobalChatService = Depends(get_global_chat_service),
 ):
+    service = _service(db)
     session = service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -194,8 +198,7 @@ async def send_message(
 
     history = payload.chat_history
     if history is None:
-        existing_messages = service.get_messages(session_id)
-        history = [{"role": message.role, "content": message.content} for message in existing_messages[-6:]]
+        history = service.build_recent_history(session_id)
 
     # Store the user message immediately for persistence
     service.add_message(session_id, role="user", content=payload.message)
@@ -212,7 +215,7 @@ async def send_message(
     # Apply filters if present in the session
     meeting_ids = None
     if session.filter_folder or session.filter_tags:
-        meeting_ids = MeetingRepository(db).get_by_filters(folder=session.filter_folder, tags=session.filter_tags)
+        meeting_ids = MeetingService(db).get_meetings_by_filters(folder=session.filter_folder, tags=session.filter_tags)
         # If filters are applied but no meetings match, inform the user
         if not meeting_ids:
             assistant_message = service.add_message(

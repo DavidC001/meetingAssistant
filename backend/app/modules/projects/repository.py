@@ -91,8 +91,12 @@ class ProjectRepository:
     # -------------------------------------------------------------------------
 
     def get_meeting_ids_subquery(self, project_id: int):
-        """Return a SQLAlchemy subquery of meeting IDs for a project."""
-        return self.db.query(ProjectMeeting.meeting_id).filter(ProjectMeeting.project_id == project_id).subquery()
+        """Return a SQLAlchemy select() of meeting IDs for a project.
+
+        Uses the modern ``select()`` construct so that ``.in_()`` works
+        consistently on both PostgreSQL and SQLite (SQLAlchemy 2.x).
+        """
+        return select(ProjectMeeting.meeting_id).where(ProjectMeeting.project_id == project_id)
 
     def get_meeting_ids_list(self, project_id: int) -> list[int]:
         """Return a plain list of meeting IDs for a project."""

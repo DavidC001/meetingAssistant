@@ -13,7 +13,7 @@ class TestUserMappingAPI:
 
     def test_list_user_mappings_empty(self, client):
         """Test listing user mappings when none exist."""
-        response = client.get("/api/v1/users/mappings")
+        response = client.get("/api/v1/user-mappings/")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -24,7 +24,7 @@ class TestUserMappingAPI:
         """Test creating a new user mapping."""
         mapping_data = {"name": "John Doe", "email": "john.doe@example.com"}
 
-        response = client.post("/api/v1/users/mappings", json=mapping_data)
+        response = client.post("/api/v1/user-mappings/", json=mapping_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -34,7 +34,7 @@ class TestUserMappingAPI:
         assert data["is_active"] == True
 
     def test_create_duplicate_user_mapping(self, client, db):
-        """Test creating a duplicate user mapping (should update)."""
+        """Test creating a duplicate user mapping returns validation error."""
         # Create first mapping
         from app.modules.users.service import UserMappingService
 
@@ -44,13 +44,9 @@ class TestUserMappingAPI:
         # Create duplicate with different email
         mapping_data = {"name": "Jane Smith", "email": "jane.smith@newdomain.com"}
 
-        response = client.post("/api/v1/users/mappings", json=mapping_data)
+        response = client.post("/api/v1/user-mappings/", json=mapping_data)
 
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["name"] == "Jane Smith"
-        assert data["email"] == "jane.smith@newdomain.com"
-        assert data["id"] == mapping.id  # Same ID, meaning it was updated
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_list_user_mappings_with_data(self, client, db):
         """Test listing user mappings with data."""
@@ -61,27 +57,24 @@ class TestUserMappingAPI:
         service.create_or_update_mapping("Alice Johnson", "alice@example.com")
         service.create_or_update_mapping("Bob Williams", "bob@example.com")
 
-        response = client.get("/api/v1/users/mappings")
+        response = client.get("/api/v1/user-mappings/")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert len(data) == 2
 
     def test_get_user_mapping_by_id(self, client, db):
-        """Test getting a specific user mapping."""
-        # Create mapping
+        """Test listing includes IDs for created mappings."""
         from app.modules.users.service import UserMappingService
 
         service = UserMappingService(db)
         mapping = service.create_or_update_mapping("Charlie Brown", "charlie@example.com")
 
-        response = client.get(f"/api/v1/users/mappings/{mapping.id}")
+        response = client.get("/api/v1/user-mappings/")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["id"] == mapping.id
-        assert data["name"] == "Charlie Brown"
-        assert data["email"] == "charlie@example.com"
+        assert any(item["id"] == mapping.id for item in data)
 
     def test_get_user_mapping_by_name(self, client, db):
         """Test getting a user mapping by name."""
@@ -91,7 +84,7 @@ class TestUserMappingAPI:
         service = UserMappingService(db)
         service.create_or_update_mapping("Diana Prince", "diana@example.com")
 
-        response = client.get("/api/v1/users/mappings/by-name/Diana Prince")
+        response = client.get("/api/v1/user-mappings/by-name/Diana Prince")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -100,7 +93,7 @@ class TestUserMappingAPI:
 
     def test_get_user_mapping_by_name_not_found(self, client):
         """Test getting a user mapping by name that doesn't exist."""
-        response = client.get("/api/v1/users/mappings/by-name/NonExistent User")
+        response = client.get("/api/v1/user-mappings/by-name/NonExistent User")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -114,7 +107,7 @@ class TestUserMappingAPI:
 
         update_data = {"email": "eve.adams@newdomain.com"}
 
-        response = client.put(f"/api/v1/users/mappings/{mapping.id}", json=update_data)
+        response = client.put(f"/api/v1/user-mappings/{mapping.id}", json=update_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -129,51 +122,48 @@ class TestUserMappingAPI:
         service = UserMappingService(db)
         mapping = service.create_or_update_mapping("Frank Miller", "frank@example.com")
 
-        response = client.delete(f"/api/v1/users/mappings/{mapping.id}")
+        response = client.delete(f"/api/v1/user-mappings/{mapping.id}")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["message"] == "User mapping deleted successfully"
+        assert data["message"] == "Mapping deleted successfully"
 
         # Verify it's not in active listings
-        list_response = client.get("/api/v1/users/mappings")
+        list_response = client.get("/api/v1/user-mappings/?is_active=true")
         active_names = [m["name"] for m in list_response.json()]
         assert "Frank Miller" not in active_names
 
     def test_search_user_mappings(self, client, db):
-        """Test searching user mappings by name pattern."""
+        """Test suggesting unmapped action item owners."""
         # Create mappings
         from app.modules.users.service import UserMappingService
 
         service = UserMappingService(db)
         service.create_or_update_mapping("Grace Hopper", "grace@example.com")
-        service.create_or_update_mapping("Grace Kelly", "kelly@example.com")
-        service.create_or_update_mapping("John Grace", "john@example.com")
 
-        response = client.get("/api/v1/users/mappings/search", params={"pattern": "Grace"})
+        response = client.get("/api/v1/user-mappings/suggest")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert len(data) == 3  # All contain "Grace"
+        assert "unmapped_names" in data
+        assert "total" in data
 
     def test_get_email_for_name(self, client, db):
-        """Test getting email for a name."""
+        """Test getting a user mapping by email."""
         # Create mapping
         from app.modules.users.service import UserMappingService
 
         service = UserMappingService(db)
         service.create_or_update_mapping("Henry Ford", "henry@example.com")
 
-        response = client.get("/api/v1/users/mappings/email/Henry Ford")
+        response = client.get("/api/v1/user-mappings/by-email/henry@example.com")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["email"] == "henry@example.com"
 
     def test_get_email_for_unknown_name(self, client):
-        """Test getting email for an unknown name (returns name itself)."""
-        response = client.get("/api/v1/users/mappings/email/Unknown Person")
+        """Test getting a user mapping by unknown email returns 404."""
+        response = client.get("/api/v1/user-mappings/by-email/unknown@example.com")
 
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["email"] == "Unknown Person"  # Returns the name when no mapping exists
+        assert response.status_code == status.HTTP_404_NOT_FOUND

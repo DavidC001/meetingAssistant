@@ -23,6 +23,9 @@ class SettingsRepository:
     def get_api_key_by_id(self, key_id: int) -> models.APIKey | None:
         return self.db.query(models.APIKey).filter(models.APIKey.id == key_id).first()
 
+    def get_active_api_key_by_id(self, key_id: int) -> models.APIKey | None:
+        return self.db.query(models.APIKey).filter(models.APIKey.id == key_id, models.APIKey.is_active == True).first()
+
     def get_api_key_by_name(self, name: str) -> models.APIKey | None:
         return self.db.query(models.APIKey).filter(models.APIKey.name == name).first()
 
