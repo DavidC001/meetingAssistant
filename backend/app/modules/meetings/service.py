@@ -21,7 +21,6 @@ from ...core.config import config
 from ...core.integrations.export import export_to_docx, export_to_json, export_to_pdf, export_to_txt
 from ...core.llm import chat as llm_chat
 from ...core.storage import rag
-from ...tasks import process_meeting_task
 from ..chat import schemas as chat_schemas
 from ..chat.repository import ChatMessageRepository, GlobalChatSessionRepository
 from ..settings.service import SettingsService
@@ -101,6 +100,17 @@ class MeetingService:
         self.transcription_repo = TranscriptionRepository(db)
         self.chunk_repo = DocumentChunkRepository(db)
 
+    def _dispatch_processing(self, meeting_id: int) -> str:
+        """Dispatch a Celery processing task and return the task ID.
+
+        Lazy-imports tasks to avoid circular dependency (tasks -> processing -> llm -> meetings/service).
+        """
+        from ...tasks import process_meeting_task
+
+        result = process_meeting_task.delay(meeting_id)
+        self.repo.update_task_id(meeting_id, result.id)
+        return result.id
+
     def create_meeting_from_upload(
         self,
         file: UploadFile,
@@ -143,9 +153,7 @@ class MeetingService:
 
         db_meeting = self.repo.create_meeting(meeting_data=meeting_create, file_path=file_path, file_size=file_size)
 
-        # Trigger background processing
-        task_result = process_meeting_task.delay(db_meeting.id)
-        self.repo.update_task_id(db_meeting.id, task_result.id)
+        self._dispatch_processing(db_meeting.id)
 
         return db_meeting
 
@@ -248,26 +256,27 @@ class MeetingService:
         db_meeting = self.get_meeting_or_404(meeting_id)
 
         tags_changed = False
+        updates: dict[str, Any] = {}
         if meeting_update.tags is not None and meeting_update.tags != db_meeting.tags:
-            db_meeting.tags = meeting_update.tags
+            updates["tags"] = meeting_update.tags
             tags_changed = True
         if meeting_update.filename is not None:
-            db_meeting.filename = meeting_update.filename
+            updates["filename"] = meeting_update.filename
         if meeting_update.transcription_language is not None:
-            db_meeting.transcription_language = meeting_update.transcription_language
+            updates["transcription_language"] = meeting_update.transcription_language
         if meeting_update.number_of_speakers is not None:
-            db_meeting.number_of_speakers = meeting_update.number_of_speakers
+            updates["number_of_speakers"] = meeting_update.number_of_speakers
         if meeting_update.model_configuration_id is not None:
-            db_meeting.model_configuration_id = meeting_update.model_configuration_id
+            updates["model_configuration_id"] = meeting_update.model_configuration_id
         if meeting_update.folder is not None:
-            db_meeting.folder = meeting_update.folder
+            updates["folder"] = meeting_update.folder
         if meeting_update.notes is not None:
-            db_meeting.notes = meeting_update.notes
+            updates["notes"] = meeting_update.notes
         if meeting_update.meeting_date is not None:
-            db_meeting.meeting_date = meeting_update.meeting_date
+            updates["meeting_date"] = meeting_update.meeting_date
 
-        self.db.commit()
-        self.db.refresh(db_meeting)
+        if updates:
+            db_meeting = self.repo.update_fields(db_meeting, updates)
 
         if tags_changed:
             try:
@@ -325,8 +334,7 @@ class MeetingService:
             processing_logs=["Processing restarted manually"],
         )
 
-        task_result = process_meeting_task.delay(meeting_id)
-        self.repo.update_task_id(meeting_id, task_result.id)
+        self._dispatch_processing(meeting_id)
         return self.repo.get_by_id(meeting_id)
 
     def retry_analysis(self, meeting_id: int) -> models.Meeting:
@@ -362,8 +370,7 @@ class MeetingService:
             processing_logs=["Retrying analysis after previous failure"],
         )
 
-        task_result = process_meeting_task.delay(meeting_id)
-        self.repo.update_task_id(meeting_id, task_result.id)
+        self._dispatch_processing(meeting_id)
         return self.repo.get_by_id(meeting_id)
 
     def delete_meeting(self, meeting_id: int) -> None:
@@ -460,11 +467,8 @@ class MeetingService:
                     failed_ids.append(meeting_id)
                     errors[meeting_id] = str(e)
 
-            if success_count > 0:
-                self.db.commit()
-
         except Exception as e:
-            self.db.rollback()
+            self.repo.rollback()
             raise HTTPException(status_code=500, detail=f"Bulk delete failed: {str(e)}")
 
         return schemas.BulkOperationResponse(
@@ -480,31 +484,25 @@ class MeetingService:
         failed_ids = []
         errors: dict[int, str] = {}
 
+        update_data = updates.model_dump(exclude_unset=True)
         try:
+            existing_ids: list[int] = []
             for meeting_id in meeting_ids:
-                try:
-                    db_meeting = self.repo.get_by_id(meeting_id)
-                    if not db_meeting:
-                        failed_count += 1
-                        failed_ids.append(meeting_id)
-                        errors[meeting_id] = "Meeting not found"
-                        continue
-
-                    update_data = updates.model_dump(exclude_unset=True)
-                    for key, value in update_data.items():
-                        setattr(db_meeting, key, value)
-                    success_count += 1
-
-                except Exception as e:
+                if self.repo.get_by_id(meeting_id):
+                    existing_ids.append(meeting_id)
+                else:
                     failed_count += 1
                     failed_ids.append(meeting_id)
-                    errors[meeting_id] = str(e)
+                    errors[meeting_id] = "Meeting not found"
 
-            if success_count > 0:
-                self.db.commit()
+            if existing_ids and update_data:
+                updated_count = self.repo.bulk_update_fields(existing_ids, update_data)
+                success_count += updated_count
+            else:
+                success_count += len(existing_ids)
 
         except Exception as e:
-            self.db.rollback()
+            self.repo.rollback()
             raise HTTPException(status_code=500, detail=f"Bulk update failed: {str(e)}")
 
         return schemas.BulkOperationResponse(
@@ -520,11 +518,7 @@ class MeetingService:
 
     def add_speaker(self, meeting_id: int, name: str, label: str | None) -> models.Speaker:
         self.get_meeting_or_404(meeting_id)
-        db_speaker = models.Speaker(meeting_id=meeting_id, name=name, label=label)
-        self.db.add(db_speaker)
-        self.db.commit()
-        self.db.refresh(db_speaker)
-        return db_speaker
+        return self.speaker_repo.create_for_meeting(meeting_id=meeting_id, name=name, label=label)
 
     def get_speakers(self, meeting_id: int) -> list[models.Speaker]:
         db_meeting = self.get_meeting_or_404(meeting_id)
@@ -563,16 +557,13 @@ class MeetingService:
                     ):
                         action_item.owner = name
 
-        self.db.commit()
-        self.db.refresh(db_speaker)
-        return db_speaker
+        return self.speaker_repo.save(db_speaker)
 
     def delete_speaker(self, speaker_id: int) -> None:
         db_speaker = self.speaker_repo.get(speaker_id)
         if not db_speaker:
             raise HTTPException(status_code=404, detail="Speaker not found")
-        self.db.delete(db_speaker)
-        self.db.commit()
+        self.speaker_repo.delete_speaker(db_speaker)
 
     # =========================================================================
     # Action Items
@@ -636,12 +627,13 @@ class MeetingService:
 
     def update_tags_folder(self, meeting_id: int, tags: str | None, folder: str | None) -> models.Meeting:
         db_meeting = self.get_meeting_or_404(meeting_id)
+        updates: dict[str, Any] = {}
         if tags is not None:
-            db_meeting.tags = tags
+            updates["tags"] = tags
         if folder is not None:
-            db_meeting.folder = folder
-        self.db.commit()
-        self.db.refresh(db_meeting)
+            updates["folder"] = folder
+        if updates:
+            db_meeting = self.repo.update_fields(db_meeting, updates)
         if tags is not None:
             try:
                 from app.modules.projects.service import ProjectService
@@ -654,9 +646,7 @@ class MeetingService:
     def update_notes(self, meeting_id: int, notes: str | None) -> models.Meeting:
         db_meeting = self.get_meeting_or_404(meeting_id)
         notes_changed = db_meeting.notes != notes
-        db_meeting.notes = notes
-        self.db.commit()
-        self.db.refresh(db_meeting)
+        db_meeting = self.repo.update_fields(db_meeting, {"notes": notes})
         self.sync_meeting_links_from_notes(meeting_id, notes)
         if notes_changed and notes:
             from ...tasks import update_notes_embeddings
@@ -692,7 +682,7 @@ class MeetingService:
             if target_meeting:
                 self.repo.add_meeting_link(source_meeting_id, target_id)
 
-        self.db.commit()
+        self.repo.commit()
 
     # =========================================================================
     # Chat

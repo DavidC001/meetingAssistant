@@ -756,7 +756,8 @@ class ToolRegistry:
 
         # Trigger embedding computation for the updated notes
         try:
-            from ..tasks import compute_embeddings_for_meeting
+            # Use package-root import from core layer to avoid relative path ambiguity.
+            from app.tasks import compute_embeddings_for_meeting
 
             compute_embeddings_for_meeting.delay(meeting_id)
         except Exception as e:

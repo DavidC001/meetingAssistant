@@ -108,6 +108,8 @@ router.py  →  service.py  →  repository.py  →  DB
 - **Markers**: Use `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`, `@pytest.mark.llm` to categorize tests.
 - **Fixtures**: Defined in `backend/tests/conftest.py`.
 - Test each layer independently: mock repositories in service tests, mock services in router tests.
+- **Mandatory for every code change**: Add or update automated tests that cover the new/changed behavior.
+- **Do not consider work complete without verification**: Run the relevant test suite(s) and ensure they pass before finishing.
 
 ## ⚛️ Frontend Guidelines (`frontend/`)
 
@@ -149,8 +151,10 @@ router.py  →  service.py  →  repository.py  →  DB
    - `docker compose -f docker-compose.yml up --build -d` (CPU only).
 
 3. **Running Tests**:
-   - Backend: `pytest backend/tests` (run from root or backend dir, use conda `meetAssistant` environment).
+   - Backend: `pytest backend/tests` (run from root or backend dir, use conda `meetAssistant` environment). NOTE: they take quite a while, do not try to execute a new command while they are running as it results in them being killed.
    - Frontend: `npm test` inside `frontend/`.
+  - **Mandatory**: For backend changes, run backend tests. For frontend changes, run frontend tests. For cross-stack changes, run both.
+  - **Pull request readiness rule**: No task is complete until tests for affected areas are executed successfully.
 
 4. **Key Anti-Patterns to Avoid**:
    - ❌ Creating `crud.py` files (use `repository.py` instead).

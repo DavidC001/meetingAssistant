@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 # Ensure values from a local .env file are available before configuration is built
 load_dotenv()
@@ -52,6 +52,21 @@ class APIConfig:
     _huggingface_token: str | None = None
     extra_keys: dict[str, str] = field(default_factory=dict)
 
+    @staticmethod
+    def _normalize_credential(value: str | None) -> str | None:
+        """Return a trimmed credential value, treating blanks as missing."""
+        if value is None:
+            return None
+
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+
+        if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {'"', "'"}:
+            normalized = normalized[1:-1].strip()
+
+        return normalized or None
+
     def get(self, name: str | None) -> str | None:
         """Return a credential by its environment variable style name."""
         if not name:
@@ -59,13 +74,24 @@ class APIConfig:
 
         normalized = name.upper()
         if normalized in self.extra_keys:
-            return self.extra_keys[normalized]
+            return self._normalize_credential(self.extra_keys[normalized])
 
         known = {
             "OPENAI_API_KEY": self._openai_api_key,
             "HUGGINGFACE_TOKEN": self._huggingface_token,
         }
-        return known.get(normalized) or os.getenv(normalized)
+
+        env_value = self._normalize_credential(os.getenv(normalized))
+        if env_value:
+            return env_value
+
+        dotenv_path = Path(__file__).resolve().parents[2] / ".env"
+        if dotenv_path.exists():
+            dotenv_value = self._normalize_credential(dotenv_values(dotenv_path).get(normalized))
+            if dotenv_value:
+                return dotenv_value
+
+        return self._normalize_credential(known.get(normalized))
 
     @property
     def openai_api_key(self) -> str | None:

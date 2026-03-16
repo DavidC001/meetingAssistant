@@ -90,12 +90,31 @@ class OpenAIProvider(LLMProvider):
             raise RuntimeError("OpenAI package not installed. Please run 'pip install openai'.")
 
         api_key = self.get_api_key()
+        if api_key:
+            # Normalize common pasted formats from UIs/proxies.
+            api_key = api_key.strip()
+            if api_key.lower().startswith("bearer "):
+                api_key = api_key[7:].strip()
+
         if not api_key:
-            env_hint = f" from environment variable '{self.config.api_key_env}'" if self.config.api_key_env else ""
-            provider_name = self.config.provider.title() if self.config.provider else "API"
-            raise RuntimeError(
-                f"{provider_name} API key not provided{env_hint}. Please configure the API key in Settings > Model Configuration."
-            )
+            # Custom providers may be deployed behind a proxy that injects auth headers.
+            # The OpenAI SDK still requires an api_key value, so use a placeholder.
+            if (self.config.provider or "").lower() == "other":
+                if self.config.api_key_env:
+                    raise RuntimeError(
+                        f"Custom provider API key not found in environment variable '{self.config.api_key_env}'. "
+                        "Update the key in Settings > API Keys and ensure the model configuration points to it."
+                    )
+                self.logger.warning(
+                    "No API key configured for provider 'other'; using placeholder key for OpenAI-compatible client."
+                )
+                api_key = "proxy-auth"
+            else:
+                env_hint = f" from environment variable '{self.config.api_key_env}'" if self.config.api_key_env else ""
+                provider_name = self.config.provider.title() if self.config.provider else "API"
+                raise RuntimeError(
+                    f"{provider_name} API key not provided{env_hint}. Please configure the API key in Settings > Model Configuration."
+                )
 
         # Initialize clients
         # Only pass base_url if it's explicitly set (not None)
@@ -289,10 +308,20 @@ class OllamaProvider(LLMProvider):
     def __init__(self, config: LLMConfig):
         super().__init__(config)
         self.base_url = config.base_url or "http://localhost:11434"
+        self.api_key = self.get_api_key()
+
+        # Prepare default headers
+        self.headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            # Normalize key (strip Bearer prefix if present)
+            key = self.api_key.strip()
+            if key.lower().startswith("bearer "):
+                key = key[7:].strip()
+            self.headers["Authorization"] = f"Bearer {key}"
 
         # Test connectivity
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(f"{self.base_url}/api/tags", headers=self.headers, timeout=5)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Ollama is not accessible at {self.base_url}: {e}")
@@ -353,7 +382,12 @@ class OllamaProvider(LLMProvider):
 
             # Use asyncio to run the synchronous request
             def make_request(request_payload: dict):
-                response = requests.post(f"{self.base_url}/api/chat", json=request_payload, timeout=self.config.timeout)
+                response = requests.post(
+                    f"{self.base_url}/api/chat",
+                    json=request_payload,
+                    headers=self.headers,
+                    timeout=self.config.timeout,
+                )
                 if not response.ok:
                     if response.status_code == 400:
                         self.logger.error(
@@ -413,7 +447,9 @@ class OllamaProvider(LLMProvider):
             }
 
             def make_request():
-                response = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.config.timeout)
+                response = requests.post(
+                    f"{self.base_url}/api/chat", json=payload, headers=self.headers, timeout=self.config.timeout
+                )
                 response.raise_for_status()
                 return response.json()
 
@@ -436,6 +472,7 @@ class ProviderFactory:
             "openai": OpenAIProvider,
             "ollama": OllamaProvider,
             # Map other providers to OpenAI (most support OpenAI-compatible APIs)
+            "other": OpenAIProvider,
             "anthropic": OpenAIProvider,
             "gemini": OpenAIProvider,
             "cohere": OpenAIProvider,

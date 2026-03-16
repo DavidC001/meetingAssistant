@@ -2,6 +2,8 @@
 Integration tests for Meeting API endpoints.
 """
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import status
 
@@ -176,3 +178,79 @@ class TestHealthEndpoints:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "version" in data
+
+
+@pytest.mark.integration
+@pytest.mark.api
+class TestMeetingProcessingAPI:
+    """Integration tests for restart/retry meeting processing endpoints."""
+
+    def test_restart_processing_dispatches_task(self, client, db_session, sample_meeting, monkeypatch):
+        from app import tasks
+
+        class _DummyTask:
+            def delay(self, meeting_id: int):
+                return SimpleNamespace(id=f"task-{meeting_id}")
+
+        monkeypatch.setattr(tasks, "process_meeting_task", _DummyTask())
+
+        sample_meeting.status = "failed"
+        db_session.commit()
+
+        response = client.post(f"/api/v1/meetings/{sample_meeting.id}/restart-processing")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "pending"
+        assert data["celery_task_id"] == f"task-{sample_meeting.id}"
+
+    def test_retry_analysis_dispatches_task(self, client, db_session, sample_meeting, monkeypatch):
+        from app import tasks
+
+        class _DummyTask:
+            def delay(self, meeting_id: int):
+                return SimpleNamespace(id=f"task-{meeting_id}")
+
+        monkeypatch.setattr(tasks, "process_meeting_task", _DummyTask())
+
+        sample_meeting.status = "failed"
+        db_session.commit()
+
+        response = client.post(f"/api/v1/meetings/{sample_meeting.id}/retry-analysis")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "processing"
+        assert data["celery_task_id"] == f"task-{sample_meeting.id}"
+
+
+@pytest.mark.integration
+@pytest.mark.api
+class TestMeetingSpeakersAndNotesAPI:
+    """Integration tests for speaker and notes endpoints."""
+
+    def test_add_speaker(self, client, sample_meeting):
+        response = client.post(
+            f"/api/v1/meetings/{sample_meeting.id}/speakers",
+            json={"name": "Alice", "label": "SPEAKER_01"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["name"] == "Alice"
+        assert data["label"] == "SPEAKER_01"
+
+    def test_update_notes_endpoint(self, client, sample_meeting, monkeypatch):
+        from app import tasks
+
+        class _DummyUpdateNotesEmbeddingsTask:
+            def delay(self, meeting_id: int, notes: str):
+                return SimpleNamespace(id=f"notes-{meeting_id}")
+
+        monkeypatch.setattr(tasks, "update_notes_embeddings", _DummyUpdateNotesEmbeddingsTask())
+
+        response = client.put(f"/api/v1/meetings/{sample_meeting.id}/notes", json={"notes": "linked to #123"})
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["notes"] == "linked to #123"

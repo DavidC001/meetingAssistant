@@ -1,12 +1,15 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
     ports:
       - "8000:8000"
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
       - /var/run/docker.sock:/var/run/docker.sock  # Enable Docker socket access for Ollama management
+      - ./backend/.env:/app/.env  # Mount env file so runtime writes are visible
     env_file:
       - ./backend/.env
     environment:
@@ -33,11 +36,14 @@ services:
     restart: unless-stopped
 
   worker:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
     command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--pool=solo"]
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
+      - ./backend/.env:/app/.env  # Mount env file so runtime writes are visible
     env_file:
       - ./backend/.env
     environment:
@@ -56,11 +62,14 @@ services:
           memory: 4G
 
   beat:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
     command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info"]
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
+      - ./backend/.env:/app/.env  # Mount env file so runtime writes are visible
     env_file:
       - ./backend/.env
     environment:

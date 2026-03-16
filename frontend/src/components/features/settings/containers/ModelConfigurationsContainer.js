@@ -310,33 +310,35 @@ const ModelConfigurationsContainer = () => {
                   />
                 </Grid>
               )}
-              {formData.chat_provider !== 'ollama' && (
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Chat API Key</InputLabel>
-                    <Select
-                      value={formData.chat_api_key_id !== null ? formData.chat_api_key_id : ''}
-                      onChange={(e) =>
-                        handleFormChange(
-                          'chat_api_key_id',
-                          e.target.value === '' ? null : e.target.value
-                        )
-                      }
-                    >
-                      <MenuItem value="">
-                        <em>No API Key</em>
-                      </MenuItem>
-                      {apiKeys
-                        .filter((key) => key.provider === formData.chat_provider)
-                        .map((apiKey) => (
-                          <MenuItem key={apiKey.id} value={apiKey.id}>
-                            {apiKey.name} ({apiKey.description || apiKey.environment_variable})
-                          </MenuItem>
-                        ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Chat API Key (Optional)</InputLabel>
+                  <Select
+                    value={formData.chat_api_key_id !== null ? formData.chat_api_key_id : ''}
+                    onChange={(e) =>
+                      handleFormChange(
+                        'chat_api_key_id',
+                        e.target.value === '' ? null : e.target.value
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>No API Key</em>
+                    </MenuItem>
+                    {apiKeys
+                      .filter((key) =>
+                        formData.chat_provider === 'ollama'
+                          ? key.provider === 'ollama' || key.provider === 'other'
+                          : key.provider === formData.chat_provider
+                      )
+                      .map((apiKey) => (
+                        <MenuItem key={apiKey.id} value={apiKey.id}>
+                          {apiKey.name} ({apiKey.description || apiKey.environment_variable})
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
           </TabPanel>
 
@@ -393,35 +395,37 @@ const ModelConfigurationsContainer = () => {
                   />
                 </Grid>
               )}
-              {formData.analysis_provider !== 'ollama' && (
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Analysis API Key</InputLabel>
-                    <Select
-                      value={
-                        formData.analysis_api_key_id !== null ? formData.analysis_api_key_id : ''
-                      }
-                      onChange={(e) =>
-                        handleFormChange(
-                          'analysis_api_key_id',
-                          e.target.value === '' ? null : e.target.value
-                        )
-                      }
-                    >
-                      <MenuItem value="">
-                        <em>No API Key</em>
-                      </MenuItem>
-                      {apiKeys
-                        .filter((key) => key.provider === formData.analysis_provider)
-                        .map((apiKey) => (
-                          <MenuItem key={apiKey.id} value={apiKey.id}>
-                            {apiKey.name} ({apiKey.description || apiKey.environment_variable})
-                          </MenuItem>
-                        ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Analysis API Key (Optional)</InputLabel>
+                  <Select
+                    value={
+                      formData.analysis_api_key_id !== null ? formData.analysis_api_key_id : ''
+                    }
+                    onChange={(e) =>
+                      handleFormChange(
+                        'analysis_api_key_id',
+                        e.target.value === '' ? null : e.target.value
+                      )
+                    }
+                  >
+                    <MenuItem value="">
+                      <em>No API Key</em>
+                    </MenuItem>
+                    {apiKeys
+                      .filter((key) =>
+                        formData.analysis_provider === 'ollama'
+                          ? key.provider === 'ollama' || key.provider === 'other'
+                          : key.provider === formData.analysis_provider
+                      )
+                      .map((apiKey) => (
+                        <MenuItem key={apiKey.id} value={apiKey.id}>
+                          {apiKey.name} ({apiKey.description || apiKey.environment_variable})
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
           </TabPanel>
         </DialogContent>

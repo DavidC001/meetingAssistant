@@ -15,7 +15,7 @@ Usage:
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import asc, func, or_
+from sqlalchemy import and_, asc, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.base import BaseRepository, NotFoundError
@@ -408,6 +408,36 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         self.db.commit()
         return meeting
 
+    def update_fields(self, meeting: models.Meeting, updates: dict[str, Any]) -> models.Meeting:
+        """Persist explicit field updates for an existing meeting."""
+        for key, value in updates.items():
+            if hasattr(meeting, key):
+                setattr(meeting, key, value)
+        self.db.commit()
+        self.db.refresh(meeting)
+        return meeting
+
+    def bulk_update_fields(self, meeting_ids: list[int], update_data: dict[str, Any]) -> int:
+        """Apply the same field updates to all meetings in meeting_ids."""
+        if not update_data or not meeting_ids:
+            return 0
+
+        updated = (
+            self.db.query(models.Meeting)
+            .filter(models.Meeting.id.in_(meeting_ids))
+            .update(update_data, synchronize_session=False)
+        )
+        self.db.commit()
+        return updated
+
+    def commit(self) -> None:
+        """Commit pending unit-of-work changes."""
+        self.db.commit()
+
+    def rollback(self) -> None:
+        """Rollback pending unit-of-work changes."""
+        self.db.rollback()
+
     # -------------------------------------------------------------------------
     # Meeting Link helpers
     # -------------------------------------------------------------------------
@@ -487,23 +517,50 @@ class ActionItemRepository(BaseRepository[models.ActionItem, schemas.ActionItemC
         include_overdue: bool = True,
     ) -> list:
         """Return (ActionItem, Meeting) pairs for upcoming/overdue deadlines."""
-        from sqlalchemy import DateTime, cast
+        # Filter and compare using the YYYY-MM-DD prefix to avoid cast failures
+        # when legacy rows contain malformed date strings.
+        dialect_name = self.db.bind.dialect.name if self.db.bind is not None else ""
+        due_date = models.ActionItem.due_date
+        due_date_expr = func.substr(due_date, 1, 10)
 
-        due_date_expr = cast(models.ActionItem.due_date, DateTime)
+        if dialect_name == "sqlite":
+            # SQLite lacks native regex in default builds; combine a glob with
+            # structural checks below.
+            date_filter = due_date.op("GLOB")("[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]*")
+        else:
+            # Safer PostgreSQL regex: constrain month/day ranges before comparing.
+            date_filter = due_date.op("~")(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])([ T].*)?$")
+
+        # Both dialects still apply a cheap structural guard for readability.
+        structure_guard = and_(
+            func.length(due_date) >= 10,
+            func.substr(due_date, 5, 1) == "-",
+            func.substr(due_date, 8, 1) == "-",
+        )
+
         query = (
             self.db.query(models.ActionItem, models.Meeting)
             .join(models.Transcription, models.ActionItem.transcription_id == models.Transcription.id)
             .join(models.Meeting, models.Transcription.meeting_id == models.Meeting.id)
             .filter(models.ActionItem.due_date.isnot(None))
+            .filter(structure_guard)
+            .filter(date_filter)
             .filter(models.ActionItem.status.in_(["pending", "in_progress"]))
         )
         if meeting_ids:
             query = query.filter(models.Meeting.id.in_(meeting_ids))
         if before_date is not None:
+            before_cmp = before_date.date().isoformat() if hasattr(before_date, "date") else str(before_date)[:10]
+            now_cmp = (
+                now.date().isoformat()
+                if (now is not None and hasattr(now, "date"))
+                else (str(now)[:10] if now is not None else None)
+            )
+
             if include_overdue:
-                query = query.filter(due_date_expr <= before_date)
+                query = query.filter(due_date_expr <= before_cmp)
             elif now is not None:
-                query = query.filter(due_date_expr >= now, due_date_expr <= before_date)
+                query = query.filter(due_date_expr >= now_cmp, due_date_expr <= before_cmp)
         return query.order_by(due_date_expr.asc()).all()
 
     def create_action_item(
@@ -854,6 +911,26 @@ class SpeakerRepository(BaseRepository[models.Speaker, Any, Any]):
         """Get all distinct non-null speaker names across all meetings."""
         results = self.db.query(models.Speaker.name).filter(models.Speaker.name.isnot(None)).distinct().all()
         return [row[0] for row in results]
+
+    def create_for_meeting(self, meeting_id: int, name: str, label: str | None) -> models.Speaker:
+        """Create and persist a speaker for a meeting."""
+        speaker = models.Speaker(meeting_id=meeting_id, name=name, label=label)
+        self.db.add(speaker)
+        self.db.commit()
+        self.db.refresh(speaker)
+        return speaker
+
+    def save(self, speaker: models.Speaker) -> models.Speaker:
+        """Persist updates to an existing speaker."""
+        self.db.add(speaker)
+        self.db.commit()
+        self.db.refresh(speaker)
+        return speaker
+
+    def delete_speaker(self, speaker: models.Speaker) -> None:
+        """Delete an existing speaker."""
+        self.db.delete(speaker)
+        self.db.commit()
 
     def delete_by_meeting_id(self, meeting_id: int) -> int:
         """Delete all speakers for a given meeting. Returns the count deleted."""

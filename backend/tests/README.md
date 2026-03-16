@@ -10,9 +10,7 @@ This directory contains all tests for the Meeting Assistant backend. Tests are o
 tests/
 ├── conftest.py              # Shared pytest fixtures and configuration
 ├── unit/                    # Unit tests for individual functions/classes
-│   └── test_validation.py   # Environment validation tests
 ├── integration/             # Integration tests for API endpoints
-│   └── test_api_meetings.py # Meeting API endpoint tests
 └── fixtures/                # Test data and fixtures (to be created)
 ```
 
