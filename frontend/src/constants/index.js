@@ -6,7 +6,6 @@
 export const API_ENDPOINTS = {
   MEETINGS: '/api/v1/meetings',
   SETTINGS: '/api/v1/settings',
-  ADMIN: '/api/v1/admin',
   UPLOAD: '/api/v1/meetings/upload',
   HEALTH: '/health',
 };

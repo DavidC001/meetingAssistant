@@ -29,6 +29,7 @@ jest.mock('../../services/apiClient', () => {
 beforeEach(() => jest.clearAllMocks());
 
 const BASE = '/api/v1/settings';
+const BACKUP_BASE = '/api/v1/backup';
 
 describe('APIKeyService', () => {
   test('getAll', async () => {
@@ -192,7 +193,7 @@ describe('BackupService', () => {
   test('export without audio', async () => {
     apiClient.get.mockResolvedValue({ data: new Blob(), headers: {} });
     const result = await BackupService.export(false);
-    expect(apiClient.get).toHaveBeenCalledWith(`${BASE}/backup/export`, {
+    expect(apiClient.get).toHaveBeenCalledWith(`${BACKUP_BASE}/export`, {
       params: { include_audio: false },
       responseType: 'blob',
     });
@@ -200,12 +201,30 @@ describe('BackupService', () => {
     expect(result).toHaveProperty('filename');
   });
 
+  test('export with audio uses zip endpoint and filename header', async () => {
+    apiClient.get.mockResolvedValue({
+      data: new Blob(),
+      headers: {
+        'content-disposition':
+          'attachment; filename="meeting_assistant_backup_20260316_120000.zip"',
+      },
+    });
+
+    const result = await BackupService.export(true);
+
+    expect(apiClient.get).toHaveBeenCalledWith(`${BACKUP_BASE}/export`, {
+      params: { include_audio: true },
+      responseType: 'blob',
+    });
+    expect(result.filename).toBe('meeting_assistant_backup_20260316_120000.zip');
+  });
+
   test('import file', async () => {
     apiClient.post.mockResolvedValue({ data: { imported: 10 } });
     const file = new File(['{}'], 'backup.json');
     await BackupService.import(file, true);
     expect(apiClient.post).toHaveBeenCalledWith(
-      `${BASE}/backup/import`,
+      `${BACKUP_BASE}/import`,
       expect.any(FormData),
       expect.objectContaining({ headers: { 'Content-Type': 'multipart/form-data' } })
     );

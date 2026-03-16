@@ -151,7 +151,10 @@ app = FastAPI(
         {"name": "calendar", "description": "Google Calendar integration for action item sync"},
         {"name": "search", "description": "Semantic and keyword search across all meetings and transcripts"},
         {"name": "users", "description": "User mapping for email addresses and task assignment"},
-        {"name": "admin", "description": "Administrative operations including worker management and system cleanup"},
+        {
+            "name": "admin",
+            "description": "Debug and operational diagnostics endpoints (cache, checkpoint, system health). Not for regular product workflows.",
+        },
         {"name": "ollama", "description": "Local LLM management via Ollama integration"},
         {"name": "graph", "description": "Meeting relationship visualization and network analysis"},
         {"name": "backup", "description": "Data backup and restore operations"},

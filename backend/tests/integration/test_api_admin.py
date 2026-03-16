@@ -26,36 +26,6 @@ class TestAdminCacheAPI:
 
 @pytest.mark.integration
 @pytest.mark.api
-class TestAdminExportAPI:
-    """Tests for /api/v1/admin/export endpoints."""
-
-    def test_export_meeting_not_found(self, client):
-        response = client.get("/api/v1/admin/export/99999")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-
-    def test_export_meeting_with_data(self, client, sample_meeting):
-        response = client.get(
-            f"/api/v1/admin/export/{sample_meeting.id}",
-            params={"formats": ["json"]},
-        )
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["meeting_id"] == sample_meeting.id
-        assert "exported_files" in data
-
-
-@pytest.mark.integration
-@pytest.mark.api
-class TestAdminCalendarAPI:
-    """Tests for /api/v1/admin/calendar endpoints."""
-
-    def test_calendar_meeting_not_found(self, client):
-        response = client.get("/api/v1/admin/calendar/99999")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.integration
-@pytest.mark.api
 class TestAdminCheckpointAPI:
     """Tests for /api/v1/admin/checkpoints endpoints."""
 

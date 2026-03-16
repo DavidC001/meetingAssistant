@@ -5,6 +5,7 @@
 import apiClient from './apiClient';
 
 const BASE_URL = '/api/v1/settings';
+const BACKUP_BASE_URL = '/api/v1/backup';
 
 /**
  * API Keys management.
@@ -297,7 +298,7 @@ export const BackupService = {
    * @returns {Promise<Blob>} Backup file
    */
   async export(includeAudio = false) {
-    const response = await apiClient.get(`${BASE_URL}/backup/export`, {
+    const response = await apiClient.get(`${BACKUP_BASE_URL}/export`, {
       params: { include_audio: includeAudio },
       responseType: 'blob',
     });
@@ -320,7 +321,7 @@ export const BackupService = {
     formData.append('file', file);
     formData.append('merge_mode', mergeMode);
 
-    const response = await apiClient.post(`${BASE_URL}/backup/import`, formData, {
+    const response = await apiClient.post(`${BACKUP_BASE_URL}/import`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
