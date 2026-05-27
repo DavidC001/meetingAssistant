@@ -72,10 +72,13 @@ const MeetingsGraphContainer = () => {
   const handleResumeSimulation = useCallback(() => {
     if (graphRef.current) {
       // Unpin any drag-locked nodes so simulation can stabilize
-      filteredData.nodes.forEach((node) => {
-        node.fx = undefined;
-        node.fy = undefined;
-      });
+      const currentData = graphRef.current.graphData();
+      if (currentData?.nodes) {
+        currentData.nodes.forEach((node) => {
+          node.fx = undefined;
+          node.fy = undefined;
+        });
+      }
       graphRef.current.resumeAnimation();
       graphRef.current.d3ReheatSimulation();
       isSimRunningRef.current = true;
@@ -88,7 +91,7 @@ const MeetingsGraphContainer = () => {
         }
       }, 3000);
     }
-  }, [filteredData.nodes]);
+  }, []);
 
   const handleEngineStop = useCallback(() => {
     if (graphRef.current && isSimRunningRef.current) {
