@@ -8,11 +8,11 @@ meeting lifecycle rather than chat interactions.
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ...core.llm import chat as llm_chat
-from ...core.storage import rag
-from ..chat import schemas as chat_schemas
-from ..chat.repository import ChatMessageRepository
-from ..settings.service import SettingsService
+from ....core.llm import chat as llm_chat
+from ....core.storage import rag
+from ...chat import schemas as chat_schemas
+from ...chat.repository import ChatMessageRepository
+from ...settings.service import SettingsService
 
 
 class MeetingChatService:

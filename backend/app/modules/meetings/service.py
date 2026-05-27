@@ -19,7 +19,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ...core.config import config
-from ...core.processing.transcript_formatter import update_speaker_name_in_transcript
 from ..chat import schemas as chat_schemas
 from ..chat.repository import ChatMessageRepository, GlobalChatSessionRepository
 from ..settings.service import SettingsService
@@ -572,6 +571,8 @@ class MeetingService:
     def update_speaker(
         self, speaker_id: int, name: str, label: str | None
     ) -> models.Speaker:
+        from ...core.processing.transcript_formatter import update_speaker_name_in_transcript
+
         db_speaker = self.speaker_repo.get(speaker_id)
         if not db_speaker:
             raise HTTPException(status_code=404, detail="Speaker not found")

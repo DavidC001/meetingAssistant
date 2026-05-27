@@ -7,11 +7,11 @@ Extracted from ProjectService to keep the main service focused on project lifecy
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ...core.llm import chat as llm_chat
-from ...core.llm.providers import ProviderFactory
-from ...core.storage import rag
-from ...modules.settings.service import SettingsService
-from . import schemas
+from ....core.llm import chat as llm_chat
+from ....core.llm.providers import ProviderFactory
+from ....core.storage import rag
+from ....modules.settings.service import SettingsService
+from .. import schemas
 
 
 class ProjectChatService:

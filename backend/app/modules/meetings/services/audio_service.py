@@ -10,9 +10,9 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from . import models as meeting_models
-from . import schemas
-from .repository import MeetingRepository
+from .. import models as meeting_models
+from .. import schemas
+from ..repository import MeetingRepository
 
 
 class AudioService:
@@ -56,7 +56,7 @@ class AudioService:
                 status_code=404, detail="Source file not found. Cannot generate audio."
             )
 
-        from ...tasks import generate_audio_for_existing_meeting
+        from ....tasks import generate_audio_for_existing_meeting
 
         task = generate_audio_for_existing_meeting.delay(meeting.id)
         return schemas.TaskStatus(
@@ -67,7 +67,7 @@ class AudioService:
 
     def regenerate_all_audio(self, force: bool = False) -> schemas.BatchTaskStatus:
         """Queue audio generation for all completed meetings that lack it."""
-        from ...tasks import generate_audio_for_existing_meeting
+        from ....tasks import generate_audio_for_existing_meeting
 
         all_completed = self.repo.get_completed_meetings(skip=0, limit=100000)
 

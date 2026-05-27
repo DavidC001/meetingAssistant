@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import ActionItem
 
-from . import schemas
+from .. import schemas
 
 
 class ProjectGanttService:

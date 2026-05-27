@@ -8,7 +8,8 @@ This module provides:
 - Document chunk management for RAG
 
 Usage:
-    from app.modules.meetings import MeetingService, MeetingRepository
+    from app.modules.meetings import MeetingRepository
+    from app.modules.meetings.service import MeetingService  # import service explicitly
 
     service = MeetingService(db)
     meetings = service.list_meetings()
@@ -28,23 +29,11 @@ from .repository import (
     SpeakerRepository,
     TranscriptionRepository,
 )
-from .service import MeetingService
-from .services.attachment_service import AttachmentService
-from .services.audio_service import AudioService
-from .services.chat_service import MeetingChatService
-from .services.export_service import ExportService
 
 __all__ = [
     # Submodules
     "models",
     "schemas",
-    # Service
-    "MeetingService",
-    # Sub-services
-    "AttachmentService",
-    "AudioService",
-    "MeetingChatService",
-    "ExportService",
     # Utilities
     "FileManager",
     "FileValidator",

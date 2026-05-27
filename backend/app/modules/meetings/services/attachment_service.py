@@ -14,9 +14,9 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ...core.config import config
-from . import models as meeting_models
-from .repository import AttachmentRepository, DocumentChunkRepository
+from ....core.config import config
+from .. import models as meeting_models
+from ..repository import AttachmentRepository, DocumentChunkRepository
 
 
 class AttachmentService:
@@ -61,7 +61,7 @@ class AttachmentService:
             description=description,
         )
 
-        from ...tasks import index_attachment
+        from ....tasks import index_attachment
 
         index_attachment.delay(attachment.id)
         return attachment

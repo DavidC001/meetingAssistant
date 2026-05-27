@@ -13,8 +13,8 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from ...core.config import get_app_config
-from . import schemas
+from ....core.config import get_app_config
+from .. import schemas
 
 
 class ProjectNotesService:
@@ -41,7 +41,7 @@ class ProjectNotesService:
     def create_note(self, project_id: int, note: schemas.ProjectNoteCreate) -> schemas.ProjectNote:
         new_note = self.note_repository.create(project_id, note.model_dump())
         try:
-            from ...tasks import index_project_note
+            from ....tasks import index_project_note
             index_project_note.delay(new_note.id)
         except Exception:
             pass
@@ -53,7 +53,7 @@ class ProjectNotesService:
         note = self.get_note(project_id, note_id)
         updated_note = self.note_repository.update(note, update.model_dump(exclude_unset=True))
         try:
-            from ...tasks import index_project_note
+            from ....tasks import index_project_note
             index_project_note.delay(updated_note.id)
         except Exception:
             pass
@@ -63,7 +63,7 @@ class ProjectNotesService:
         note = self.get_note(project_id, note_id)
         self.note_repository.delete(note)
         try:
-            from ...tasks import remove_project_note_embeddings
+            from ....tasks import remove_project_note_embeddings
             remove_project_note_embeddings.delay(note_id)
         except Exception:
             pass
@@ -117,7 +117,7 @@ class ProjectNotesService:
         )
 
         try:
-            from ...tasks import index_project_note_attachment
+            from ....tasks import index_project_note_attachment
             index_project_note_attachment.delay(attachment.id)
         except Exception:
             pass
@@ -141,7 +141,7 @@ class ProjectNotesService:
             pass
         self.attachment_repository.delete(attachment)
         try:
-            from ...tasks import remove_project_attachment_embeddings
+            from ....tasks import remove_project_attachment_embeddings
             remove_project_attachment_embeddings.delay(attachment_id)
         except Exception:
             pass

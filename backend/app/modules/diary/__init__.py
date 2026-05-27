@@ -1,4 +1,3 @@
 """Diary module for daily work diary functionality."""
-from .service import DiaryService
-
-__all__ = ["DiaryService"]
+# DiaryService is not re-exported here to avoid circular imports.
+# Import it directly: from app.modules.diary.service import DiaryService

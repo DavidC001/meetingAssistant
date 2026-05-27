@@ -13,13 +13,13 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ...core.integrations.export import (
+from ....core.integrations.export import (
     export_to_docx,
     export_to_json,
     export_to_pdf,
     export_to_txt,
 )
-from . import models as meeting_models
+from .. import models as meeting_models
 
 
 class ExportService:
