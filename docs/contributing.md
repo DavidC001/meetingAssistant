@@ -1,5 +1,8 @@
 # Contributing
 
+> **Also read** [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) —
+> the authoritative source for patterns, anti-patterns, and conventions in this repo.
+
 ## Adding a new feature module
 
 ### 1. Create the module structure
@@ -79,15 +82,18 @@ Add a service wrapper in `frontend/src/services/newFeatureService.js`.
 ```bash
 # Backend
 cd backend
-pytest
+pytest -m "unit"              # Unit tests only
+pytest -m "integration"        # Integration tests
+pytest                        # All tests
+pytest -m "not slow"          # Skip slow tests
 
 # Frontend
 cd frontend
 npm test
-
-# Pre-commit (runs on every commit)
-pre-commit run --all-files
+npm run test:ci               # CI mode
 ```
+
+Use pytest markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`, `@pytest.mark.llm`.
 
 ### Test patterns
 
