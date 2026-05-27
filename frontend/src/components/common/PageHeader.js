@@ -60,7 +60,7 @@ const PageHeader = ({
           {backButton}
 
           <Box>
-            <Typography variant="h4" component="h1">
+            <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
               {title}
             </Typography>
 

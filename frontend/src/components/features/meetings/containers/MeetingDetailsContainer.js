@@ -293,7 +293,14 @@ export const MeetingDetailsContainer = () => {
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={activeTab} onChange={handleTabChange} aria-label="meeting details tabs">
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          aria-label="meeting details tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab label="Overview" id="meeting-tab-0" aria-controls="meeting-tabpanel-0" />
           <Tab label="Transcript" id="meeting-tab-1" aria-controls="meeting-tabpanel-1" />
           <Tab
