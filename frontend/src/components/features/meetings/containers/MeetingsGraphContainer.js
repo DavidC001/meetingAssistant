@@ -59,10 +59,12 @@ const MeetingsGraphContainer = () => {
   const containerRef = useRef();
   const clickTimeRef = useRef(0);
   const clickNodeRef = useRef(null);
+  const isSimRunningRef = useRef(true);  // stable ref for engine callback
 
   const handleStopSimulation = useCallback(() => {
     if (graphRef.current) {
       graphRef.current.pauseAnimation();
+      isSimRunningRef.current = false;
       setIsSimulationRunning(false);
     }
   }, []);
@@ -71,10 +73,12 @@ const MeetingsGraphContainer = () => {
     if (graphRef.current) {
       graphRef.current.resumeAnimation();
       graphRef.current.d3ReheatSimulation();
+      isSimRunningRef.current = true;
       setIsSimulationRunning(true);
       setTimeout(() => {
         if (graphRef.current) {
           graphRef.current.pauseAnimation();
+          isSimRunningRef.current = false;
           setIsSimulationRunning(false);
         }
       }, 3000);
@@ -82,11 +86,12 @@ const MeetingsGraphContainer = () => {
   }, []);
 
   const handleEngineStop = useCallback(() => {
-    if (graphRef.current && isSimulationRunning) {
+    if (graphRef.current && isSimRunningRef.current) {
       graphRef.current.pauseAnimation();
+      isSimRunningRef.current = false;
       setIsSimulationRunning(false);
     }
-  }, [isSimulationRunning]);
+  }, []);  // stable reference — no deps on state
 
   const handleNodeClick = useCallback(
     (node) => {
@@ -248,6 +253,7 @@ const MeetingsGraphContainer = () => {
   // Zoom to fit when node count changes
   React.useEffect(() => {
     if (graphRef.current && filteredData.nodes.length > 0) {
+      isSimRunningRef.current = true;
       setIsSimulationRunning(true);
       filteredData.nodes.forEach((node) => {
         node.fx = undefined;
