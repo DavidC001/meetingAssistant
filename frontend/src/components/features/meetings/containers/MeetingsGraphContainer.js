@@ -71,6 +71,11 @@ const MeetingsGraphContainer = () => {
 
   const handleResumeSimulation = useCallback(() => {
     if (graphRef.current) {
+      // Unpin any drag-locked nodes so simulation can stabilize
+      filteredData.nodes.forEach((node) => {
+        node.fx = undefined;
+        node.fy = undefined;
+      });
       graphRef.current.resumeAnimation();
       graphRef.current.d3ReheatSimulation();
       isSimRunningRef.current = true;
@@ -83,7 +88,7 @@ const MeetingsGraphContainer = () => {
         }
       }, 3000);
     }
-  }, []);
+  }, [filteredData.nodes]);
 
   const handleEngineStop = useCallback(() => {
     if (graphRef.current && isSimRunningRef.current) {
@@ -352,19 +357,17 @@ const MeetingsGraphContainer = () => {
                 onNodeDragEnd={handleNodeDragEnd}
                 onBackgroundClick={handleBackgroundClick}
                 onEngineStop={handleEngineStop}
-                cooldownTicks={50}
+                cooldownTicks={100}
                 warmupTicks={50}
-                cooldownTime={2000}
+                cooldownTime={3000}
                 enableNodeDrag
                 enableZoomInteraction
                 enablePanInteraction
                 minZoom={0.5}
                 maxZoom={8}
-                d3AlphaDecay={0.1}
-                d3VelocityDecay={0.6}
+                d3AlphaDecay={0.05}
+                d3VelocityDecay={0.4}
                 d3AlphaMin={0.001}
-                width={containerRef.current?.offsetWidth}
-                height={containerRef.current?.offsetHeight}
               />
             </Box>
           </Paper>

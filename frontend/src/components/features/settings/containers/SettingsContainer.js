@@ -103,7 +103,9 @@ const SettingsContainer = () => {
           <Tabs
             value={currentTab}
             onChange={(e, newValue) => setCurrentTab(newValue)}
-            variant="fullWidth"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
             sx={{
               '& .MuiTab-root': { py: 2, fontSize: '1rem', fontWeight: 600 },
             }}

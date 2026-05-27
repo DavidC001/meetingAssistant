@@ -272,18 +272,16 @@ const KanbanBoardContainer = ({
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {showHeader && (
-        <Box sx={{ maxWidth: 'calc(3 * 380px + 2 * 20px)', width: '100%' }}>
-          <KanbanHeader
-            headerTitle={headerTitle || 'Action Items Board'}
-            headerSubtitle={headerSubtitle}
-            totalTasks={getTotalTasks()}
-            allowAdd={allowAdd}
-            isProjectMode={isProjectMode}
-            onAddTask={() => handleAddOpen('pending')}
-            onAddExisting={handleAddExistingOpen}
-            showHeader={showHeader}
-          />
-        </Box>
+        <KanbanHeader
+          headerTitle={headerTitle || 'Action Items Board'}
+          headerSubtitle={headerSubtitle}
+          totalTasks={getTotalTasks()}
+          allowAdd={allowAdd}
+          isProjectMode={isProjectMode}
+          onAddTask={() => handleAddOpen('pending')}
+          onAddExisting={handleAddExistingOpen}
+          showHeader={showHeader}
+        />
       )}
 
       {/* Fallback Add button row when header is hidden */}

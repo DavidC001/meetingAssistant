@@ -47,9 +47,9 @@ const KanbanColumn = ({
     <Paper
       elevation={0}
       sx={{
-        minWidth: 340,
-        maxWidth: 380,
-        flex: '1 1 340px',
+        minWidth: { xs: 280, sm: 340 },
+        maxWidth: { xs: '100%', sm: 380 },
+        flex: '1 1 280px',
         bgcolor: 'background.paper',
         borderRadius: 3,
         border: '1px solid',
