@@ -105,12 +105,13 @@ def _transcribe_local(audio_slice: Path, whisper_model: WhisperModel, language: 
 
 def _extract_segment(src: Path, start: float, end: float) -> Path:
     """Extracts a segment from an audio file using ffmpeg."""
-    duration = max(end - start, MIN_SLICE_SEC)
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-
     # Validate that source file exists
     if not src.exists():
         raise FileNotFoundError(f"Source audio file does not exist: {src}")
+
+    duration = max(end - start, MIN_SLICE_SEC)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp.close()
 
     # Log the extraction for debugging
     logger.info(f"Extracting segment {start:.2f}s-{end:.2f}s from {src}")

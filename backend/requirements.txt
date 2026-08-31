@@ -21,31 +21,32 @@ celery[redis]==5.3.6
 python-dotenv==1.0.0
 
 # HTTP Requests
-requests==2.31.0
+requests>=2.32.3
 
 # AI/ML Dependencies
 # PyTorch is installed separately in Dockerfile (GPU or CPU version)
 # Do NOT include torch/torchaudio here - they are pre-installed in the Docker image
-numpy==1.26.4
+numpy==2.4.6
 transformers==4.45.0
 sentence-transformers>=2.6.0
 tiktoken==0.5.2
 
 # Audio Processing
 faster-whisper==1.1.0
-pyannote.audio==3.1.1
+pyannote.audio==4.0.7
+torchcodec==0.7.0  # Pin to match torch==2.8.0 ABI; newer torchcodec releases require a newer torch
 ffmpeg-python==0.2.0
 
 # Natural Language Processing
 nltk==3.8.1
-scikit-learn==1.3.2
+scikit-learn==1.9.0
 
 # AI Providers
 openai>=1.50.0
 
 # Data Processing
-pandas==2.1.4
-tqdm==4.66.1
+pandas==2.2.3
+tqdm>=4.67.1
 
 # Document Generation
 python-docx==1.1.0

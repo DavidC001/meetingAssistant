@@ -106,7 +106,7 @@ def diarize_audio(
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1", use_auth_token=auth_token, cache_dir=str(cache_dir)
+            "pyannote/speaker-diarization-community-1", token=auth_token, cache_dir=str(cache_dir)
         )
         pipeline.to(DEVICE)
         logger.info(f"Diarization pipeline loaded on {DEVICE}")
@@ -166,13 +166,13 @@ def diarize_audio(
         if diarization_error[0]:
             raise diarization_error[0]
 
-        diarization = diarization_result[0]
+        diarization_output = diarization_result[0]
 
         if enhanced_progress_callback:
             enhanced_progress_callback(95, "Processing diarization results...")
 
         segments: list[dict[str, Any]] = []
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
+        for turn, speaker in diarization_output.speaker_diarization:
             segments.append({"start": turn.start, "end": turn.end, "speaker": speaker})
 
         # Count unique speakers for timing tracking

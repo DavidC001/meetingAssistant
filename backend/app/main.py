@@ -300,7 +300,7 @@ def read_root():
         "version": config.version,
         "features": [
             "Audio/Video transcription with Whisper",
-            "Speaker diarization with Pyannote",
+            "Speaker diarization with Pyannote Community-1",
             "AI-powered meeting analysis",
             "Export to multiple formats (JSON, TXT, DOCX, PDF, SRT)",
             "Calendar generation for action items",
