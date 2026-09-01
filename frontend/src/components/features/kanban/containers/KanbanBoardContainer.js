@@ -43,7 +43,7 @@ const KanbanBoardContainer = ({
   allowAdd = true,
   allowEdit = true,
   allowDelete = true,
-  defaultShowCompleted = true,
+  defaultShowCompleted = false,
   headerTitle,
   headerSubtitle,
   defaultOwner = '',
@@ -72,7 +72,17 @@ const KanbanBoardContainer = ({
     return localStorage.getItem(`kanban-timeHorizon`) || '3months';
   });
 
-  const [showCompleted, setShowCompleted] = useState(defaultShowCompleted);
+  const [showCompleted, setShowCompleted] = useState(() => {
+    // Project- and meeting-scoped boards keep whatever their caller passes in
+    // (e.g. ProjectActionItemsContainer always wants completed hidden,
+    // MeetingActionItemsContainer always wants them shown) and are never
+    // persisted across sessions. Only the general/global board — which has no
+    // fixed scope — remembers the user's last choice, mirroring the other
+    // "Global mode filters" below.
+    if (mode === 'project' || !showFilters) return defaultShowCompleted;
+    const stored = localStorage.getItem('kanban-showCompleted');
+    return stored === null ? defaultShowCompleted : stored === 'true';
+  });
   const [searchQuery, setSearchQuery] = useState('');
 
   // Hook for action items management
@@ -126,6 +136,11 @@ const KanbanBoardContainer = ({
     if (mode === 'project' || !showFilters) return;
     localStorage.setItem('kanban-timeHorizon', timeHorizon);
   }, [timeHorizon, mode, showFilters]);
+
+  useEffect(() => {
+    if (mode === 'project' || !showFilters) return;
+    localStorage.setItem('kanban-showCompleted', showCompleted.toString());
+  }, [showCompleted, mode, showFilters]);
 
   // Drag-drop handler
   const handleDragEnd = async (result) => {

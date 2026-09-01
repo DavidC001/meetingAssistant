@@ -8,12 +8,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { projectService, ActionItemService } from '../../../../services';
 import logger from '../../../../utils/logger';
 
-const normalizeItems = (items) =>
-  (items || []).map((item) => ({
-    ...item,
-    task: item.task || '',
-    status: (item.status || 'pending').replace('_', '-'),
-  }));
+// Backend statuses use underscores (e.g. "in_progress"); the kanban columns
+// are keyed with hyphens (e.g. "in-progress"). Every item that enters local
+// state — whether from a fetch, a create, or an update response — must go
+// through this so column grouping (see `columns` below) can match it.
+const normalizeItem = (item) => ({
+  ...item,
+  task: item.task || '',
+  status: (item.status || 'pending').replace('_', '-'),
+});
+
+const normalizeItems = (items) => (items || []).map(normalizeItem);
 
 export const useActionItems = ({
   mode = 'global',
@@ -65,11 +70,7 @@ export const useActionItems = ({
       }
 
       // Normalize items
-      const normalizedItems = rawItems.map((item) => ({
-        ...item,
-        task: item.task || '',
-        status: (item.status || 'pending').replace('_', '-'),
-      }));
+      const normalizedItems = normalizeItems(rawItems);
 
       // Apply time horizon filter
       const now = new Date();
@@ -116,8 +117,10 @@ export const useActionItems = ({
         });
       }
 
-      // Hide completed in project mode if disabled
-      if (isProjectMode && !showCompleted) {
+      // Hide completed items (including past-due ones) when disabled.
+      // Applies to both project-scoped and global boards; meeting mode never
+      // reaches this function (items come from initialItems instead).
+      if (!showCompleted) {
         filteredItems = filteredItems.filter((item) => item.status !== 'completed');
       }
 
@@ -221,11 +224,7 @@ export const useActionItems = ({
         }
 
         // Normalize the created item the same way as fetchActionItems does
-        const normalizedItem = {
-          ...createdItem,
-          task: createdItem.task || '',
-          status: (createdItem.status || 'pending').replace('_', '-'),
-        };
+        const normalizedItem = normalizeItem(createdItem);
 
         // Link to selected projects
         if (linkedProjectIds.length > 0 && normalizedItem?.id) {
@@ -265,7 +264,15 @@ export const useActionItems = ({
           updated = await ActionItemService.updateGlobal(itemId, payload);
         }
 
-        setActionItems((prev) => prev.map((item) => (item.id === itemId ? updated : item)));
+        // The backend returns the item with its raw (underscore) status, e.g.
+        // "in_progress". Without normalizing, the column-grouping lookup below
+        // (`columns` useMemo) won't match the hyphenated column key
+        // "in-progress" and will silently drop the item into "pending".
+        const normalizedUpdated = updated ? normalizeItem(updated) : updated;
+
+        setActionItems((prev) =>
+          prev.map((item) => (item.id === itemId ? normalizedUpdated : item))
+        );
         setError(null);
         if (isMeetingMode && onActionItemsChanged) onActionItemsChanged();
         return true;
