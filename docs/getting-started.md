@@ -17,7 +17,7 @@ docker-compose up -d
 
 # GPU setup (NVIDIA)
 cp backend/example.env backend/.env
-docker-compose -f docker-compose.gpu.yml up -d
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 The app will be available at `http://localhost:3000` (frontend) with the API at `http://localhost:8000`.

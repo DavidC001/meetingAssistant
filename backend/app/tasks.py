@@ -3,12 +3,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import models, schemas
+from celery import chord
+
+from . import models
 from .core.processing import chunking
 from .core.processing.document_processor import extract_text
 from .core.storage.embeddings import batched_embeddings, get_embedding_provider
-from .core.storage.vector_store import DEFAULT_PROJECT_VECTOR_STORE, DEFAULT_VECTOR_STORE
+from .core.storage.vector_store import DEFAULT_PROJECT_VECTOR_STORE, DEFAULT_VECTOR_STORE, rebuild_embedding_indexes
 from .database import SessionLocal
+from .modules.meetings import schemas
 from .modules.meetings.repository import AttachmentRepository, DocumentChunkRepository, MeetingRepository
 from .modules.projects.repository import ProjectNoteAttachmentRepository, ProjectNoteRepository
 from .modules.settings.repository import GoogleDriveRepository
@@ -30,7 +33,7 @@ def _build_chunk_payloads(meeting: models.Meeting) -> list[dict[str, Any]]:
         for chunk in chunks:
             metadata = dict(chunk.metadata or {})
             metadata.setdefault("meeting_id", meeting.id)
-            metadata.setdefault("meeting_name", meeting.filename)
+            metadata.setdefault("meeting_name", meeting.title or meeting.filename)
             if attachment is not None:
                 metadata.setdefault("attachment_id", attachment.id)
                 metadata.setdefault("attachment_name", attachment.filename)
@@ -256,7 +259,14 @@ def compute_embeddings_for_meeting(self, meeting_id: int) -> dict[str, Any]:
 
 @celery_app.task
 def recompute_all_embeddings() -> dict[str, Any]:
-    """Queue embedding recomputation for all meetings."""
+    """Queue embedding recomputation for all meetings, then rebuild the vector index
+    once every meeting has finished re-embedding at the (possibly new) configuration's
+    dimension.
+
+    Uses a chord rather than plain .delay() fan-out because the index rebuild's
+    ALTER COLUMN TYPE step requires every chunk to already be at a uniform dimension —
+    running it before all meetings finish would hit rows still at the old dimension.
+    """
 
     db = SessionLocal()
     try:
@@ -264,10 +274,28 @@ def recompute_all_embeddings() -> dict[str, Any]:
     finally:
         db.close()
 
-    for meeting_id in meeting_ids:
-        compute_embeddings_for_meeting.delay(meeting_id)
+    if not meeting_ids:
+        return {"status": "queued", "meetings": 0}
+
+    chord(compute_embeddings_for_meeting.s(meeting_id) for meeting_id in meeting_ids)(rebuild_vector_indexes_task.s())
 
     return {"status": "queued", "meetings": len(meeting_ids)}
+
+
+@celery_app.task
+def rebuild_vector_indexes_task(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Chord callback for recompute_all_embeddings — runs once every per-meeting
+    embedding job has completed (successfully or not)."""
+    failures = [r for r in results if not r or r.get("status") == "error"]
+    if failures:
+        logger.warning("Skipping vector index rebuild: %d/%d meetings failed to re-embed", len(failures), len(results))
+        return {"status": "skipped", "reason": "partial_failure", "failed": len(failures)}
+
+    db = SessionLocal()
+    try:
+        return rebuild_embedding_indexes(db)
+    finally:
+        db.close()
 
 
 @celery_app.task(bind=True)
@@ -491,7 +519,6 @@ def generate_audio_for_existing_meeting(self, meeting_id: int):
 
         # Ensure unique filename
         counter = 1
-        original_mp3_path = mp3_path
         while mp3_path.exists():
             mp3_filename = f"{Path(meeting.filepath).stem}_audio_{counter}.mp3"
             mp3_path = audio_dir / mp3_filename
@@ -561,7 +588,7 @@ def update_notes_embeddings(self, meeting_id: int, notes: str):
         for i, chunk in enumerate(notes_chunks):
             metadata = dict(chunk.metadata or {})
             metadata.setdefault("meeting_id", meeting.id)
-            metadata.setdefault("meeting_name", meeting.filename)
+            metadata.setdefault("meeting_name", meeting.title or meeting.filename)
             payloads.append(
                 {
                     "content": chunk.content,
@@ -652,7 +679,7 @@ def index_attachment(self, attachment_id: int):
         for i, chunk in enumerate(attachment_chunks):
             metadata = dict(chunk.metadata or {})
             metadata.setdefault("meeting_id", meeting_id)
-            metadata.setdefault("meeting_name", meeting.filename if meeting else "Unknown")
+            metadata.setdefault("meeting_name", (meeting.title or meeting.filename) if meeting else "Unknown")
             payloads.append(
                 {
                     "content": chunk.content,

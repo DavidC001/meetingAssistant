@@ -2,6 +2,8 @@
 Integration tests for Admin API endpoints.
 """
 
+import sys
+
 import pytest
 from fastapi import status
 
@@ -38,3 +40,44 @@ class TestAdminCheckpointAPI:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["meeting_id"] == sample_meeting.id
+
+
+@pytest.mark.integration
+@pytest.mark.api
+class TestAdminSystemStatusAPI:
+    """Tests for /api/v1/admin/system endpoints.
+
+    torch is only installed in the "heavy" Docker image target (the worker
+    service - see backend/Dockerfile); on the "light" target (backend,
+    worker-light) it's absent. These endpoints must degrade gracefully
+    rather than 500 when that's the case, so we simulate torch's absence by
+    marking it unimportable in sys.modules (the standard way to make
+    `import torch` raise ImportError regardless of whether it was already
+    imported elsewhere in the process).
+    """
+
+    def test_system_status_reports_gpu_when_torch_available(self, client):
+        response = client.get("/api/v1/admin/system/status")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "torch_available" in data
+        assert "gpu_available" in data
+        assert "cache_info" in data
+
+    def test_system_status_degrades_when_torch_missing(self, client, monkeypatch):
+        monkeypatch.setitem(sys.modules, "torch", None)
+
+        response = client.get("/api/v1/admin/system/status")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["torch_available"] is False
+        assert data["gpu_available"] is False
+        assert "gpu_info" not in data
+
+    def test_gpu_clear_cache_returns_400_when_torch_missing(self, client, monkeypatch):
+        monkeypatch.setitem(sys.modules, "torch", None)
+
+        response = client.post("/api/v1/admin/system/gpu/clear-cache")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

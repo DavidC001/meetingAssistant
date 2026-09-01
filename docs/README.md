@@ -38,7 +38,6 @@ meetingAssistant/
 │       │   ├── calendar/   # Google Calendar sync
 │       │   ├── graph/      # Meeting relationship visualization
 │       │   ├── users/      # User email mapping
-│       │   ├── ollama/     # Local LLM management
 │       │   └── admin/      # Diagnostic endpoints
 │       ├── middleware/      # Request ID, logging
 │       ├── database.py     # DB session and engine

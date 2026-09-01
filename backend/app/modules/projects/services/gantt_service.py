@@ -10,8 +10,6 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import ActionItem
-
 from .. import schemas
 
 
@@ -72,7 +70,7 @@ class ProjectGanttService:
             gantt_items.append(
                 schemas.GanttItem(
                     id=f"meeting-{meeting.id}",
-                    name=meeting.filename or f"Meeting {meeting.id}",
+                    name=meeting.title or meeting.filename or f"Meeting {meeting.id}",
                     type="meeting",
                     start_date=meeting.meeting_date,
                     end_date=end_date,
@@ -225,9 +223,7 @@ class ProjectGanttService:
         project.settings = settings
         self.db.commit()
 
-    def update_item(
-        self, project_id: int, item_id: str, update: schemas.GanttItemUpdate
-    ) -> schemas.GanttItem:
+    def update_item(self, project_id: int, item_id: str, update: schemas.GanttItemUpdate) -> schemas.GanttItem:
         """Update a Gantt item's date (meeting, milestone, or action item)."""
         if item_id.startswith("meeting-"):
             return self._update_meeting_gantt(project_id, item_id, update)
@@ -258,7 +254,7 @@ class ProjectGanttService:
             if meeting:
                 result["meeting_id"] = meeting.id
                 result["meeting_filename"] = meeting.filename
-                result["meeting_title"] = meeting.filename
+                result["meeting_title"] = meeting.title or meeting.filename
                 result["meeting_date"] = meeting.meeting_date
         return result
 
@@ -271,6 +267,7 @@ class ProjectGanttService:
                 return start_date
             if isinstance(start_date, str):
                 from dateutil.parser import parse
+
                 try:
                     return parse(start_date)
                 except Exception:
@@ -281,6 +278,7 @@ class ProjectGanttService:
                 return meeting_date
             if isinstance(meeting_date, str):
                 from dateutil.parser import parse
+
                 try:
                     return parse(meeting_date)
                 except Exception:
@@ -297,6 +295,7 @@ class ProjectGanttService:
             return due_date_raw
         if isinstance(due_date_raw, str):
             from dateutil.parser import parse
+
             try:
                 return parse(due_date_raw)
             except Exception:
@@ -322,7 +321,7 @@ class ProjectGanttService:
 
         return schemas.GanttItem(
             id=f"meeting-{meeting.id}",
-            name=meeting.filename,
+            name=meeting.title or meeting.filename,
             type="meeting",
             start_date=meeting.meeting_date,
             end_date=end_date,
@@ -361,9 +360,7 @@ class ProjectGanttService:
             metadata={"milestone_id": milestone.id, "status": milestone.status},
         )
 
-    def _update_action_gantt(
-        self, item_id: str, update: schemas.GanttItemUpdate
-    ) -> schemas.GanttItem:
+    def _update_action_gantt(self, item_id: str, update: schemas.GanttItemUpdate) -> schemas.GanttItem:
         db_id = int(item_id.split("-")[1])
         action = self.pai_repo.get_action_item(db_id)
         if not action:

@@ -9,19 +9,15 @@ from __future__ import annotations
 import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import get_app_config
-from app.core.storage import rag
 from app.models import ActionItem, Meeting
-from app.modules.meetings.service import MeetingService
-from app.modules.settings.service import SettingsService
 
 from . import schemas
-from .models import Project, ProjectActionItem, ProjectMeeting, ProjectMember, ProjectMilestone
+from .models import Project, ProjectActionItem, ProjectMeeting
 from .repository import (
     ProjectActionItemRepository,
     ProjectChatRepository,
@@ -46,6 +42,13 @@ class ProjectService:
     """
 
     def __init__(self, db: Session):
+        # Deferred: app.modules.meetings.service imports app.modules.settings.service,
+        # which (via core.storage -> core.llm.tools) imports this module at the top
+        # level. Importing MeetingService at module load time here would make that a
+        # circular import; importing it lazily here, after both modules have finished
+        # loading, breaks the cycle.
+        from app.modules.meetings.service import MeetingService
+
         self.db = db
         self.config = get_app_config()
         self.repository = ProjectRepository(db)
@@ -77,9 +80,7 @@ class ProjectService:
     @property
     def gantt_service(self) -> ProjectGanttService:
         if self._gantt_svc is None:
-            self._gantt_svc = ProjectGanttService(
-                self.db, self.repository, self.milestone_repository, self.pai_repo
-            )
+            self._gantt_svc = ProjectGanttService(self.db, self.repository, self.milestone_repository, self.pai_repo)
         return self._gantt_svc
 
     # =====================================================================
@@ -168,12 +169,8 @@ class ProjectService:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_data = self.get_project(project_id).model_dump()
-        project_data["milestones"] = [
-            schemas.ProjectMilestone.model_validate(m) for m in project.milestones
-        ]
-        project_data["members"] = [
-            schemas.ProjectMember.model_validate(m) for m in project.members
-        ]
+        project_data["milestones"] = [schemas.ProjectMilestone.model_validate(m) for m in project.milestones]
+        project_data["members"] = [schemas.ProjectMember.model_validate(m) for m in project.members]
         project_data["recent_activity"] = self._get_recent_activity(project_id, limit=10)
         return schemas.ProjectWithDetails(**project_data)
 
@@ -207,8 +204,11 @@ class ProjectService:
     # =====================================================================
 
     def get_project_meetings(
-        self, project_id: int, status: str | None = None,
-        sort_by: str = "date", sort_order: str = "desc",
+        self,
+        project_id: int,
+        status: str | None = None,
+        sort_by: str = "date",
+        sort_order: str = "desc",
     ) -> list[dict]:
         project = self.repository.get(project_id)
         if not project:
@@ -251,9 +251,7 @@ class ProjectService:
         project = self.repository.get(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        action_items = self.repository.get_project_linked_action_items(
-            project_id, status=status, owner=owner
-        )
+        action_items = self.repository.get_project_linked_action_items(project_id, status=status, owner=owner)
         result = []
         for item in action_items:
             item_dict = {
@@ -272,14 +270,12 @@ class ProjectService:
                 if meeting:
                     item_dict["meeting_id"] = meeting.id
                     item_dict["meeting_filename"] = meeting.filename
-                    item_dict["meeting_title"] = meeting.filename
+                    item_dict["meeting_title"] = meeting.title or meeting.filename
                     item_dict["meeting_date"] = meeting.meeting_date
             result.append(item_dict)
         return result
 
-    def create_project_action_item(
-        self, project_id: int, data: schemas.ProjectActionItemCreate
-    ) -> ActionItem:
+    def create_project_action_item(self, project_id: int, data: schemas.ProjectActionItemCreate) -> ActionItem:
         project = self.repository.get(project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -354,25 +350,18 @@ class ProjectService:
         unique_participants = self.repository.count_distinct_speakers_by_project(project_id)
         meetings_by_month = self._group_meetings_by_month(meetings)
         action_items_by_status = dict(status_counts)
-        action_items_by_owner = [
-            {"owner": owner, "count": count} for owner, count in owner_counts.most_common(10)
-        ]
+        action_items_by_owner = [{"owner": owner, "count": count} for owner, count in owner_counts.most_common(10)]
         milestones = self.milestone_repository.list_by_project(project_id)
         milestone_total = len(milestones)
         milestone_completed = len([m for m in milestones if m.status == "completed"])
-        milestone_missed = len([
-            m for m in milestones
-            if m.status != "completed" and m.due_date and m.due_date < now
-        ])
+        milestone_missed = len([m for m in milestones if m.status != "completed" and m.due_date and m.due_date < now])
         milestone_pending = milestone_total - milestone_completed
         milestone_progress = {
             "total": milestone_total,
             "completed": milestone_completed,
             "pending": milestone_pending,
             "missed": milestone_missed,
-            "completion_rate": (
-                round((milestone_completed / milestone_total) * 100, 2) if milestone_total else 0.0
-            ),
+            "completion_rate": (round((milestone_completed / milestone_total) * 100, 2) if milestone_total else 0.0),
         }
         activity_trend = self._build_activity_trend(meetings)
         return schemas.ProjectAnalytics(
@@ -426,9 +415,7 @@ class ProjectService:
         self.get_project(project_id)
         return self.chat_service.update_session(project_id, session_id, payload)
 
-    def get_chat_messages(
-        self, project_id: int, session_id: int
-    ) -> list[schemas.ProjectChatMessage]:
+    def get_chat_messages(self, project_id: int, session_id: int) -> list[schemas.ProjectChatMessage]:
         self.get_project(project_id)
         return self.chat_service.list_messages(project_id, session_id)
 
@@ -448,37 +435,32 @@ class ProjectService:
         self.get_project(project_id)
         return self.notes_service.get_note(project_id, note_id)
 
-    def create_note(
-        self, project_id: int, note: schemas.ProjectNoteCreate
-    ) -> schemas.ProjectNote:
+    def create_note(self, project_id: int, note: schemas.ProjectNoteCreate) -> schemas.ProjectNote:
         self.get_project(project_id)
         return self.notes_service.create_note(project_id, note)
 
-    def update_note(
-        self, project_id: int, note_id: int, update: schemas.ProjectNoteUpdate
-    ) -> schemas.ProjectNote:
+    def update_note(self, project_id: int, note_id: int, update: schemas.ProjectNoteUpdate) -> schemas.ProjectNote:
         return self.notes_service.update_note(project_id, note_id, update)
 
     def delete_note(self, project_id: int, note_id: int) -> None:
         self.notes_service.delete_note(project_id, note_id)
 
-    def list_note_attachments(
-        self, project_id: int, note_id: int
-    ) -> list[schemas.ProjectNoteAttachment]:
+    def list_note_attachments(self, project_id: int, note_id: int) -> list[schemas.ProjectNoteAttachment]:
         return self.notes_service.list_attachments(project_id, note_id)
 
     def get_note_attachment(self, attachment_id: int):
         return self.notes_service.get_attachment(attachment_id)
 
     async def upload_note_attachment(
-        self, project_id: int, note_id: int, file: UploadFile,
+        self,
+        project_id: int,
+        note_id: int,
+        file: UploadFile,
         description: str | None = None,
     ) -> schemas.ProjectNoteAttachment:
         return await self.notes_service.upload_attachment(project_id, note_id, file, description)
 
-    def update_note_attachment_description(
-        self, attachment_id: int, description: str
-    ) -> schemas.ProjectNoteAttachment:
+    def update_note_attachment_description(self, attachment_id: int, description: str) -> schemas.ProjectNoteAttachment:
         return self.notes_service.update_attachment_description(attachment_id, description)
 
     def delete_note_attachment(self, attachment_id: int) -> None:
@@ -516,9 +498,7 @@ class ProjectService:
         members = self.member_repository.list_by_project(project_id)
         return [schemas.ProjectMember.model_validate(m) for m in members]
 
-    def add_project_member(
-        self, project_id: int, member: schemas.ProjectMemberCreate
-    ) -> schemas.ProjectMember:
+    def add_project_member(self, project_id: int, member: schemas.ProjectMemberCreate) -> schemas.ProjectMember:
         self.get_project(project_id)
         member_data = member.model_dump()
         member_data["is_auto_detected"] = False
@@ -551,9 +531,7 @@ class ProjectService:
         milestones = self.milestone_repository.list_by_project(project_id)
         return [schemas.ProjectMilestone.model_validate(m) for m in milestones]
 
-    def create_milestone(
-        self, project_id: int, milestone: schemas.ProjectMilestoneCreate
-    ) -> schemas.ProjectMilestone:
+    def create_milestone(self, project_id: int, milestone: schemas.ProjectMilestoneCreate) -> schemas.ProjectMilestone:
         self.get_project(project_id)
         new_milestone = self.milestone_repository.create(project_id, milestone.model_dump())
         return schemas.ProjectMilestone.model_validate(new_milestone)
@@ -565,14 +543,10 @@ class ProjectService:
         milestone = self.milestone_repository.get(milestone_id)
         if not milestone or milestone.project_id != project_id:
             raise HTTPException(status_code=404, detail="Milestone not found")
-        updated_milestone = self.milestone_repository.update(
-            milestone, update.model_dump(exclude_unset=True)
-        )
+        updated_milestone = self.milestone_repository.update(milestone, update.model_dump(exclude_unset=True))
         return schemas.ProjectMilestone.model_validate(updated_milestone)
 
-    def complete_milestone(
-        self, project_id: int, milestone_id: int
-    ) -> schemas.ProjectMilestone:
+    def complete_milestone(self, project_id: int, milestone_id: int) -> schemas.ProjectMilestone:
         self.get_project(project_id)
         milestone = self.milestone_repository.get(milestone_id)
         if not milestone or milestone.project_id != project_id:
@@ -594,17 +568,13 @@ class ProjectService:
     def get_gantt_data(self, project_id: int) -> schemas.GanttData:
         return self.gantt_service.get_gantt_data(project_id)
 
-    def add_gantt_link(
-        self, project_id: int, source: str, target: str, link_type: str = "e2s"
-    ) -> schemas.GanttLink:
+    def add_gantt_link(self, project_id: int, source: str, target: str, link_type: str = "e2s") -> schemas.GanttLink:
         return self.gantt_service.add_link(project_id, source, target, link_type)
 
     def delete_gantt_link(self, project_id: int, link_id: str) -> None:
         self.gantt_service.delete_link(project_id, link_id)
 
-    def update_gantt_item(
-        self, project_id: int, item_id: str, update: schemas.GanttItemUpdate
-    ) -> schemas.GanttItem:
+    def update_gantt_item(self, project_id: int, item_id: str, update: schemas.GanttItemUpdate) -> schemas.GanttItem:
         return self.gantt_service.update_item(project_id, item_id, update)
 
     # =====================================================================
@@ -624,17 +594,25 @@ class ProjectService:
 
         milestones_data = [
             {
-                "id": m.id, "name": m.name, "description": m.description,
-                "due_date": m.due_date, "completed_at": m.completed_at,
-                "status": m.status, "color": m.color,
-                "created_at": m.created_at, "updated_at": m.updated_at,
+                "id": m.id,
+                "name": m.name,
+                "description": m.description,
+                "due_date": m.due_date,
+                "completed_at": m.completed_at,
+                "status": m.status,
+                "color": m.color,
+                "created_at": m.created_at,
+                "updated_at": m.updated_at,
             }
             for m in milestones
         ]
         members_data = [
             {
-                "id": m.id, "name": m.name, "email": m.email,
-                "role": m.role, "is_auto_detected": m.is_auto_detected,
+                "id": m.id,
+                "name": m.name,
+                "email": m.email,
+                "role": m.role,
+                "is_auto_detected": m.is_auto_detected,
                 "added_at": m.added_at,
             }
             for m in members
@@ -642,30 +620,42 @@ class ProjectService:
         notes_data = []
         for note in notes:
             attachments = self.attachment_repository.list_by_note(note.id)
-            notes_data.append({
-                "id": note.id, "title": note.title, "content": note.content or "",
-                "pinned": note.pinned,
-                "created_at": note.created_at, "updated_at": note.updated_at,
-                "attachments": [
-                    {
-                        "id": a.id, "filename": a.filename,
-                        "description": a.description, "file_size": a.file_size,
-                        "uploaded_at": a.uploaded_at,
-                    }
-                    for a in attachments
-                ],
-            })
+            notes_data.append(
+                {
+                    "id": note.id,
+                    "title": note.title,
+                    "content": note.content or "",
+                    "pinned": note.pinned,
+                    "created_at": note.created_at,
+                    "updated_at": note.updated_at,
+                    "attachments": [
+                        {
+                            "id": a.id,
+                            "filename": a.filename,
+                            "description": a.description,
+                            "file_size": a.file_size,
+                            "uploaded_at": a.uploaded_at,
+                        }
+                        for a in attachments
+                    ],
+                }
+            )
 
         return {
             "project": {
-                "id": project_schema.id, "name": project_schema.name,
-                "description": project_schema.description, "status": project_schema.status,
-                "color": project_schema.color, "icon": project_schema.icon,
-                "meeting_ids": project_schema.meeting_ids, "tags": project_schema.tags,
+                "id": project_schema.id,
+                "name": project_schema.name,
+                "description": project_schema.description,
+                "status": project_schema.status,
+                "color": project_schema.color,
+                "icon": project_schema.icon,
+                "meeting_ids": project_schema.meeting_ids,
+                "tags": project_schema.tags,
                 "start_date": project_schema.start_date,
                 "target_end_date": project_schema.target_end_date,
                 "actual_end_date": project_schema.actual_end_date,
-                "created_at": project_schema.created_at, "updated_at": project_schema.updated_at,
+                "created_at": project_schema.created_at,
+                "updated_at": project_schema.updated_at,
                 "settings": project_schema.settings,
             },
             "metrics": {
@@ -788,6 +778,7 @@ class ProjectService:
         if isinstance(value, str):
             try:
                 from dateutil.parser import parse
+
                 parsed = parse(value)
                 return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
             except Exception:
@@ -836,7 +827,7 @@ class ProjectService:
                 schemas.ActivityItem(
                     type="meeting_added",
                     timestamp=meeting.created_at,
-                    description=f"Meeting '{meeting.filename}' added",
+                    description=f"Meeting '{meeting.title or meeting.filename}' added",
                     metadata={"meeting_id": meeting.id, "filename": meeting.filename},
                 )
             )
@@ -863,7 +854,7 @@ class ProjectService:
         return {
             "id": meeting.id,
             "filename": meeting.filename,
-            "title": meeting.filename,
+            "title": meeting.title or meeting.filename,
             "filepath": meeting.filepath,
             "status": meeting.status,
             "created_at": meeting.created_at,

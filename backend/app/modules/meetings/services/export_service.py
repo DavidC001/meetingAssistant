@@ -50,6 +50,7 @@ class ExportService:
 
         data: dict = {
             "filename": meeting.filename,
+            "title": meeting.title or meeting.filename,
             "created_at": meeting.created_at,
             "status": meeting.status,
             "summary": meeting.transcription.summary or "No summary available",
@@ -72,9 +73,7 @@ class ExportService:
                 )
 
         if meeting.speakers:
-            data["speakers"] = [
-                {"name": s.name, "label": s.label or ""} for s in meeting.speakers
-            ]
+            data["speakers"] = [{"name": s.name, "label": s.label or ""} for s in meeting.speakers]
         if meeting.tags:
             data["tags"] = meeting.tags
         if meeting.folder:

@@ -37,12 +37,28 @@ def clear_cache_data():
 
 @router.get("/system/status")
 def get_system_status():
-    """Get system status including GPU availability and cache info."""
-    import torch
+    """Get system status including GPU availability and cache info.
 
-    status = {"gpu_available": torch.cuda.is_available(), "cache_info": get_cache_info()}
+    torch is only installed in the "heavy" image (the worker service — see
+    backend/Dockerfile); on the "light" image (API, worker-light) it's absent,
+    so this degrades to reporting no GPU rather than 500ing.
+    """
+    try:
+        import torch
 
-    if torch.cuda.is_available():
+        torch_available = True
+        gpu_available = torch.cuda.is_available()
+    except ImportError:
+        torch_available = False
+        gpu_available = False
+
+    status = {
+        "torch_available": torch_available,
+        "gpu_available": gpu_available,
+        "cache_info": get_cache_info(),
+    }
+
+    if gpu_available:
         status["gpu_info"] = {
             "device_count": torch.cuda.device_count(),
             "current_device": torch.cuda.current_device(),
@@ -56,8 +72,14 @@ def get_system_status():
 
 @router.post("/system/gpu/clear-cache")
 def clear_gpu_cache():
-    """Clear GPU cache if available."""
-    import torch
+    """Clear GPU cache if available.
+
+    torch is only installed in the "heavy" image — see get_system_status().
+    """
+    try:
+        import torch
+    except ImportError:
+        raise HTTPException(status_code=400, detail="GPU not available: torch is not installed on this service")
 
     if not torch.cuda.is_available():
         raise HTTPException(status_code=400, detail="GPU not available")
