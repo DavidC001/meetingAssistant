@@ -14,7 +14,6 @@ import {
   Memory as MemoryIcon,
   Tune as TuneIcon,
   Key as KeyIcon,
-  Storage as StorageIcon,
   CloudQueue as CloudQueueIcon,
   Backup as BackupIcon,
 } from '@mui/icons-material';
@@ -25,7 +24,6 @@ import GeneralSettingsTab from '../presentation/GeneralSettingsTab';
 import EmbeddingTab from '../presentation/EmbeddingTab';
 import ModelConfigurations from '../ModelConfigurations';
 import APIKeyManagement from '../APIKeyManagement';
-import OllamaManager from '../OllamaManager';
 import GoogleDriveSync from '../GoogleDriveSync';
 import DataBackup from '../DataBackup';
 
@@ -114,7 +112,6 @@ const SettingsContainer = () => {
             <Tab label="RAG & Embeddings" icon={<MemoryIcon />} iconPosition="start" />
             <Tab label="AI Models" icon={<TuneIcon />} iconPosition="start" />
             <Tab label="API Keys" icon={<KeyIcon />} iconPosition="start" />
-            <Tab label="Ollama" icon={<StorageIcon />} iconPosition="start" />
             <Tab label="Google Drive" icon={<CloudQueueIcon />} iconPosition="start" />
             <Tab label="Backup" icon={<BackupIcon />} iconPosition="start" />
           </Tabs>
@@ -160,14 +157,10 @@ const SettingsContainer = () => {
         </TabPanel>
 
         <TabPanel value={currentTab} index={4}>
-          <OllamaManager />
-        </TabPanel>
-
-        <TabPanel value={currentTab} index={5}>
           <GoogleDriveSync />
         </TabPanel>
 
-        <TabPanel value={currentTab} index={6}>
+        <TabPanel value={currentTab} index={5}>
           <DataBackup />
         </TabPanel>
       </Paper>

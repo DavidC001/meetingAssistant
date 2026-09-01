@@ -227,8 +227,10 @@ const ModelConfigurationsContainer = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Whisper Provider</InputLabel>
+                  <InputLabel id="whisper-provider-label">Whisper Provider</InputLabel>
                   <Select
+                    labelId="whisper-provider-label"
+                    label="Whisper Provider"
                     value={formData.whisper_provider}
                     onChange={(e) => handleFormChange('whisper_provider', e.target.value)}
                   >
@@ -242,8 +244,10 @@ const ModelConfigurationsContainer = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Whisper Model</InputLabel>
+                  <InputLabel id="whisper-model-label">Whisper Model</InputLabel>
                   <Select
+                    labelId="whisper-model-label"
+                    label="Whisper Model"
                     value={formData.whisper_model}
                     onChange={(e) => handleFormChange('whisper_model', e.target.value)}
                   >
@@ -263,8 +267,10 @@ const ModelConfigurationsContainer = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Chat Provider</InputLabel>
+                  <InputLabel id="chat-provider-label">Chat Provider</InputLabel>
                   <Select
+                    labelId="chat-provider-label"
+                    label="Chat Provider"
                     value={formData.chat_provider}
                     onChange={(e) => handleFormChange('chat_provider', e.target.value)}
                   >
@@ -312,8 +318,10 @@ const ModelConfigurationsContainer = () => {
               )}
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel>Chat API Key (Optional)</InputLabel>
+                  <InputLabel id="chat-api-key-label">Chat API Key (Optional)</InputLabel>
                   <Select
+                    labelId="chat-api-key-label"
+                    label="Chat API Key (Optional)"
                     value={formData.chat_api_key_id !== null ? formData.chat_api_key_id : ''}
                     onChange={(e) =>
                       handleFormChange(
@@ -347,8 +355,10 @@ const ModelConfigurationsContainer = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
-                  <InputLabel>Analysis Provider</InputLabel>
+                  <InputLabel id="analysis-provider-label">Analysis Provider</InputLabel>
                   <Select
+                    labelId="analysis-provider-label"
+                    label="Analysis Provider"
                     value={formData.analysis_provider}
                     onChange={(e) => handleFormChange('analysis_provider', e.target.value)}
                   >
@@ -397,8 +407,10 @@ const ModelConfigurationsContainer = () => {
               )}
               <Grid item xs={12}>
                 <FormControl fullWidth>
-                  <InputLabel>Analysis API Key (Optional)</InputLabel>
+                  <InputLabel id="analysis-api-key-label">Analysis API Key (Optional)</InputLabel>
                   <Select
+                    labelId="analysis-api-key-label"
+                    label="Analysis API Key (Optional)"
                     value={
                       formData.analysis_api_key_id !== null ? formData.analysis_api_key_id : ''
                     }

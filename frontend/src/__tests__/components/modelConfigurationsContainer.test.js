@@ -80,7 +80,9 @@ describe('ModelConfigurationsContainer API key selector', () => {
 
     render(<ModelConfigurationsContainer />);
 
-    expect(screen.getByText('Chat API Key (Optional)')).toBeInTheDocument();
+    // An outlined Select renders its label twice: in the <label> and in the
+    // notched outline's <legend>.
+    expect(screen.getAllByText('Chat API Key (Optional)').length).toBeGreaterThan(0);
 
     const chatSelect = screen.getByRole('combobox', { name: /chat api key \(optional\)/i });
     fireEvent.mouseDown(chatSelect);
@@ -100,7 +102,7 @@ describe('ModelConfigurationsContainer API key selector', () => {
 
     render(<ModelConfigurationsContainer />);
 
-    expect(screen.getByText('Analysis API Key (Optional)')).toBeInTheDocument();
+    expect(screen.getAllByText('Analysis API Key (Optional)').length).toBeGreaterThan(0);
 
     const analysisSelect = screen.getByRole('combobox', {
       name: /analysis api key \(optional\)/i,
