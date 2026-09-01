@@ -24,7 +24,6 @@ from .modules.chat import router as chat_router
 from .modules.diary import router as diary_router
 from .modules.graph import router as graph_router
 from .modules.meetings import router as meetings_router
-from .modules.ollama import router as ollama_router
 from .modules.projects.router import router as projects_router
 from .modules.search import router as search_router
 from .modules.settings import router as settings_router
@@ -155,7 +154,6 @@ app = FastAPI(
             "name": "admin",
             "description": "Debug and operational diagnostics endpoints (cache, checkpoint, system health). Not for regular product workflows.",
         },
-        {"name": "ollama", "description": "Local LLM management via Ollama integration"},
         {"name": "graph", "description": "Meeting relationship visualization and network analysis"},
         {"name": "backup", "description": "Data backup and restore operations"},
         {"name": "drive", "description": "Google Drive integration for file synchronization"},
@@ -258,7 +256,6 @@ app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(google_drive_router.router, prefix="/api/v1")
 app.include_router(backup_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
-app.include_router(ollama_router.router, prefix="/api/v1")
 app.include_router(calendar_router.router, prefix="/api/v1")
 app.include_router(chat_router.router, prefix="/api/v1")
 app.include_router(graph_router.router, prefix="/api/v1")

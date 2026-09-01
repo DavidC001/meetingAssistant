@@ -154,7 +154,6 @@ def fix_diary_action_items():
 
     db = SessionLocal()
     try:
-        from .modules.diary.models import DiaryEntry
         from .modules.diary.repository import DiaryRepository, extract_action_item_ids_from_content
 
         # Get all entries that have content but no action items extracted

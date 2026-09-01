@@ -71,7 +71,7 @@ def test_ollama_provider_uses_api_key_when_configured():
         config = LLMConfig(
             provider="ollama", model="llama3", base_url="http://proxy.example.com", api_key="secret-token"
         )
-        provider = providers.OllamaProvider(config)
+        providers.OllamaProvider(config)
 
         # Check the headers were set with Bearer token
         call_kwargs = mock_get.call_args[1]
@@ -90,7 +90,7 @@ def test_ollama_provider_strips_bearer_prefix():
         config = LLMConfig(
             provider="ollama", model="llama3", base_url="http://proxy.example.com", api_key="Bearer my-token"
         )
-        provider = providers.OllamaProvider(config)
+        providers.OllamaProvider(config)
 
         call_kwargs = mock_get.call_args[1]
         assert call_kwargs["headers"]["Authorization"] == "Bearer my-token"

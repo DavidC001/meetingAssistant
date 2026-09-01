@@ -19,7 +19,7 @@ Quick Import Examples:
     from app.core.llm import ProviderFactory, chat_about_meeting, analyze_transcript
 
     # Processing
-    from app.core.processing import process_audio_file, run_diarization
+    from app.core.processing import diarize_audio, run_processing_pipeline
 
     # Storage
     from app.core.storage import VectorStore, generate_embeddings

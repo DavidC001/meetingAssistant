@@ -15,7 +15,6 @@ except ImportError:
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import inch
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 except ImportError:
@@ -49,8 +48,8 @@ def export_to_txt(data: dict[str, Any], filename: str) -> Path:
         f.write("MEETING INFORMATION\n")
         f.write("=" * 70 + "\n\n")
 
-        if "filename" in data:
-            f.write(f"Meeting Name: {data['filename']}\n")
+        if data.get("title") or data.get("filename"):
+            f.write(f"Meeting Name: {data.get('title') or data['filename']}\n")
 
         if "created_at" in data:
             created_at = data["created_at"]
@@ -182,15 +181,15 @@ def export_to_docx(data: dict[str, Any], filename: str) -> Path | None:
     document = Document()
 
     # Title
-    title = document.add_heading("Meeting Summary Report", 0)
+    document.add_heading("Meeting Summary Report", 0)
 
     # Meeting Information Section
     document.add_heading("Meeting Information", level=1)
 
-    if "filename" in data:
+    if data.get("title") or data.get("filename"):
         p = document.add_paragraph()
         p.add_run("Meeting Name: ").bold = True
-        p.add_run(data["filename"])
+        p.add_run(data.get("title") or data["filename"])
 
     if "created_at" in data:
         created_at = data["created_at"]
@@ -264,17 +263,15 @@ def export_to_docx(data: dict[str, Any], filename: str) -> Path | None:
 
                 # Details in sub-bullets
                 if "owner" in item and item["owner"]:
-                    detail_p = document.add_paragraph(f"Owner: {item['owner']}", style="List Bullet 2")
+                    document.add_paragraph(f"Owner: {item['owner']}", style="List Bullet 2")
                 if "due_date" in item and item["due_date"]:
-                    detail_p = document.add_paragraph(f"Due Date: {item['due_date']}", style="List Bullet 2")
+                    document.add_paragraph(f"Due Date: {item['due_date']}", style="List Bullet 2")
                 if "status" in item and item["status"]:
-                    detail_p = document.add_paragraph(f"Status: {item['status'].capitalize()}", style="List Bullet 2")
+                    document.add_paragraph(f"Status: {item['status'].capitalize()}", style="List Bullet 2")
                 if "priority" in item and item["priority"]:
-                    detail_p = document.add_paragraph(
-                        f"Priority: {item['priority'].capitalize()}", style="List Bullet 2"
-                    )
+                    document.add_paragraph(f"Priority: {item['priority'].capitalize()}", style="List Bullet 2")
                 if "notes" in item and item["notes"]:
-                    detail_p = document.add_paragraph(f"Notes: {item['notes']}", style="List Bullet 2")
+                    document.add_paragraph(f"Notes: {item['notes']}", style="List Bullet 2")
             else:
                 document.add_paragraph(str(item), style="List Number")
     else:
@@ -334,8 +331,8 @@ def export_to_pdf(data: dict[str, Any], filename: str) -> Path | None:
     story.append(Paragraph("Meeting Information", styles["Heading1"]))
     story.append(Spacer(1, 6))
 
-    if "filename" in data:
-        story.append(Paragraph(f"<b>Meeting Name:</b> {data['filename']}", styles["Normal"]))
+    if data.get("title") or data.get("filename"):
+        story.append(Paragraph(f"<b>Meeting Name:</b> {data.get('title') or data['filename']}", styles["Normal"]))
 
     if "created_at" in data:
         created_at = data["created_at"]

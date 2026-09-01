@@ -320,7 +320,9 @@ def validate_embedding_model(provider: str, model_name: str) -> tuple[bool, str,
     return True, "", None
 
 
-def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguration) -> EmbeddingConfig:
+def _resolve_runtime_config(
+    db: Session, db_config: models.EmbeddingConfiguration | _ActiveEmbeddingConfigSnapshot
+) -> EmbeddingConfig:
     """Convert a database configuration into a runtime configuration."""
 
     provider = db_config.provider.lower()
@@ -351,12 +353,58 @@ def _resolve_runtime_config(db: Session, db_config: models.EmbeddingConfiguratio
     )
 
 
-def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfiguration:
-    """Fetch the active embedding configuration, creating a default if necessary."""
+@dataclass(frozen=True)
+class _ActiveEmbeddingConfigSnapshot:
+    """Scalar snapshot of the active EmbeddingConfiguration row.
+
+    Cached in place of the live ORM object so it survives past the request's db session
+    (safe to read after the session that fetched it closes) and can be reused across
+    requests without re-querying on every RAG call.
+    """
+
+    id: int
+    provider: str
+    model_name: str
+    dimension: int | None
+    settings: dict
+    api_key_id: int | None
+    base_url: str | None
+
+
+_ACTIVE_CONFIG_CACHE_TTL_SECONDS = 30
+_active_config_cache: _ActiveEmbeddingConfigSnapshot | None = None
+_active_config_cache_at: float = 0.0
+
+
+def ensure_active_embedding_configuration(
+    db: Session,
+) -> models.EmbeddingConfiguration | _ActiveEmbeddingConfigSnapshot:
+    """Fetch the active embedding configuration, creating a default if necessary.
+
+    This is called on every RAG/chat request (get_embedding_provider), so the lookup is
+    cached in-process for a short TTL rather than hitting Postgres each time. This is a
+    per-process cache like core/base/cache.py — good enough for read-mostly config with a
+    short staleness window, not a substitute for a real cross-process cache.
+    """
+    global _active_config_cache, _active_config_cache_at
+
+    now = time.monotonic()
+    if _active_config_cache is not None and (now - _active_config_cache_at) < _ACTIVE_CONFIG_CACHE_TTL_SECONDS:
+        return _active_config_cache
 
     config_record = SettingsRepository(db).get_active_embedding_configuration()
     if config_record:
-        return config_record
+        _active_config_cache = _ActiveEmbeddingConfigSnapshot(
+            id=config_record.id,
+            provider=config_record.provider,
+            model_name=config_record.model_name,
+            dimension=config_record.dimension,
+            settings=config_record.settings or {},
+            api_key_id=config_record.api_key_id,
+            base_url=config_record.base_url,
+        )
+        _active_config_cache_at = now
+        return _active_config_cache
 
     if SentenceTransformer is None:
         raise RuntimeError(
@@ -397,7 +445,9 @@ def ensure_active_embedding_configuration(db: Session) -> models.EmbeddingConfig
     return SettingsRepository(db).create_embedding_configuration(create_schema)
 
 
-def get_embedding_provider(db: Session) -> tuple[EmbeddingProvider, models.EmbeddingConfiguration]:
+def get_embedding_provider(
+    db: Session,
+) -> tuple[EmbeddingProvider, models.EmbeddingConfiguration | _ActiveEmbeddingConfigSnapshot]:
     """Return an embedding provider bound to the active configuration."""
 
     db_config = ensure_active_embedding_configuration(db)

@@ -3,20 +3,42 @@ Tool definitions and handlers for LLM chat capabilities.
 Provides functions that the LLM can call to interact with the meeting assistant system.
 """
 
+import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
 from ...modules.meetings import schemas
-from ...modules.meetings.models import Meeting, Speaker, Transcription
+from ...modules.meetings.models import Meeting
 from ...modules.meetings.repository import ActionItemRepository, MeetingRepository, SpeakerRepository
 from ...modules.projects import schemas as project_schemas
-from ...modules.projects.service import ProjectService
+
+if TYPE_CHECKING:
+    from ...modules.projects.service import ProjectService
 
 logger = logging.getLogger(__name__)
+
+
+def _get_project_service(db: Session) -> "ProjectService":
+    """Construct a ProjectService, importing it lazily.
+
+    core.llm.tools sits below app.modules in the dependency graph (per
+    CLAUDE.md, it's meant to use repositories directly rather than reach
+    into a module's service layer), but ProjectService's own __init__
+    constructs a MeetingService, whose module in turn imports
+    app.modules.settings.service, whose transitive imports (core.storage ->
+    core.llm.chat -> this module) reach back here. Importing ProjectService
+    at module load time closes that loop while it's still mid-import; a
+    deferred import here — the one place this module actually needs the
+    class — breaks it without scattering the same import across every call
+    site below.
+    """
+    from ...modules.projects.service import ProjectService as _ProjectService
+
+    return _ProjectService(db)
 
 
 class ToolRegistry:
@@ -220,7 +242,7 @@ class ToolRegistry:
                                 "type": "string",
                                 "description": "Meeting date in ISO format (YYYY-MM-DDTHH:MM:SS) (optional)",
                             },
-                            "filename": {"type": "string", "description": "Updated meeting name or title (optional)"},
+                            "title": {"type": "string", "description": "Updated meeting title (optional)"},
                             "tags": {
                                 "type": "string",
                                 "description": "Comma-separated tags for organizing the meeting (optional)",
@@ -576,7 +598,7 @@ class ToolRegistry:
         user_query: str | None = context.get("user_query")
 
         if project_id:
-            service = ProjectService(db)
+            service = _get_project_service(db)
             payload = project_schemas.ProjectActionItemCreate(
                 task=args["task"],
                 owner=args.get("owner"),
@@ -612,7 +634,7 @@ class ToolRegistry:
             transcription_id=meeting.transcription.id, item_data=action_item_data, is_manual=True
         )
 
-        meeting_name = meeting.filename or f"Meeting {meeting.id}"
+        meeting_name = meeting.title or meeting.filename or f"Meeting {meeting.id}"
         result = f"✅ Action item created (ID: {action_item.id}) in **{meeting_name}**:\n"
         result += f"- **Task:** {action_item.task}\n"
         if action_item.owner:
@@ -653,7 +675,7 @@ class ToolRegistry:
         status_filter = args.get("status_filter", "all")
 
         if project_id:
-            service = ProjectService(db)
+            service = _get_project_service(db)
             items = service.get_project_action_items(project_id)
             if status_filter != "all":
                 items = [item for item in items if item.get("status") == status_filter]
@@ -686,7 +708,7 @@ class ToolRegistry:
             if not action_items:
                 return f"No action items found with status: {status_filter}"
 
-            meeting_name = meeting.filename or f"Meeting {meeting.id}"
+            meeting_name = meeting.title or meeting.filename or f"Meeting {meeting.id}"
             result = f"Found {len(action_items)} action item(s) in **{meeting_name}**:\n\n"
             for item in action_items:
                 result += f"- **{item.task}** (ID: {item.id})\n"
@@ -712,7 +734,7 @@ class ToolRegistry:
 
         result = f"Found {len(rows)} action item(s):\n\n"
         for item, meeting in rows:
-            meeting_name = meeting.filename or f"Meeting {meeting.id}"
+            meeting_name = meeting.title or meeting.filename or f"Meeting {meeting.id}"
             result += f"- **{item.task}** (ID: {item.id})\n"
             result += f"  Meeting: {meeting_name} | Status: {item.status}"
             if item.owner:
@@ -793,9 +815,9 @@ class ToolRegistry:
             except ValueError:
                 return "Error: Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)"
 
-        if "filename" in args:
-            meeting.filename = args["filename"]
-            updated_fields.append("name")
+        if "title" in args:
+            meeting.title = args["title"]
+            updated_fields.append("title")
 
         if "tags" in args:
             meeting.tags = args["tags"]
@@ -815,7 +837,7 @@ class ToolRegistry:
     async def _handle_list_projects(self, args: dict[str, Any], context: dict[str, Any]) -> str:
         """Handler for listing projects."""
         db: Session = context["db"]
-        service = ProjectService(db)
+        service = _get_project_service(db)
         projects = service.list_projects()
         if not projects:
             return "No projects found"
@@ -842,7 +864,7 @@ class ToolRegistry:
         if not project_id:
             return "Error: project_id is required to list project notes"
 
-        service = ProjectService(db)
+        service = _get_project_service(db)
         notes = service.note_repository.list_by_project(project_id)
         if not notes:
             return "No project notes found"
@@ -878,7 +900,7 @@ class ToolRegistry:
             return False
 
         if project_id:
-            service = ProjectService(db)
+            service = _get_project_service(db)
             project = service.repository.get(project_id)
             if not project:
                 return "Error: Project not found"
@@ -912,7 +934,7 @@ class ToolRegistry:
                 "matches": [
                     {
                         "meeting_id": meeting.id,
-                        "meeting_name": meeting.filename or f"Meeting {meeting.id}",
+                        "meeting_name": meeting.title or meeting.filename or f"Meeting {meeting.id}",
                         "snippet": match.strip(),
                     }
                     for match in matches
@@ -932,7 +954,7 @@ class ToolRegistry:
                     matches.append(
                         {
                             "meeting_id": meeting.id,
-                            "meeting_name": meeting.filename or f"Meeting {meeting.id}",
+                            "meeting_name": meeting.title or meeting.filename or f"Meeting {meeting.id}",
                             "snippet": sentence.strip(),
                         }
                     )
@@ -962,7 +984,7 @@ class ToolRegistry:
         if not project_id:
             return "Error: project_id is required to create a project note"
 
-        service = ProjectService(db)
+        service = _get_project_service(db)
         note = service.note_repository.create(
             project_id,
             {
@@ -980,7 +1002,7 @@ class ToolRegistry:
         if not project_id:
             return "Error: project_id is required to create a project milestone"
 
-        service = ProjectService(db)
+        service = _get_project_service(db)
         due_date = args.get("due_date")
         if isinstance(due_date, str):
             try:
@@ -1007,7 +1029,7 @@ class ToolRegistry:
             return "Error: project_id is required. Use list_projects to find the project first."
 
         status_filter = args.get("status_filter", "all")
-        service = ProjectService(db)
+        service = _get_project_service(db)
         milestones = service.milestone_repository.list_by_project(project_id)
 
         if status_filter != "all":
@@ -1053,7 +1075,7 @@ class ToolRegistry:
         if not summary:
             return "No summary available for this meeting"
 
-        meeting_name = meeting.filename or f"Meeting {meeting.id}"
+        meeting_name = meeting.title or meeting.filename or f"Meeting {meeting.id}"
         return f"**Summary of {meeting_name} (ID: {meeting.id}):**\n\n{summary}"
 
     async def _handle_get_meeting_speakers(self, args: dict[str, Any], context: dict[str, Any]) -> str:
@@ -1072,7 +1094,7 @@ class ToolRegistry:
         if not speakers:
             return "No speaker information available for this meeting"
 
-        meeting_name = meeting.filename or f"Meeting {meeting.id}"
+        meeting_name = meeting.title or meeting.filename or f"Meeting {meeting.id}"
         result = f"**Participants in {meeting_name}** ({len(speakers)} speaker(s)):\n\n"
         for speaker in speakers:
             result += f"- {speaker.name}"
@@ -1092,7 +1114,7 @@ class ToolRegistry:
         limit = args.get("limit", 20)
 
         if project_id:
-            service = ProjectService(db)
+            service = _get_project_service(db)
             project = service.repository.get(project_id)
             if not project:
                 return "Error: Project not found"
@@ -1112,7 +1134,7 @@ class ToolRegistry:
         result = f"Found {len(meetings)} meeting(s):\n\n"
         for m in meetings:
             date_str = m.meeting_date.strftime("%Y-%m-%d %H:%M") if m.meeting_date else "No date"
-            result += f"- **ID {m.id}**: {m.filename or 'Untitled'}\n"
+            result += f"- **ID {m.id}**: {m.title or m.filename or 'Untitled'}\n"
             result += f"  Date: {date_str}"
             if m.folder:
                 result += f" | Folder: {m.folder}"
@@ -1140,7 +1162,7 @@ class ToolRegistry:
             return f"Error: Meeting {meeting_id} not found"
 
         date_str = meeting.meeting_date.strftime("%Y-%m-%d %H:%M") if meeting.meeting_date else "Not set"
-        result = f"**Meeting: {meeting.filename or 'Untitled'}** (ID: {meeting.id})\n\n"
+        result = f"**Meeting: {meeting.title or meeting.filename or 'Untitled'}** (ID: {meeting.id})\n\n"
         result += f"- **Date:** {date_str}\n"
         if meeting.folder:
             result += f"- **Folder:** {meeting.folder}\n"
@@ -1176,7 +1198,6 @@ class ToolRegistry:
     async def _handle_get_upcoming_deadlines(self, args: dict[str, Any], context: dict[str, Any]) -> str:
         """Handler for getting upcoming action item deadlines."""
         db: Session = context["db"]
-        project_id: int | None = context.get("project_id")
         meeting_ids: list[int] | None = context.get("meeting_ids")
         days_ahead = args.get("days_ahead", 14)
         include_overdue = args.get("include_overdue", True)
@@ -1214,7 +1235,7 @@ class ToolRegistry:
                     "due_date": str(ai.due_date),
                     "status": ai.status,
                     "overdue": is_overdue,
-                    "meeting_name": meeting.filename or f"Meeting {meeting.id}",
+                    "meeting_name": meeting.title or meeting.filename or f"Meeting {meeting.id}",
                     "meeting_id": meeting.id,
                 }
             )
@@ -1298,6 +1319,31 @@ class ToolRegistry:
         reasoning_chain = []
         current_question = initial_question
 
+        # Built once and reused across steps: llm_config never changes mid-loop, and for
+        # Ollama, construction does a blocking connectivity check that would otherwise
+        # repeat (and stall the event loop) on every one of the up-to-10 iterations.
+        from . import chat
+
+        try:
+            if not llm_config:
+                llm_config = chat.get_default_chat_config()
+            provider = await asyncio.get_event_loop().run_in_executor(
+                None, chat.ProviderFactory.create_provider, llm_config
+            )
+        except Exception as e:
+            logger.error(f"Error creating provider for iterative research: {e}", exc_info=True)
+            reasoning_chain.append(
+                {
+                    "step": 1,
+                    "question": current_question,
+                    "answer": f"Error during analysis: {str(e)}",
+                    "confidence": "low",
+                    "sources": [],
+                    "follow_up": "COMPLETE",
+                }
+            )
+            max_depth = 0  # provider unavailable — skip straight to formatting the result below
+
         logger.info(f"Starting iterative research with max_depth={max_depth}")
 
         for step in range(max_depth):
@@ -1343,12 +1389,6 @@ FOLLOW_UP: [next question or "COMPLETE"]"""
 
             try:
                 # Use the chat provider to analyze
-                from . import chat
-
-                if not llm_config:
-                    llm_config = chat.get_default_chat_config()
-
-                provider = chat.ProviderFactory.create_provider(llm_config)
                 analysis_response = await provider.chat_completion(
                     messages=[{"role": "user", "content": analysis_prompt}],
                     system_prompt="You are a research assistant analyzing information to answer questions. Be concise and specific.",

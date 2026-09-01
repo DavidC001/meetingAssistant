@@ -11,7 +11,7 @@ from typing import Any
 import torch
 from faster_whisper import WhisperModel
 
-from ..base.cache import cache_result, get_file_hash
+from ..base.cache import get_file_hash
 from ..base.utils import _run_ffmpeg
 from .transcript_formatter import format_transcript_grouped
 
@@ -168,7 +168,6 @@ class WhisperConfig:
             self.model_size = "base"
 
 
-@cache_result()
 def compile_transcript(
     audio_path: str,
     segments: list[dict[str, Any]],
@@ -179,7 +178,10 @@ def compile_transcript(
     """
     Transcribes all diarized segments in parallel and compiles the full transcript.
     Returns the formatted transcript string and the detected dominant language.
-    Results are cached based on file hash, segments, and parameters.
+
+    Not memoized: callers pass a fresh ``progress_callback`` closure on every run, which
+    would make any generic args-based cache key unique per call anyway. Checkpointing in
+    the processing pipeline is what actually avoids recomputing this on retry.
 
     Args:
         audio_path: Path to the audio file
