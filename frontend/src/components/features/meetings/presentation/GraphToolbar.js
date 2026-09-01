@@ -51,26 +51,39 @@ export const GraphToolbar = ({
         justifyContent: 'space-between',
       }}
     >
-      <ToggleButtonGroup value={visibleTypes} onChange={onTypeToggle} size="small">
+      <ToggleButtonGroup
+        value={visibleTypes}
+        onChange={onTypeToggle}
+        size="small"
+        sx={{ flexWrap: 'wrap', maxWidth: '100%' }}
+      >
         <ToggleButton value="meeting">
-          <MeetingIcon sx={{ mr: 0.5 }} fontSize="small" />
-          Meetings
+          <MeetingIcon fontSize="small" />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.5 }}>
+            Meetings
+          </Box>
         </ToggleButton>
         <ToggleButton value="person">
-          <PeopleIcon sx={{ mr: 0.5 }} fontSize="small" />
-          People
+          <PeopleIcon fontSize="small" />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.5 }}>
+            People
+          </Box>
         </ToggleButton>
         <ToggleButton value="folder">
-          <FolderIcon sx={{ mr: 0.5 }} fontSize="small" />
-          Folders
+          <FolderIcon fontSize="small" />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.5 }}>
+            Folders
+          </Box>
         </ToggleButton>
         <ToggleButton value="tag">
-          <TagIcon sx={{ mr: 0.5 }} fontSize="small" />
-          Tags
+          <TagIcon fontSize="small" />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.5 }}>
+            Tags
+          </Box>
         </ToggleButton>
       </ToggleButtonGroup>
 
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         <FormControlLabel
           control={
             <Switch checked={showLabels} onChange={(e) => onShowLabelsChange(e.target.checked)} />

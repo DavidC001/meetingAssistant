@@ -150,7 +150,11 @@ export const useMeetingsList = ({ refreshKey, onMeetingUpdate } = {}) => {
 
   const downloadTranscript = useCallback(async (meeting, format = 'txt') => {
     try {
-      await MeetingService.download(meeting.id, format, `${meeting.filename}.${format}`);
+      await MeetingService.download(
+        meeting.id,
+        format,
+        `${meeting.title || meeting.filename}.${format}`
+      );
       return true;
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to download transcript.');

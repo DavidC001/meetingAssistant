@@ -3,7 +3,7 @@
  * Manages meetings fetch, filtering/sorting derivation, bulk operations, and meeting actions.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MeetingService } from '../../../../services';
 import logger from '../../../../utils/logger';
@@ -39,20 +39,43 @@ export const useMeetingsBrowser = ({ searchQuery, filters, sortBy, sortOrder } =
     fetchMeetings();
   }, [fetchMeetings]);
 
-  // Polling for processing meetings
+  const meetingsRef = useRef(meetings);
+  meetingsRef.current = meetings;
+
+  const hasProcessing = useMemo(
+    () => meetings.some((m) => m.status === 'processing' || m.status === 'pending'),
+    [meetings]
+  );
+
+  // Poll only while work is in flight, and only for the status projection — the full
+  // list embeds entire transcripts and is far too heavy to fetch on an interval.
   useEffect(() => {
+    if (!hasProcessing) return undefined;
+
+    const isActive = (status) => status === 'processing' || status === 'pending';
+
     const pollInterval = setInterval(() => {
-      MeetingService.getAll()
-        .then((data) => {
-          const hasProcessing = data.some(
-            (m) => m.status === 'processing' || m.status === 'pending'
-          );
-          if (hasProcessing) setMeetings(data);
+      MeetingService.getStatuses()
+        .then((statuses) => {
+          const byId = new Map(statuses.map((s) => [s.id, s]));
+          const settled = meetingsRef.current.some((m) => {
+            const next = byId.get(m.id);
+            return next && isActive(m.status) && !isActive(next.status);
+          });
+          if (settled) {
+            // A meeting finished — refetch so its newly derived fields land.
+            fetchMeetings();
+          } else {
+            setMeetings((current) =>
+              current.map((m) => (byId.has(m.id) ? { ...m, ...byId.get(m.id) } : m))
+            );
+          }
         })
         .catch(() => {});
     }, 15000);
+
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [hasProcessing, fetchMeetings]);
 
   // Available filter options derived from raw meetings
   const availableFilters = useMemo(() => {
@@ -84,7 +107,8 @@ export const useMeetingsBrowser = ({ searchQuery, filters, sortBy, sortOrder } =
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (m) =>
-          (m.filename || m.title || '').toLowerCase().includes(q) ||
+          (m.title || '').toLowerCase().includes(q) ||
+          (m.filename || '').toLowerCase().includes(q) ||
           (m.folder || '').toLowerCase().includes(q) ||
           (m.tags || '').toLowerCase().includes(q)
       );
@@ -171,7 +195,11 @@ export const useMeetingsBrowser = ({ searchQuery, filters, sortBy, sortOrder } =
   const handleDownloadMeeting = useCallback(
     async (meeting, format = 'txt') => {
       try {
-        await MeetingService.download(meeting.id, format, `${meeting.filename}.${format}`);
+        await MeetingService.download(
+          meeting.id,
+          format,
+          `${meeting.title || meeting.filename}.${format}`
+        );
         showSnackbar('Download started');
       } catch (err) {
         showSnackbar('Failed to download transcript', 'error');
@@ -208,7 +236,10 @@ export const useMeetingsBrowser = ({ searchQuery, filters, sortBy, sortOrder } =
 
   const handleDeleteMeeting = useCallback(
     async (meeting) => {
-      if (!window.confirm(`Are you sure you want to delete "${meeting.filename}"?`)) return;
+      if (
+        !window.confirm(`Are you sure you want to delete "${meeting.title || meeting.filename}"?`)
+      )
+        return;
       try {
         await MeetingService.delete(meeting.id);
         showSnackbar('Meeting deleted');

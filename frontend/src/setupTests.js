@@ -17,6 +17,24 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// Mock ResizeObserver (not implemented in jsdom)
+class ResizeObserverMock {
+  constructor(callback) {
+    this.callback = callback;
+    this.observed = new Set();
+  }
+  observe(target) {
+    this.observed.add(target);
+  }
+  unobserve(target) {
+    this.observed.delete(target);
+  }
+  disconnect() {
+    this.observed.clear();
+  }
+}
+global.ResizeObserver = ResizeObserverMock;
+
 // Mock localStorage
 const localStorageMock = {
   getItem: jest.fn(),

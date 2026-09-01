@@ -126,7 +126,7 @@ export const NotesEditor = ({ notes = '', isUpdating = false, onSave }) => {
       parts.push(
         <Chip
           key={`${keyPrefix}-meeting-${meetingId}-${match.index}`}
-          label={meeting ? meeting.filename : `Meeting #${meetingId}`}
+          label={meeting ? meeting.title || meeting.filename : `Meeting #${meetingId}`}
           onClick={(event) => {
             event.stopPropagation();
             navigate(`/meetings/${meetingId}`);
@@ -264,7 +264,7 @@ export const NotesEditor = ({ notes = '', isUpdating = false, onSave }) => {
                         <ListItemText
                           primary={
                             <Typography variant="body2" noWrap fontWeight={500}>
-                              {meeting.filename}
+                              {meeting.title || meeting.filename}
                             </Typography>
                           }
                           secondary={

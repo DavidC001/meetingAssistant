@@ -2,20 +2,39 @@
   display: flex;
   height: calc(100vh - 160px);
   padding: 24px 0;
+  min-width: 0;
 }
 
 .global-chat-container {
   display: flex;
   width: 100%;
+  min-width: 0;
   border-radius: 12px;
   overflow: hidden;
 }
 
 .global-chat-sidebar {
   width: 280px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-tertiary);
+}
+
+@media (max-width: 900px) {
+  .global-chat-page {
+    height: calc(100vh - 120px);
+    padding: 12px 0;
+  }
+
+  .global-chat-container {
+    flex-direction: column;
+  }
+
+  .global-chat-sidebar {
+    width: 100%;
+    max-height: 35vh;
+  }
 }
 
 .global-chat-sidebar-header {

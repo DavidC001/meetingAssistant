@@ -9,6 +9,7 @@ import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Box, Typography, Paper, CircularProgress, Alert, Grid } from '@mui/material';
 import ForceGraph2D from 'react-force-graph-2d';
 import { useGraphData } from '../hooks';
+import { useElementSize } from '../../../../hooks';
 import { GraphStatsCards, GraphToolbar, GraphNodeDetail, GraphLegend } from '../presentation';
 
 const getNodeColor = (node) => {
@@ -56,10 +57,10 @@ const MeetingsGraphContainer = () => {
   const [isDragging, setIsDragging] = useState(false);
 
   const graphRef = useRef();
-  const containerRef = useRef();
+  const [containerRef, { width: containerWidth, height: containerHeight }] = useElementSize();
   const clickTimeRef = useRef(0);
   const clickNodeRef = useRef(null);
-  const isSimRunningRef = useRef(true);  // stable ref for engine callback
+  const isSimRunningRef = useRef(true); // stable ref for engine callback
 
   const handleStopSimulation = useCallback(() => {
     if (graphRef.current) {
@@ -99,7 +100,7 @@ const MeetingsGraphContainer = () => {
       isSimRunningRef.current = false;
       setIsSimulationRunning(false);
     }
-  }, []);  // stable reference — no deps on state
+  }, []); // stable reference — no deps on state
 
   const handleNodeClick = useCallback(
     (node) => {
@@ -258,9 +259,14 @@ const MeetingsGraphContainer = () => {
     [graphData, visibleTypes, hiddenNodes]
   );
 
-  // Zoom to fit when node count changes
+  // Zoom to fit when node count or the graph's visible box changes
   React.useEffect(() => {
-    if (graphRef.current && filteredData.nodes.length > 0) {
+    if (
+      graphRef.current &&
+      filteredData.nodes.length > 0 &&
+      containerWidth > 0 &&
+      containerHeight > 0
+    ) {
       isSimRunningRef.current = true;
       setIsSimulationRunning(true);
       filteredData.nodes.forEach((node) => {
@@ -272,7 +278,7 @@ const MeetingsGraphContainer = () => {
       }, 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredData.nodes.length]);
+  }, [filteredData.nodes.length, containerWidth, containerHeight]);
 
   if (loading) {
     return (
@@ -293,7 +299,7 @@ const MeetingsGraphContainer = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 0, sm: 2, md: 3 } }}>
       <Typography variant="h4" gutterBottom>
         Meetings Graph
       </Typography>
@@ -326,11 +332,11 @@ const MeetingsGraphContainer = () => {
 
       {/* Graph + Side Panel */}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={selectedNode ? 8 : 12}>
+        <Grid item xs={12} md={selectedNode ? 8 : 12} sx={{ minWidth: 0 }}>
           <Paper
             sx={{
               position: 'relative',
-              height: '70vh',
+              height: { xs: '55vh', sm: '65vh', md: '70vh' },
               overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
@@ -347,37 +353,41 @@ const MeetingsGraphContainer = () => {
                 '& canvas': { display: 'block', outline: 'none' },
               }}
             >
-              <ForceGraph2D
-                ref={graphRef}
-                graphData={filteredData}
-                nodeLabel="label"
-                nodeAutoColorBy="type"
-                nodeCanvasObject={paintNode}
-                linkCanvasObject={paintLink}
-                onNodeClick={handleNodeClick}
-                onNodeHover={handleNodeHover}
-                onNodeDrag={handleNodeDrag}
-                onNodeDragEnd={handleNodeDragEnd}
-                onBackgroundClick={handleBackgroundClick}
-                onEngineStop={handleEngineStop}
-                cooldownTicks={100}
-                warmupTicks={50}
-                cooldownTime={3000}
-                enableNodeDrag
-                enableZoomInteraction
-                enablePanInteraction
-                minZoom={0.5}
-                maxZoom={8}
-                d3AlphaDecay={0.05}
-                d3VelocityDecay={0.4}
-                d3AlphaMin={0.001}
-              />
+              {containerWidth > 0 && containerHeight > 0 && (
+                <ForceGraph2D
+                  ref={graphRef}
+                  width={containerWidth}
+                  height={containerHeight}
+                  graphData={filteredData}
+                  nodeLabel="label"
+                  nodeAutoColorBy="type"
+                  nodeCanvasObject={paintNode}
+                  linkCanvasObject={paintLink}
+                  onNodeClick={handleNodeClick}
+                  onNodeHover={handleNodeHover}
+                  onNodeDrag={handleNodeDrag}
+                  onNodeDragEnd={handleNodeDragEnd}
+                  onBackgroundClick={handleBackgroundClick}
+                  onEngineStop={handleEngineStop}
+                  cooldownTicks={100}
+                  warmupTicks={50}
+                  cooldownTime={3000}
+                  enableNodeDrag
+                  enableZoomInteraction
+                  enablePanInteraction
+                  minZoom={0.5}
+                  maxZoom={8}
+                  d3AlphaDecay={0.05}
+                  d3VelocityDecay={0.4}
+                  d3AlphaMin={0.001}
+                />
+              )}
             </Box>
           </Paper>
         </Grid>
 
         {selectedNode && (
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={4} sx={{ minWidth: 0 }}>
             <GraphNodeDetail
               node={selectedNode}
               connectedCount={highlightNodes.size - 1}

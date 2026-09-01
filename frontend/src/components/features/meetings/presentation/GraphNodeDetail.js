@@ -24,7 +24,14 @@ export const GraphNodeDetail = ({ node, connectedCount, onOpenMeeting, onHideNod
   const Icon = TYPE_ICONS[node.type] || MeetingIcon;
 
   return (
-    <Paper sx={{ p: 2, height: '70vh', overflow: 'auto' }}>
+    <Paper
+      sx={{
+        p: 2,
+        height: { xs: 'auto', md: '70vh' },
+        maxHeight: { xs: '50vh', md: '70vh' },
+        overflow: 'auto',
+      }}
+    >
       <Typography variant="h6" gutterBottom>
         {node.type.charAt(0).toUpperCase() + node.type.slice(1)} Details
       </Typography>

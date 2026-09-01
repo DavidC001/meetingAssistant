@@ -18,6 +18,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -225,31 +226,33 @@ const ProjectAnalyticsContainer = () => {
             <Typography variant="h6" gutterBottom>
               Meetings by Month (Last 6 Months)
             </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Month</TableCell>
-                  <TableCell align="right">Meetings</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {meetingsByMonth.map((item) => (
-                  <TableRow key={item.month}>
-                    <TableCell>{item.month}</TableCell>
-                    <TableCell align="right">{item.count}</TableCell>
-                  </TableRow>
-                ))}
-                {meetingsByMonth.length === 0 && (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      <Typography variant="body2" color="text.secondary">
-                        No meeting history available
-                      </Typography>
-                    </TableCell>
+                    <TableCell>Month</TableCell>
+                    <TableCell align="right">Meetings</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {meetingsByMonth.map((item) => (
+                    <TableRow key={item.month}>
+                      <TableCell>{item.month}</TableCell>
+                      <TableCell align="right">{item.count}</TableCell>
+                    </TableRow>
+                  ))}
+                  {meetingsByMonth.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2} align="center">
+                        <Typography variant="body2" color="text.secondary">
+                          No meeting history available
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Paper>
         </Grid>
 
@@ -258,31 +261,33 @@ const ProjectAnalyticsContainer = () => {
             <Typography variant="h6" gutterBottom>
               Action Items by Owner
             </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Owner</TableCell>
-                  <TableCell align="right">Items</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(analytics?.action_items_by_owner || []).map((row) => (
-                  <TableRow key={row.owner}>
-                    <TableCell>{row.owner}</TableCell>
-                    <TableCell align="right">{row.count}</TableCell>
-                  </TableRow>
-                ))}
-                {(analytics?.action_items_by_owner || []).length === 0 && (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
                   <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      <Typography variant="body2" color="text.secondary">
-                        No action items assigned
-                      </Typography>
-                    </TableCell>
+                    <TableCell>Owner</TableCell>
+                    <TableCell align="right">Items</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(analytics?.action_items_by_owner || []).map((row) => (
+                    <TableRow key={row.owner}>
+                      <TableCell>{row.owner}</TableCell>
+                      <TableCell align="right">{row.count}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(analytics?.action_items_by_owner || []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={2} align="center">
+                        <Typography variant="body2" color="text.secondary">
+                          No action items assigned
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Paper>
         </Grid>
       </Grid>

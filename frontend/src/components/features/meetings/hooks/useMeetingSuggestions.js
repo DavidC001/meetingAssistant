@@ -67,8 +67,8 @@ export const useMeetingSuggestions = () => {
       const filtered = allMeetingsRef.current
         .filter((m) => {
           const id = m.id.toString();
-          const filename = (m.filename || '').toLowerCase();
-          return id.includes(q) || filename.includes(q.toLowerCase());
+          const name = (m.title || m.filename || '').toLowerCase();
+          return id.includes(q) || name.includes(q.toLowerCase());
         })
         .slice(0, 5);
       setSuggestions(filtered);

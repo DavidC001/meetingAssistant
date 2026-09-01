@@ -56,6 +56,7 @@ const MeetingPicker = ({
   const filteredMeetings = meetings.filter((meeting) => {
     const searchLower = searchQuery.toLowerCase();
     return (
+      (meeting.title && meeting.title.toLowerCase().includes(searchLower)) ||
       (meeting.filename && meeting.filename.toLowerCase().includes(searchLower)) ||
       (meeting.folder && meeting.folder.toLowerCase().includes(searchLower))
     );
@@ -90,7 +91,7 @@ const MeetingPicker = ({
     <Box>
       <TextField
         label="Search meetings"
-        placeholder="By filename or folder..."
+        placeholder="By title or folder..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         fullWidth
@@ -111,7 +112,7 @@ const MeetingPicker = ({
             return meeting ? (
               <Chip
                 key={id}
-                label={meeting.filename}
+                label={meeting.title || meeting.filename}
                 onDelete={() => toggleMeeting(id)}
                 size="small"
               />
@@ -144,7 +145,7 @@ const MeetingPicker = ({
                     <VideoCallIcon fontSize="small" />
                   </ListItemIcon>
                   <ListItemText
-                    primary={meeting.filename}
+                    primary={meeting.title || meeting.filename}
                     secondary={
                       <>
                         {meeting.folder && <span>{meeting.folder}</span>}

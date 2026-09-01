@@ -65,7 +65,7 @@ const MeetingsListContainer = ({ refreshKey, onMeetingUpdate }) => {
   };
 
   const handleRenameOpen = () => {
-    setNewName(selectedMeeting.filename);
+    setNewName(selectedMeeting.title || selectedMeeting.filename);
     setRenameDialogOpen(true);
     handleMenuClose();
   };
@@ -156,7 +156,7 @@ const MeetingsListContainer = ({ refreshKey, onMeetingUpdate }) => {
                   <ListItemText
                     primary={
                       <Typography variant="subtitle1" fontWeight="medium">
-                        {meeting.filename}
+                        {meeting.title || meeting.filename}
                       </Typography>
                     }
                     secondary={
@@ -302,7 +302,10 @@ const MeetingsListContainer = ({ refreshKey, onMeetingUpdate }) => {
           <Button
             onClick={handleRenameConfirm}
             variant="contained"
-            disabled={!newName?.trim() || newName.trim() === selectedMeeting?.filename}
+            disabled={
+              !newName?.trim() ||
+              newName.trim() === (selectedMeeting?.title || selectedMeeting?.filename)
+            }
           >
             Rename
           </Button>
@@ -314,8 +317,8 @@ const MeetingsListContainer = ({ refreshKey, onMeetingUpdate }) => {
         <DialogTitle>Delete Meeting</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete "{selectedMeeting?.filename}"? This action cannot be
-            undone.
+            Are you sure you want to delete "{selectedMeeting?.title || selectedMeeting?.filename}"?
+            This action cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
