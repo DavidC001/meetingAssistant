@@ -3,7 +3,7 @@
  * Displays basic meeting information (title, date, status, metadata)
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -20,6 +20,7 @@ import {
   Divider,
   Chip,
   Stack,
+  TextField,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -43,14 +44,52 @@ import { getStatusColor } from '../../../../utils/statusHelpers';
  * @param {Function} props.onRename - Callback for rename action
  * @param {Function} props.onDelete - Callback for delete action
  * @param {Function} props.onDownload - Callback for download action
+ * @param {Function} props.onUpdateSummary - Callback to save an edited summary (summary) => Promise<boolean>
  */
-export const MeetingOverview = ({ meeting, isUpdating, onRename, onDelete, onDownload }) => {
+export const MeetingOverview = ({
+  meeting,
+  isUpdating,
+  onRename,
+  onDelete,
+  onDownload,
+  onUpdateSummary,
+}) => {
   const navigate = useNavigate();
   const [downloadMenuAnchor, setDownloadMenuAnchor] = React.useState(null);
+
+  const summary = meeting?.transcription?.summary || '';
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [editedSummary, setEditedSummary] = useState(summary);
+
+  // Keep the draft in sync with fresh data as long as the user isn't mid-edit
+  // (e.g. after a speaker rename auto-substitutes names in the summary).
+  useEffect(() => {
+    if (!isEditingSummary) {
+      setEditedSummary(summary);
+    }
+  }, [summary, isEditingSummary]);
 
   if (!meeting) return null;
 
   const statusColor = getStatusColor(meeting.status);
+
+  const handleEditSummary = () => {
+    setEditedSummary(summary);
+    setIsEditingSummary(true);
+  };
+
+  const handleCancelSummary = () => {
+    setEditedSummary(summary);
+    setIsEditingSummary(false);
+  };
+
+  const handleSaveSummary = async () => {
+    if (!onUpdateSummary) return;
+    const success = await onUpdateSummary(editedSummary);
+    if (success !== false) {
+      setIsEditingSummary(false);
+    }
+  };
 
   return (
     <Card variant="outlined" sx={{ mb: 4 }}>
@@ -80,7 +119,7 @@ export const MeetingOverview = ({ meeting, isUpdating, onRename, onDelete, onDow
               gutterBottom
               sx={{ wordBreak: 'break-word', lineHeight: 1.25 }}
             >
-              {meeting.filename}
+              {meeting.title || meeting.filename}
             </Typography>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -195,6 +234,76 @@ export const MeetingOverview = ({ meeting, isUpdating, onRename, onDelete, onDow
         </Box>
 
         <Divider sx={{ mb: 2 }} />
+
+        {(meeting.transcription || isEditingSummary) && (
+          <Box sx={{ mb: 2 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mb: 1,
+              }}
+            >
+              <Typography variant="subtitle2" fontWeight="bold">
+                Executive Summary
+              </Typography>
+              {isEditingSummary ? (
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" onClick={handleCancelSummary} disabled={isUpdating}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={handleSaveSummary}
+                    disabled={isUpdating}
+                  >
+                    Save
+                  </Button>
+                </Stack>
+              ) : (
+                <Button
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={handleEditSummary}
+                  disabled={isUpdating || !onUpdateSummary}
+                >
+                  Edit
+                </Button>
+              )}
+            </Box>
+
+            {isEditingSummary ? (
+              <TextField
+                fullWidth
+                multiline
+                minRows={6}
+                value={editedSummary}
+                onChange={(e) => setEditedSummary(e.target.value)}
+                placeholder="Summary of the meeting..."
+                disabled={isUpdating}
+                autoFocus
+              />
+            ) : summary ? (
+              <Box
+                sx={{
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{summary}</Typography>
+              </Box>
+            ) : (
+              <Typography sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                No summary yet. Use the Edit button to add one...
+              </Typography>
+            )}
+          </Box>
+        )}
 
         {(meeting.estimated_duration || meeting.file_size) && (
           <List dense>

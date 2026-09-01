@@ -1,8 +1,9 @@
 import logging
 import os
+from functools import lru_cache
 from typing import Any
 
-from ..base.cache import cache_result, get_file_hash
+from ..base.cache import get_file_hash
 from ..base.retry import retry_gpu_operation
 from ..base.utils import get_file_metadata
 from ..config import config
@@ -54,8 +55,131 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 
-@cache_result()
+DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
+
+
+@lru_cache(maxsize=1)
+def _load_diarization_pipeline(model_name: str, auth_token: str, cache_dir: str):
+    """Load and cache the pyannote pipeline, mirroring how Whisper is cached.
+
+    Building this pipeline pulls several sub-models (segmentation, embedding,
+    clustering) onto the device; without caching it is rebuilt for every meeting.
+    """
+    pipeline = Pipeline.from_pretrained(model_name, token=auth_token, cache_dir=cache_dir)
+    pipeline.to(DEVICE)
+    logger.info(f"Diarization pipeline loaded on {DEVICE}")
+    return pipeline
+
+
 @retry_gpu_operation(max_retries=2, delay=2.0)
+def _run_diarization_pipeline(
+    audio_path: str,
+    num_speakers: int | None,
+    auth_token: str,
+    progress_callback: object | None,
+    progress_tracker: object | None,
+) -> list[dict[str, Any]]:
+    """
+    Run the pyannote diarization pipeline once and return the speaker segments.
+
+    This is intentionally the *only* part of diarization wrapped by
+    `@retry_gpu_operation`, and it must let failures propagate (never swallow
+    them) so the decorator can actually retry transient GPU errors (e.g. CUDA
+    out-of-memory). The single-speaker fallback lives in the caller
+    (`diarize_audio`), applied only once retries are exhausted — previously the
+    fallback lived in this same function and caught every exception, so the
+    retry decorator never saw a failure to retry and every diarization error
+    (transient or not) silently and permanently degraded to one fake speaker.
+    """
+    if progress_callback:
+        progress_callback(10, "Loading diarization model...")
+
+    # Use persistent cache directory for model downloads
+    from pathlib import Path
+
+    cache_dir = Path("/app/cache/models/pyannote")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    pipeline = _load_diarization_pipeline(DIARIZATION_MODEL, auth_token, str(cache_dir))
+
+    # Start timing tracking
+    if progress_tracker:
+        progress_tracker.start_tracking()
+
+    # Create enhanced progress callback
+    enhanced_progress_callback = None
+    if progress_tracker:
+        enhanced_progress_callback = progress_tracker.get_progress_callback(progress_callback)
+    else:
+        enhanced_progress_callback = progress_callback
+
+    if enhanced_progress_callback:
+        enhanced_progress_callback(30, "Running speaker diarization...")
+
+    # Run diarization with simulated progress updates
+    import threading
+    import time
+
+    # Start the diarization in a separate thread
+    diarization_result = [None]
+    diarization_error = [None]
+
+    def run_diarization():
+        try:
+            diarization_result[0] = pipeline(audio_path, num_speakers=num_speakers)
+        except Exception as e:
+            diarization_error[0] = e
+
+    diarization_thread = threading.Thread(target=run_diarization)
+    diarization_thread.start()
+
+    # Update progress while diarization is running
+    if enhanced_progress_callback:
+        if progress_tracker:
+            # With timing tracker: let it calculate progress based on elapsed time
+            while diarization_thread.is_alive():
+                time.sleep(1)  # Check every second for responsiveness
+                # The timing tracker will calculate the actual progress percentage
+                enhanced_progress_callback(50, "Processing audio segments...")
+        else:
+            # Fallback without timing tracker: use incremental progress
+            progress = 30
+            while diarization_thread.is_alive():
+                time.sleep(2)  # Update every 2 seconds
+                if progress < 90:  # Cap at 90% until actual completion
+                    progress += 3
+                    enhanced_progress_callback(progress, "Processing audio segments...")
+
+    # Wait for completion
+    diarization_thread.join()
+
+    # Check for errors — raise so @retry_gpu_operation can retry transient failures
+    if diarization_error[0]:
+        raise diarization_error[0]
+
+    diarization_output = diarization_result[0]
+
+    if enhanced_progress_callback:
+        enhanced_progress_callback(95, "Processing diarization results...")
+
+    segments: list[dict[str, Any]] = []
+    for turn, speaker in diarization_output.speaker_diarization:
+        segments.append({"start": turn.start, "end": turn.end, "speaker": speaker})
+
+    # Count unique speakers for timing tracking
+    unique_speakers = len({segment["speaker"] for segment in segments})
+
+    # Finish timing tracking
+    if progress_tracker:
+        progress_tracker.finish_tracking(num_speakers=unique_speakers)
+
+    if enhanced_progress_callback:
+        enhanced_progress_callback(100, f"Diarization completed - {len(segments)} segments found")
+
+    logger.info(f"Diarization produced {len(segments)} segments.")
+    return segments
+
+
 def diarize_audio(
     audio_path: str,
     num_speakers: int | None = None,
@@ -67,6 +191,10 @@ def diarize_audio(
     Performs speaker diarization on an audio file.
     Requires a Hugging Face authentication token.
     Results are cached based on file hash and parameters.
+
+    Transient GPU failures are retried (see `_run_diarization_pipeline`); if every
+    retry is exhausted (or the failure isn't retryable), this falls back to treating
+    the whole recording as a single speaker so meeting processing can still complete.
 
     Args:
         audio_path: Path to the audio file
@@ -96,105 +224,15 @@ def diarize_audio(
         raise RuntimeError("Hugging Face token not configured. Please set it in the application settings.")
 
     try:
-        if progress_callback:
-            progress_callback(10, "Loading diarization model...")
-
-        # Use persistent cache directory for model downloads
-        from pathlib import Path
-
-        cache_dir = Path("/app/cache/models/pyannote")
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-community-1", token=auth_token, cache_dir=str(cache_dir)
-        )
-        pipeline.to(DEVICE)
-        logger.info(f"Diarization pipeline loaded on {DEVICE}")
-
-        # Start timing tracking
-        if progress_tracker:
-            progress_tracker.start_tracking()
-
-        # Create enhanced progress callback
-        enhanced_progress_callback = None
-        if progress_tracker:
-            enhanced_progress_callback = progress_tracker.get_progress_callback(progress_callback)
-        else:
-            enhanced_progress_callback = progress_callback
-
-        if enhanced_progress_callback:
-            enhanced_progress_callback(30, "Running speaker diarization...")
-
-        # Run diarization with simulated progress updates
-        import threading
-        import time
-
-        # Start the diarization in a separate thread
-        diarization_result = [None]
-        diarization_error = [None]
-
-        def run_diarization():
-            try:
-                diarization_result[0] = pipeline(audio_path, num_speakers=num_speakers)
-            except Exception as e:
-                diarization_error[0] = e
-
-        diarization_thread = threading.Thread(target=run_diarization)
-        diarization_thread.start()
-
-        # Update progress while diarization is running
-        if enhanced_progress_callback:
-            if progress_tracker:
-                # With timing tracker: let it calculate progress based on elapsed time
-                while diarization_thread.is_alive():
-                    time.sleep(1)  # Check every second for responsiveness
-                    # The timing tracker will calculate the actual progress percentage
-                    enhanced_progress_callback(50, "Processing audio segments...")
-            else:
-                # Fallback without timing tracker: use incremental progress
-                progress = 30
-                while diarization_thread.is_alive():
-                    time.sleep(2)  # Update every 2 seconds
-                    if progress < 90:  # Cap at 90% until actual completion
-                        progress += 3
-                        enhanced_progress_callback(progress, "Processing audio segments...")
-
-        # Wait for completion
-        diarization_thread.join()
-
-        # Check for errors
-        if diarization_error[0]:
-            raise diarization_error[0]
-
-        diarization_output = diarization_result[0]
-
-        if enhanced_progress_callback:
-            enhanced_progress_callback(95, "Processing diarization results...")
-
-        segments: list[dict[str, Any]] = []
-        for turn, speaker in diarization_output.speaker_diarization:
-            segments.append({"start": turn.start, "end": turn.end, "speaker": speaker})
-
-        # Count unique speakers for timing tracking
-        unique_speakers = len({segment["speaker"] for segment in segments})
-
-        # Finish timing tracking
-        if progress_tracker:
-            progress_tracker.finish_tracking(num_speakers=unique_speakers)
-
-        if enhanced_progress_callback:
-            enhanced_progress_callback(100, f"Diarization completed - {len(segments)} segments found")
-
-        logger.info(f"Diarization produced {len(segments)} segments.")
-        return segments
+        return _run_diarization_pipeline(audio_path, num_speakers, auth_token, progress_callback, progress_tracker)
     except Exception as e:
-        logger.error(f"Diarization failed: {e}", exc_info=True)
+        logger.error(f"Diarization failed after retries: {e}", exc_info=True)
 
         # Finish timing tracking even on failure (to record partial timing data)
         if progress_tracker:
             try:
                 progress_tracker.finish_tracking()
-            except:
+            except Exception:
                 pass  # Don't let timing errors mask the original error
 
         # Clear GPU cache if CUDA error
@@ -205,6 +243,6 @@ def diarize_audio(
         try:
             metadata = get_file_metadata(audio_path)
             duration = metadata.duration if hasattr(metadata, "duration") else 1
-        except:
+        except Exception:
             duration = 1
         return [{"start": 0, "end": duration, "speaker": "SPEAKER_00"}]

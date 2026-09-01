@@ -178,6 +178,7 @@ class MeetingCreate(MeetingBase):
 
 class MeetingUpdate(BaseModel):
     filename: str | None = None
+    title: str | None = None
     transcription_language: str | None = None
     number_of_speakers: str | None = None
     model_configuration_id: int | None = None
@@ -185,10 +186,20 @@ class MeetingUpdate(BaseModel):
     folder: str | None = None
     notes: str | None = None
     meeting_date: datetime | None = None
+    summary: str | None = Field(None, description="Manual correction of the meeting's transcription summary.")
 
 
-class Meeting(MeetingBase):
+class MeetingSummary(MeetingBase):
+    """Scalar-only view of a meeting, used for list endpoints.
+
+    Deliberately excludes every relationship — most importantly ``transcription``,
+    whose ``full_text`` holds an entire transcript. Omitting them also means
+    serialization never triggers a lazy load, so listing N meetings stays a single
+    query instead of N x (relationship count).
+    """
+
     id: int
+    title: str | None = None
     status: MeetingStatus
     created_at: datetime
     transcription_language: str | None = "en-US"
@@ -214,6 +225,26 @@ class Meeting(MeetingBase):
     folder: str | None = None
     notes: str | None = None
     meeting_date: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class MeetingStatusSummary(BaseModel):
+    """Minimal progress projection used by the frontend's processing poll."""
+
+    id: int
+    status: MeetingStatus
+    current_stage: ProcessingStage | None = None
+    stage_progress: float = 0.0
+    overall_progress: float = 0.0
+    error_message: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class Meeting(MeetingSummary):
     speakers: list[Speaker] = []
     attachments: list[Attachment] = []
     transcription: Transcription | None = None

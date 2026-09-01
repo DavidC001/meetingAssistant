@@ -11,20 +11,16 @@ sub-services for chat, export, attachments, and audio operations.
 import os
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ...core.config import config
 from ..chat import schemas as chat_schemas
-from ..chat.repository import ChatMessageRepository, GlobalChatSessionRepository
-from ..settings.service import SettingsService
+from ..chat.repository import GlobalChatSessionRepository
 from . import models, schemas
 from .file_utils import FileManager, FileValidator
-from .models import MeetingStatus
 from .repository import (
     ActionItemRepository,
     AttachmentRepository,
@@ -112,9 +108,7 @@ class MeetingService:
             return None
 
     @staticmethod
-    def _parse_batch_param(
-        param: str | None, file_count: int, default: str | None
-    ) -> list[str | None]:
+    def _parse_batch_param(param: str | None, file_count: int, default: str | None) -> list[str | None]:
         """Parse comma-separated batch parameter or use default."""
         if not param:
             return [default] * file_count
@@ -148,9 +142,7 @@ class MeetingService:
             number_of_speakers=number_of_speakers,
             meeting_date=parsed_meeting_date,
         )
-        db_meeting = self.repo.create_meeting(
-            meeting_data=meeting_create, file_path=file_path, file_size=file_size
-        )
+        db_meeting = self.repo.create_meeting(meeting_data=meeting_create, file_path=file_path, file_size=file_size)
         self._dispatch_processing(db_meeting.id)
         return db_meeting
 
@@ -188,15 +180,16 @@ class MeetingService:
     def list_meetings(self, skip: int = 0, limit: int = 100) -> list[models.Meeting]:
         return self.repo.get_all(skip=skip, limit=limit)
 
+    def list_meeting_statuses(self) -> list:
+        return self.repo.list_status_summaries()
+
     def get_unique_folders(self) -> list[str]:
         return self.repo.get_unique_folders()
 
     def get_unique_tags(self) -> list[str]:
         return self.repo.get_unique_tags()
 
-    def get_meetings_by_filters(
-        self, folder: str | None = None, tags: str | None = None
-    ) -> list[int]:
+    def get_meetings_by_filters(self, folder: str | None = None, tags: str | None = None) -> list[int]:
         return self.repo.get_by_filters(folder=folder, tags=tags)
 
     def get_meeting(self, meeting_id: int) -> models.Meeting | None:
@@ -208,9 +201,7 @@ class MeetingService:
             raise HTTPException(status_code=404, detail="Meeting not found")
         return meeting
 
-    def update_meeting(
-        self, meeting_id: int, meeting_update: schemas.MeetingUpdate
-    ) -> models.Meeting:
+    def update_meeting(self, meeting_id: int, meeting_update: schemas.MeetingUpdate) -> models.Meeting:
         db_meeting = self.get_meeting_or_404(meeting_id)
 
         tags_changed = False
@@ -220,6 +211,8 @@ class MeetingService:
             tags_changed = True
         if meeting_update.filename is not None:
             updates["filename"] = meeting_update.filename
+        if meeting_update.title is not None:
+            updates["title"] = meeting_update.title
         if meeting_update.transcription_language is not None:
             updates["transcription_language"] = meeting_update.transcription_language
         if meeting_update.number_of_speakers is not None:
@@ -235,6 +228,14 @@ class MeetingService:
 
         if updates:
             db_meeting = self.repo.update_fields(db_meeting, updates)
+
+        if meeting_update.summary is not None:
+            if not db_meeting.transcription:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot update summary: meeting has no transcription yet.",
+                )
+            self.transcription_repo.update_text_fields(db_meeting.transcription.id, summary=meeting_update.summary)
 
         if tags_changed:
             try:
@@ -313,8 +314,7 @@ class MeetingService:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Meeting has no transcription data. Use /restart-processing "
-                    "to reprocess the entire meeting."
+                    "Meeting has no transcription data. Use /restart-processing " "to reprocess the entire meeting."
                 ),
             )
 
@@ -382,9 +382,7 @@ class MeetingService:
         event_id: str | None = None,
         synced: bool = False,
     ) -> models.ActionItem | None:
-        return self.action_item_repo.update_calendar_sync(
-            item_id, event_id=event_id, synced=synced
-        )
+        return self.action_item_repo.update_calendar_sync(item_id, event_id=event_id, synced=synced)
 
     def get_meeting_title(self, transcription_id: int) -> str | None:
         return self.transcription_repo.get_meeting_title(transcription_id)
@@ -431,16 +429,12 @@ class MeetingService:
             enriched.append(schemas.ActionItemWithMeeting(**item_dict))
         return enriched
 
-    def add_action_item(
-        self, transcription_id: int, item_data: schemas.ActionItemCreate
-    ) -> models.ActionItem:
+    def add_action_item(self, transcription_id: int, item_data: schemas.ActionItemCreate) -> models.ActionItem:
         return self.action_item_repo.create_action_item(
             transcription_id=transcription_id, item_data=item_data, is_manual=True
         )
 
-    def update_action_item(
-        self, item_id: int, item_update: schemas.ActionItemUpdate
-    ) -> models.ActionItem:
+    def update_action_item(self, item_id: int, item_update: schemas.ActionItemUpdate) -> models.ActionItem:
         updated_item = self.action_item_repo.update_action_item(item_id, item_update)
         if updated_item and updated_item.synced_to_calendar and updated_item.google_calendar_event_id:
             try:
@@ -448,12 +442,8 @@ class MeetingService:
 
                 calendar_service = GoogleCalendarService(self.db)
                 if calendar_service.is_connected():
-                    meeting_title = self.transcription_repo.get_meeting_title(
-                        updated_item.transcription_id
-                    )
-                    calendar_service.update_event(
-                        updated_item.google_calendar_event_id, updated_item, meeting_title
-                    )
+                    meeting_title = self.transcription_repo.get_meeting_title(updated_item.transcription_id)
+                    calendar_service.update_event(updated_item.google_calendar_event_id, updated_item, meeting_title)
             except Exception as e:
                 print(f"Error updating Google Calendar event: {e}")
         return updated_item
@@ -516,9 +506,7 @@ class MeetingService:
             errors=errors if errors else None,
         )
 
-    def bulk_update(
-        self, meeting_ids: list[int], updates: Any
-    ) -> schemas.BulkOperationResponse:
+    def bulk_update(self, meeting_ids: list[int], updates: Any) -> schemas.BulkOperationResponse:
         success_count = 0
         failed_count = 0
         failed_ids: list[int] = []
@@ -556,22 +544,19 @@ class MeetingService:
     #  Speakers
     # =====================================================================
 
-    def add_speaker(
-        self, meeting_id: int, name: str, label: str | None
-    ) -> models.Speaker:
+    def add_speaker(self, meeting_id: int, name: str, label: str | None) -> models.Speaker:
         self.get_meeting_or_404(meeting_id)
-        return self.speaker_repo.create_for_meeting(
-            meeting_id=meeting_id, name=name, label=label
-        )
+        return self.speaker_repo.create_for_meeting(meeting_id=meeting_id, name=name, label=label)
 
     def get_speakers(self, meeting_id: int) -> list[models.Speaker]:
         db_meeting = self.get_meeting_or_404(meeting_id)
         return db_meeting.speakers
 
-    def update_speaker(
-        self, speaker_id: int, name: str, label: str | None
-    ) -> models.Speaker:
-        from ...core.processing.transcript_formatter import update_speaker_name_in_transcript
+    def update_speaker(self, speaker_id: int, name: str, label: str | None) -> models.Speaker:
+        from ...core.processing.transcript_formatter import (
+            replace_speaker_mentions,
+            update_speaker_name_in_transcript,
+        )
 
         db_speaker = self.speaker_repo.get(speaker_id)
         if not db_speaker:
@@ -583,26 +568,34 @@ class MeetingService:
         db_speaker.label = label
 
         if old_name != name or old_label != label:
-            meeting = self.repo.get_by_id(db_speaker.meeting_id)
-            if meeting and meeting.transcription:
-                if meeting.transcription.full_text:
-                    updated_text = meeting.transcription.full_text
-                    if old_label and old_label != name:
-                        updated_text = update_speaker_name_in_transcript(
-                            updated_text, old_label, name
-                        )
-                    if old_name and old_name != name and old_name != old_label:
-                        updated_text = update_speaker_name_in_transcript(
-                            updated_text, old_name, name
-                        )
-                    meeting.transcription.full_text = updated_text
+            # Both the old display name and the raw diarization label (e.g.
+            # "SPEAKER_00") may still be present in the transcript/summary/action
+            # items — substitute both. De-duped and filtered so a rename that
+            # already matches the new value (idempotent double-rename, e.g.
+            # SPEAKER_00 -> Alice -> Bob) never no-ops the wrong value or
+            # re-substitutes something already renamed.
+            old_values = [v for v in dict.fromkeys([old_name, old_label]) if v and v != name]
 
-                for action_item in meeting.transcription.action_items:
-                    if action_item.owner and (
-                        (old_name and action_item.owner.lower() == old_name.lower())
-                        or (old_label and action_item.owner.lower() == old_label.lower())
-                    ):
-                        action_item.owner = name
+            meeting = self.repo.get_by_id(db_speaker.meeting_id)
+            if meeting and meeting.transcription and old_values:
+                transcription = meeting.transcription
+                updated_text = transcription.full_text
+                updated_summary = transcription.summary
+
+                for old_value in old_values:
+                    if updated_text:
+                        updated_text = update_speaker_name_in_transcript(updated_text, old_value, name)
+                    if updated_summary:
+                        updated_summary = replace_speaker_mentions(updated_summary, old_value, name)
+
+                if updated_text != transcription.full_text or updated_summary != transcription.summary:
+                    self.transcription_repo.update_text_fields(
+                        transcription.id,
+                        full_text=updated_text,
+                        summary=updated_summary,
+                    )
+
+                self.action_item_repo.rename_owner_for_meeting(db_speaker.meeting_id, old_values, name)
 
         return self.speaker_repo.save(db_speaker)
 
@@ -616,9 +609,7 @@ class MeetingService:
     #  Tags / Folder / Notes
     # =====================================================================
 
-    def update_tags_folder(
-        self, meeting_id: int, tags: str | None, folder: str | None
-    ) -> models.Meeting:
+    def update_tags_folder(self, meeting_id: int, tags: str | None, folder: str | None) -> models.Meeting:
         db_meeting = self.get_meeting_or_404(meeting_id)
         updates: dict[str, Any] = {}
         if tags is not None:
@@ -647,9 +638,7 @@ class MeetingService:
             update_notes_embeddings.delay(meeting_id, notes)
         return db_meeting
 
-    def sync_meeting_links_from_notes(
-        self, source_meeting_id: int, notes: str | None
-    ) -> None:
+    def sync_meeting_links_from_notes(self, source_meeting_id: int, notes: str | None) -> None:
         if not notes:
             self.repo.delete_meeting_links(source_meeting_id)
             return
@@ -690,15 +679,11 @@ class MeetingService:
         return await self.chat_service.chat_with_meeting(
             meeting_id=meeting_id,
             request=request,
-            transcription_text=(
-                db_meeting.transcription.full_text if db_meeting.transcription else None
-            ),
+            transcription_text=(db_meeting.transcription.full_text if db_meeting.transcription else None),
             model_configuration_id=db_meeting.model_configuration_id,
         )
 
-    def get_chat_history(
-        self, meeting_id: int, skip: int = 0, limit: int = 100
-    ) -> "chat_schemas.ChatHistoryResponse":
+    def get_chat_history(self, meeting_id: int, skip: int = 0, limit: int = 100) -> "chat_schemas.ChatHistoryResponse":
         self.get_meeting_or_404(meeting_id)
         return self.chat_service.get_chat_history(meeting_id, skip=skip, limit=limit)
 
@@ -734,14 +719,10 @@ class MeetingService:
     def get_attachment(self, attachment_id: int) -> models.Attachment:
         return self.attachment_service.get_attachment(attachment_id)
 
-    def get_attachment_file_response(
-        self, attachment_id: int, inline: bool = False
-    ) -> FileResponse:
+    def get_attachment_file_response(self, attachment_id: int, inline: bool = False) -> FileResponse:
         return self.attachment_service.serve_attachment(attachment_id, inline)
 
-    def update_attachment_description(
-        self, attachment_id: int, description: str
-    ) -> models.Attachment:
+    def update_attachment_description(self, attachment_id: int, description: str) -> models.Attachment:
         return self.attachment_service.update_description(attachment_id, description)
 
     def delete_attachment(self, attachment_id: int) -> None:

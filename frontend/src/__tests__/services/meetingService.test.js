@@ -77,9 +77,9 @@ describe('MeetingService', () => {
   });
 
   test('rename delegates to update', async () => {
-    apiClient.put.mockResolvedValue({ data: { id: 1, filename: 'renamed' } });
+    apiClient.put.mockResolvedValue({ data: { id: 1, title: 'renamed' } });
     await MeetingService.rename(1, 'renamed');
-    expect(apiClient.put).toHaveBeenCalledWith('/api/v1/meetings/1', { filename: 'renamed' });
+    expect(apiClient.put).toHaveBeenCalledWith('/api/v1/meetings/1', { title: 'renamed' });
   });
 
   test('delete calls DELETE', async () => {

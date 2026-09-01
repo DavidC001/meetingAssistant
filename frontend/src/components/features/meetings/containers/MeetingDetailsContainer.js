@@ -247,6 +247,10 @@ export const MeetingDetailsContainer = () => {
     return await meetingDetail.updateTagsFolder(newTags, newFolder);
   };
 
+  const handleUpdateSummary = async (newSummary) => {
+    return await meetingDetail.updateSummary(newSummary);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
       {/* Error Alert */}
@@ -269,11 +273,12 @@ export const MeetingDetailsContainer = () => {
         meeting={meeting}
         isUpdating={isUpdating}
         onRename={() => {
-          setNewName(meeting.filename);
+          setNewName(meeting.title || meeting.filename);
           setRenameDialogOpen(true);
         }}
         onDelete={() => setDeleteDialogOpen(true)}
         onDownload={handleDownloadMeeting}
+        onUpdateSummary={handleUpdateSummary}
       />
 
       {/* Re-embed Search Index — shown for completed meetings with a transcription */}
@@ -329,7 +334,7 @@ export const MeetingDetailsContainer = () => {
                   </Typography>
                   <AudioPlayer
                     src={`/api/v1/meetings/${meeting.id}/audio`}
-                    title={meeting.filename}
+                    title={meeting.title || meeting.filename}
                   />
                 </CardContent>
               </Card>
@@ -344,23 +349,6 @@ export const MeetingDetailsContainer = () => {
               </Alert>
             )}
 
-            {meeting.transcription?.summary && (
-              <Box
-                sx={{
-                  mb: 3,
-                  p: 2,
-                  bgcolor: 'background.paper',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <h3>Executive Summary</h3>
-                <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
-                  {meeting.transcription.summary}
-                </p>
-              </Box>
-            )}
             <NotesEditor
               notes={meetingDetail.notes}
               isUpdating={isUpdating}
@@ -472,7 +460,7 @@ export const MeetingDetailsContainer = () => {
       {meeting && meeting.transcription && (
         <FloatingChat
           meetingId={meetingId}
-          meetingTitle={meeting.filename || meeting.title || 'Meeting'}
+          meetingTitle={meeting.title || meeting.filename || 'Meeting'}
         />
       )}
 

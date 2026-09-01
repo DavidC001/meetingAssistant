@@ -30,6 +30,15 @@ const MeetingService = {
   },
 
   /**
+   * Fetch id/status/progress for every meeting. Cheap enough to poll.
+   * @returns {Promise<Array>} List of meeting status summaries
+   */
+  async getStatuses() {
+    const response = await apiClient.get(`${BASE_URL}/statuses`);
+    return response.data;
+  },
+
+  /**
    * Fetch a single meeting by ID.
    * @param {number} meetingId - Meeting ID
    * @returns {Promise<Object>} Meeting details
@@ -131,11 +140,11 @@ const MeetingService = {
   /**
    * Rename a meeting.
    * @param {number} meetingId - Meeting ID
-   * @param {string} newName - New filename
+   * @param {string} newName - New title
    * @returns {Promise<Object>} Updated meeting
    */
   async rename(meetingId, newName) {
-    return this.update(meetingId, { filename: newName });
+    return this.update(meetingId, { title: newName });
   },
 
   /**
@@ -198,6 +207,16 @@ const MeetingService = {
   async updateNotes(meetingId, notes) {
     const response = await apiClient.put(`${BASE_URL}/${meetingId}/notes`, { notes });
     return response.data;
+  },
+
+  /**
+   * Update (manually correct) a meeting's transcription summary.
+   * @param {number} meetingId - Meeting ID
+   * @param {string} summary - New summary text
+   * @returns {Promise<Object>} Updated meeting
+   */
+  async updateSummary(meetingId, summary) {
+    return this.update(meetingId, { summary });
   },
 
   /**

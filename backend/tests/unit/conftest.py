@@ -1,20 +1,21 @@
 """Minimal conftest for unit tests — avoids loading the full app with ML deps."""
+
 import os
 
 os.environ.setdefault("SKIP_STARTUP_DB_INIT", "1")
 
+from datetime import date
+
 import pytest
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Must import Base and models BEFORE creating engine (for table metadata)
 from app.database import Base
 
 # Import models so they register with Base.metadata
-from app.models import Meeting, Transcription, ActionItem, UserMapping, DiaryEntry  # noqa: F401
-
-from datetime import date
+from app.models import ActionItem, DiaryEntry, Meeting, Transcription, UserMapping  # noqa: F401
 
 
 @pytest.fixture(scope="session")
