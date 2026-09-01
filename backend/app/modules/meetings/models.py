@@ -27,6 +27,7 @@ class Meeting(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, index=True)
+    title = Column(String, nullable=True, index=True)
     filepath = Column(String, unique=True)
     audio_filepath = Column(String, nullable=True)
     status = Column(String, default=MeetingStatus.PENDING.value, index=True)
