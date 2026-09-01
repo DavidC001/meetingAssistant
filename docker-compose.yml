@@ -2,13 +2,12 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.cpu
+      target: light
     ports:
       - "8000:8000"
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
-      - /var/run/docker.sock:/var/run/docker.sock  # Enable Docker socket access for Ollama management
       - ./backend/.env:/app/.env  # Mount env file so runtime writes are visible
     env_file:
       - ./backend/.env
@@ -35,11 +34,17 @@ services:
       - backend
     restart: unless-stopped
 
+  # GPU-bound meeting pipeline only. --pool=solo processes one task at a time, which is
+  # required for CUDA safety but means anything else sharing this worker would queue
+  # behind an hour-long transcription — hence the "heavy" queue and the separate
+  # worker-light service below for everything else.
   worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile.cpu
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--pool=solo"]
+      target: heavy
+      args:
+        WITH_HEAVY: "true"
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info", "--pool=solo", "-Q", "heavy"]
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
@@ -61,11 +66,30 @@ services:
         limits:
           memory: 4G
 
-  beat:
+  # Embeddings, Drive sync, note/attachment indexing, diary — no GPU, so real
+  # concurrency is safe here and keeps these off the heavy worker's single-task queue.
+  # Also runs the embedded beat scheduler (-B) for the Drive-sync periodic task: safe
+  # because there is exactly one replica of this service. If you ever scale
+  # worker-light past one replica, pull beat back out into its own service first —
+  # otherwise the periodic task fires once per replica.
+  worker-light:
     build:
       context: ./backend
-      dockerfile: Dockerfile.cpu
-    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info"]
+      target: light
+    command:
+      [
+        "celery",
+        "-A",
+        "app.worker.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--pool=threads",
+        "--concurrency=4",
+        "-Q",
+        "light",
+        "-B",
+        "--schedule=/app/cache/celerybeat-schedule",
+      ]
     volumes:
       - cache_data:/app/cache
       - uploads_data:/app/uploads
@@ -82,6 +106,10 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   db:
     image: pgvector/pgvector:pg15
@@ -110,8 +138,10 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Ollama service (optional - can be started/stopped via UI)
-  # Uncomment to have it start automatically with docker-compose
+  # Ollama service (optional). The app talks to Ollama over HTTP via OLLAMA_BASE_URL —
+  # point that at wherever Ollama actually runs. Uncomment this to also run it as a
+  # docker-compose service, or point OLLAMA_BASE_URL at an Ollama instance you manage
+  # separately.
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: ollama

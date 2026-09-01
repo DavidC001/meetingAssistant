@@ -1,0 +1,9 @@
+# Audio transcription / diarization dependencies — only installed in the
+# "heavy" image target (the `worker` service, which serves the "heavy" Celery
+# queue running app.tasks.process_meeting_task). The API, beat schedule, and
+# worker-light never call into faster-whisper/pyannote, so keeping these out
+# of their image is what makes the "light" target light.
+
+faster-whisper==1.1.0
+pyannote.audio==4.0.7
+torchcodec==0.7.0  # Pin to match torch==2.8.0 ABI; newer torchcodec releases require a newer torch

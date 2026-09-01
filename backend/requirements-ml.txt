@@ -1,0 +1,7 @@
+# ML dependencies shared by the "light" image (API, worker-light) and the
+# "heavy" image (worker). Needed for local sentence-transformers embeddings.
+# PyTorch itself is installed separately in the Dockerfile.
+
+transformers==4.45.0
+sentence-transformers>=2.6.0
+tiktoken==0.5.2

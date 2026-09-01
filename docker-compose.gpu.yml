@@ -1,18 +1,20 @@
 # Docker Compose override for GPU deployment
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 #
-# This file adds NVIDIA GPU support for systems with NVIDIA GPUs and nvidia-docker installed
+# This file adds NVIDIA GPU support for systems with NVIDIA GPUs and nvidia-docker
+# installed. It overrides ONLY the `worker` service, which is the sole service that
+# ever touches CUDA (the GPU-bound meeting transcription/diarization pipeline).
+# `backend` and `worker-light` stay on the "light" target in every deployment — they
+# can't reach a GPU (no `devices:` reservation) and gain nothing from a CUDA base.
 
 services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.gpu
-
   worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile.gpu
+      target: heavy
+      args:
+        WITH_HEAVY: "true"
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     deploy:
@@ -24,8 +26,3 @@ services:
               capabilities: [gpu]
         limits:
           memory: 4G
-
-  beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.gpu
