@@ -37,3 +37,10 @@ Dockerfile.*
 .coverage
 htmlcov/
 .pytest_cache/
+tests/
+scripts/
+*.md
+
+# Runtime data — mounted as volumes, not baked into the image
+uploads/
+cache/

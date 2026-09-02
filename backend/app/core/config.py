@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +11,25 @@ from dotenv import dotenv_values, load_dotenv
 
 # Ensure values from a local .env file are available before configuration is built
 load_dotenv()
+
+# .env is re-read on every credential lookup that misses os.getenv (see APIConfig.get)
+# because the settings UI can write new keys to it at runtime (write_env_file) and
+# those need to show up without a container restart. A short TTL cache avoids
+# re-parsing the file from disk on every single call in a tight loop (e.g. the chat
+# tool-calling loop can call this many times in a few seconds) while still picking up
+# an updated key within a few seconds.
+_DOTENV_CACHE_TTL_SECONDS = 5
+_dotenv_cache: dict[str, str | None] | None = None
+_dotenv_cache_at: float = 0.0
+
+
+def _cached_dotenv_values(dotenv_path: Path) -> dict[str, str | None]:
+    global _dotenv_cache, _dotenv_cache_at
+    now = time.monotonic()
+    if _dotenv_cache is None or (now - _dotenv_cache_at) >= _DOTENV_CACHE_TTL_SECONDS:
+        _dotenv_cache = dotenv_values(dotenv_path)
+        _dotenv_cache_at = now
+    return _dotenv_cache
 
 
 @dataclass
@@ -87,7 +107,7 @@ class APIConfig:
 
         dotenv_path = Path(__file__).resolve().parents[2] / ".env"
         if dotenv_path.exists():
-            dotenv_value = self._normalize_credential(dotenv_values(dotenv_path).get(normalized))
+            dotenv_value = self._normalize_credential(_cached_dotenv_values(dotenv_path).get(normalized))
             if dotenv_value:
                 return dotenv_value
 
@@ -110,6 +130,10 @@ class DatabaseConfig:
 
     url: str
     echo: bool = False
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_recycle: int = 1800
+    pool_pre_ping: bool = True
 
 
 @dataclass
@@ -197,6 +221,10 @@ def get_database_config() -> DatabaseConfig:
     return DatabaseConfig(
         url=os.getenv("DATABASE_URL", "sqlite:///./app.db"),
         echo=os.getenv("DATABASE_ECHO", "false").lower() == "true",
+        pool_size=int(os.getenv("DATABASE_POOL_SIZE", "5")),
+        max_overflow=int(os.getenv("DATABASE_MAX_OVERFLOW", "10")),
+        pool_recycle=int(os.getenv("DATABASE_POOL_RECYCLE", "1800")),
+        pool_pre_ping=os.getenv("DATABASE_POOL_PRE_PING", "true").lower() == "true",
     )
 
 

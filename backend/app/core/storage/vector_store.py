@@ -7,12 +7,56 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ... import models
+from .embeddings import ensure_active_embedding_configuration
 from .repository import VectorStoreRepository
 
 LOGGER = logging.getLogger(__name__)
+
+# (table, index_name) pairs for every chunk table with a pgvector embedding column.
+_HNSW_INDEXES = (
+    ("document_chunks", "ix_document_chunks_embedding_hnsw"),
+    ("project_document_chunks", "ix_project_document_chunks_embedding_hnsw"),
+)
+
+
+def rebuild_embedding_indexes(db: Session) -> dict[str, Any]:
+    """Pin the chunk tables' embedding columns to the active dimension and (re)build an
+    HNSW cosine index.
+
+    The embedding columns are declared as a dimensionless ``vector()`` so the app can
+    support switching to a differently-sized embedding model, but pgvector can't build
+    an ANN index on a dimensionless column — every similarity search is a full
+    sequential scan until this runs. Call this ONLY after every chunk has been
+    re-embedded at the same dimension (see recompute_all_embeddings /
+    rebuild_vector_indexes in app/tasks.py, which chains this as a chord callback so it
+    runs once the fan-out of per-meeting embedding jobs is fully done) — Postgres
+    validates every existing row against the new declared dimension during ALTER
+    COLUMN, so mixed dimensions make this fail.
+    """
+    db_config = ensure_active_embedding_configuration(db)
+    dimension = db_config.dimension
+    if not dimension:
+        LOGGER.warning("Active embedding configuration has no dimension recorded; skipping index rebuild")
+        return {"status": "skipped", "reason": "no_dimension"}
+    dimension = int(dimension)
+
+    for table, index_name in _HNSW_INDEXES:
+        try:
+            db.execute(text(f"DROP INDEX IF EXISTS {index_name}"))
+            db.execute(text(f"ALTER TABLE {table} ALTER COLUMN embedding TYPE vector({dimension})"))
+            db.execute(text(f"CREATE INDEX {index_name} ON {table} USING hnsw (embedding vector_cosine_ops)"))
+            db.commit()
+            LOGGER.info(f"Rebuilt HNSW index {index_name} on {table} for dimension {dimension}")
+        except Exception as e:
+            db.rollback()
+            LOGGER.error(f"Failed to rebuild index {index_name} on {table}: {e}", exc_info=True)
+            return {"status": "error", "table": table, "error": str(e)}
+
+    return {"status": "completed", "dimension": dimension}
 
 
 @dataclass

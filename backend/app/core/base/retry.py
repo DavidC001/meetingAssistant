@@ -15,6 +15,8 @@ Usage:
         ...
 """
 
+import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Callable
@@ -50,31 +52,62 @@ def retry(
     """
 
     def decorator(func: Callable) -> Callable:
+        def handle_failure(e: Exception, attempt: int) -> float | None:
+            """Log/notify a failed attempt; return the delay to wait, or None if giving up."""
+            if log_errors:
+                logger.warning(f"Attempt {attempt}/{max_retries} failed for {func.__name__}: {e}")
+
+            if on_retry:
+                on_retry(e, attempt)
+
+            if attempt >= max_retries:
+                if log_errors:
+                    logger.error(f"All {max_retries} attempts failed for {func.__name__}")
+                return None
+
+            if log_errors:
+                logger.info(f"Retrying in {delay * backoff_factor ** (attempt - 1):.1f} seconds...")
+            return delay * backoff_factor ** (attempt - 1)
+
+        # A sync wrapper around an `async def` would only build the coroutine, never run
+        # it, so no exception could ever reach the except clause and the retry would be a
+        # silent no-op. Coroutine functions need their own awaiting wrapper.
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs) -> Any:
+                last_exception = None
+
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        return await func(*args, **kwargs)
+                    except exceptions as e:
+                        last_exception = e
+                        wait = handle_failure(e, attempt)
+                        if wait is None:
+                            break
+                        await asyncio.sleep(wait)
+                    except Exception as e:
+                        logger.error(f"Unexpected error in {func.__name__}: {e}")
+                        raise
+
+                raise last_exception
+
+            return async_wrapper
+
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             last_exception = None
-            current_delay = delay
 
             for attempt in range(1, max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
                     last_exception = e
-
-                    if log_errors:
-                        logger.warning(f"Attempt {attempt}/{max_retries} failed for {func.__name__}: {e}")
-
-                    if on_retry:
-                        on_retry(e, attempt)
-
-                    if attempt < max_retries:
-                        if log_errors:
-                            logger.info(f"Retrying in {current_delay:.1f} seconds...")
-                        time.sleep(current_delay)
-                        current_delay *= backoff_factor
-                    else:
-                        if log_errors:
-                            logger.error(f"All {max_retries} attempts failed for {func.__name__}")
+                    wait = handle_failure(e, attempt)
+                    if wait is None:
+                        break
+                    time.sleep(wait)
                 except Exception as e:
                     # Don't retry for unexpected exceptions
                     logger.error(f"Unexpected error in {func.__name__}: {e}")

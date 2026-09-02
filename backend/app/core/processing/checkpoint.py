@@ -11,6 +11,8 @@ from ...modules.meetings.repository import MeetingRepository
 
 logger = logging.getLogger(__name__)
 
+_UNSET = object()
+
 
 class CheckpointManager:
     """
@@ -205,18 +207,24 @@ class CheckpointManager:
             logger.error(f"Failed to determine resume point for meeting {self.meeting_id}: {e}")
             return None
 
-    def validate_checkpoint(self, stage: str) -> bool:
+    def validate_checkpoint(self, stage: str, data: Any = _UNSET) -> bool:
         """
         Validate that a checkpoint is still valid and not corrupted.
 
         Args:
             stage: The stage to validate
+            data: Already-loaded checkpoint data, if the caller has it. Pass this when
+                you've just called load_checkpoint() yourself, to avoid re-reading and
+                re-unpickling the same file (checkpoint payloads can be large — full
+                transcripts, full diarization segment lists). Omit to have this method
+                load the checkpoint itself.
 
         Returns:
             bool: True if valid, False otherwise
         """
         try:
-            data = self.load_checkpoint(stage)
+            if data is _UNSET:
+                data = self.load_checkpoint(stage)
             if data is None:
                 return False
 

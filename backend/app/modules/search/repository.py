@@ -1,4 +1,5 @@
 """Repository layer for search database operations."""
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -36,12 +37,15 @@ class SearchRepository:
         return self.db.query(meeting_models.Meeting).filter(meeting_models.Meeting.id.in_(meeting_ids)).all()
 
     def search_meetings_by_title(self, meeting_ids: list[int], pattern: str) -> list[meeting_models.Meeting]:
-        """Search meeting titles within a set of meeting IDs."""
+        """Search meeting titles (falling back to filename) within a set of meeting IDs."""
         return (
             self.db.query(meeting_models.Meeting)
             .filter(
                 meeting_models.Meeting.id.in_(meeting_ids),
-                meeting_models.Meeting.filename.ilike(pattern),
+                or_(
+                    meeting_models.Meeting.title.ilike(pattern),
+                    meeting_models.Meeting.filename.ilike(pattern),
+                ),
             )
             .all()
         )
@@ -58,12 +62,15 @@ class SearchRepository:
         )
 
     def search_meeting_titles_quick(self, pattern: str, limit: int) -> list[meeting_models.Meeting]:
-        """Quick-search completed meeting titles for autocomplete."""
+        """Quick-search completed meeting titles (falling back to filename) for autocomplete."""
         return (
             self.db.query(meeting_models.Meeting)
             .filter(
                 meeting_models.Meeting.status == "completed",
-                meeting_models.Meeting.filename.ilike(pattern),
+                or_(
+                    meeting_models.Meeting.title.ilike(pattern),
+                    meeting_models.Meeting.filename.ilike(pattern),
+                ),
             )
             .limit(limit)
             .all()

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -147,8 +148,9 @@ async def chat_with_meeting(
         if config is None:
             config = get_default_chat_config()
 
-        # Create provider instance
-        provider = ProviderFactory.create_provider(config)
+        # Create provider instance. For Ollama this does a blocking connectivity check
+        # (requests.get with a 5s timeout) inside __init__, so keep it off the event loop.
+        provider = await asyncio.get_event_loop().run_in_executor(None, ProviderFactory.create_provider, config)
 
         today_str = datetime.now().strftime("%A, %B %d, %Y")
 

@@ -2,7 +2,7 @@
  * Custom React hooks for the Meeting Assistant application.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { POLLING, MEETING_STATUS } from '../constants';
 import { MeetingService } from '../services';
 
@@ -480,6 +480,44 @@ export const useInterval = (callback, delay) => {
 
     return () => clearInterval(id);
   }, [delay]);
+};
+
+/**
+ * Hook for measuring an element's content box, kept in sync via ResizeObserver.
+ * Useful for canvas-based libraries that need explicit pixel dimensions
+ * (e.g. ForceGraph2D, which otherwise defaults to the full window size).
+ * @returns {array} [ref, { width, height }] - ref to attach, and the measured size
+ */
+export const useElementSize = () => {
+  const ref = useRef(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+
+    const measure = () => {
+      const width = Math.round(element.clientWidth);
+      const height = Math.round(element.clientHeight);
+      // Preserve identity when unchanged, otherwise the observer re-triggers forever
+      setSize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height }
+      );
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size];
 };
 
 /**

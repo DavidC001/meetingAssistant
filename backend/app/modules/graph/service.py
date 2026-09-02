@@ -1,4 +1,5 @@
 """Service layer for meeting graph business logic."""
+
 import logging
 import re
 
@@ -35,8 +36,11 @@ def extract_meeting_ids_from_notes(notes: str, all_meetings: list[models.Meeting
     for match in re.finditer(pattern3, notes, re.IGNORECASE):
         meeting_ids.add(int(match.group(1)))
 
+    notes_lower = notes.lower()
     for meeting in all_meetings:
-        if meeting.filename and meeting.filename.lower() in notes.lower():
+        if (meeting.title and meeting.title.lower() in notes_lower) or (
+            meeting.filename and meeting.filename.lower() in notes_lower
+        ):
             meeting_ids.add(meeting.id)
 
     return list(meeting_ids)
@@ -69,11 +73,12 @@ class GraphService:
             nodes.append(
                 {
                     "id": meeting_node_id,
-                    "label": meeting.filename or f"Meeting {meeting.id}",
+                    "label": meeting.title or meeting.filename or f"Meeting {meeting.id}",
                     "type": "meeting",
                     "data": {
                         "id": meeting.id,
                         "filename": meeting.filename,
+                        "title": meeting.title,
                         "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
                         "meeting_date": meeting.meeting_date.isoformat() if meeting.meeting_date else None,
                         "status": meeting.status,

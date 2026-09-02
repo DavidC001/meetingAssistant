@@ -7,7 +7,6 @@ delegated to MeetingService – this file is an HTTP-layer-only module.
 """
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ...database import get_db
@@ -75,10 +74,17 @@ def create_batch_upload_files(
 # =============================================================================
 
 
-@router.get("/", response_model=list[schemas.Meeting])
+@router.get("/", response_model=list[schemas.MeetingSummary])
 def read_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Retrieve a paginated list of all meetings."""
+    """Retrieve a paginated list of all meetings, without transcripts or related records."""
     return _service(db).list_meetings(skip=skip, limit=limit)
+
+
+# Must stay ahead of "/{meeting_id}" so the literal path wins the match.
+@router.get("/statuses", response_model=list[schemas.MeetingStatusSummary])
+def read_meeting_statuses(db: Session = Depends(get_db)):
+    """Retrieve id/status/progress for every meeting. Cheap enough to poll."""
+    return _service(db).list_meeting_statuses()
 
 
 @router.get("/{meeting_id}", response_model=schemas.Meeting)
@@ -96,12 +102,14 @@ def update_meeting_details(
     """Update a meeting's details, e.g., rename it."""
     if meeting.filename and not meeting.filename.strip():
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
+    if meeting.title is not None and not meeting.title.strip():
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
     try:
         return _service(db).update_meeting(meeting_id, meeting)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to update meeting")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to update meeting: {exc}")
 
 
 @router.post("/{meeting_id}/restart-processing", response_model=schemas.Meeting)
@@ -123,8 +131,8 @@ def delete_meeting_file(meeting_id: int, db: Session = Depends(get_db)):
         _service(db).delete_meeting(meeting_id)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to delete meeting from database")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to delete meeting from database: {exc}")
     return
 
 

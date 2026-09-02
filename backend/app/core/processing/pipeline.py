@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from ...modules.meetings import schemas
 from ...modules.meetings.models import MeetingStatus, ProcessingStage
 from ...modules.meetings.repository import MeetingRepository, SpeakerRepository, TranscriptionRepository
+from ...modules.projects.repository import ProjectRepository
 from ...modules.settings.repository import SettingsRepository
+from ...modules.users.repository import UserMappingRepository
 from ..base import utils
 from ..base.retry import retry_file_operation
 from ..integrations.calendar import generate_ics_calendar
@@ -17,7 +19,6 @@ from ..integrations.export import export_meeting_data
 from ..llm import analysis
 from . import diarization, transcription
 from .checkpoint import CheckpointManager
-from .text_analysis import analyze_meeting_sentiment, detect_topic, extract_keywords, identify_speakers
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -93,6 +94,17 @@ def run_processing_pipeline(db: Session, meeting_id: int):
         tmp_path = Path(tmpdir)
         wav_audio_path = tmp_path / f"{input_file_path.stem}.wav"
 
+        def ensure_wav_audio() -> None:
+            """Convert the source file to WAV, if that hasn't already happened this run.
+
+            Only diarization and transcription actually need this file, and both are
+            skipped when resuming from a later stage with a valid checkpoint. Converting
+            unconditionally on every resume — including resuming straight into analysis —
+            wasted a full ffmpeg pass on the common "LLM failed, retry" path.
+            """
+            if not wav_audio_path.exists():
+                utils.convert_to_audio(input_file_path, wav_audio_path)
+
         # Create exports directory
         exports_dir = tmp_path / "exports"
         exports_dir.mkdir(exist_ok=True)
@@ -138,7 +150,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 processing_logs=["Starting file conversion..."],
             )
 
-            utils.convert_to_audio(input_file_path, wav_audio_path)
+            ensure_wav_audio()
 
             # Also create MP3 for playback (storage-efficient, streamable format)
             try:
@@ -175,15 +187,16 @@ def run_processing_pipeline(db: Session, meeting_id: int):
             )
             logger.info(f"Successfully converted to {wav_audio_path}")
         else:
-            # Copy the original file to our temporary location for processing
-            utils.convert_to_audio(input_file_path, wav_audio_path)
+            # wav_audio_path is only actually needed if diarization or transcription
+            # below fall through to re-running (no valid checkpoint) — ensure_wav_audio()
+            # converts lazily at those call sites instead of unconditionally here.
             logger.info("Skipped conversion stage (using checkpoint)")
 
         # 2. Perform speaker diarization (with caching and retry)
         if not resume_stage or resume_stage in ["conversion", "diarization"]:
             # Check if we have a diarization checkpoint
             diarization_checkpoint = checkpoint_manager.load_checkpoint("diarization")
-            if diarization_checkpoint and checkpoint_manager.validate_checkpoint("diarization"):
+            if diarization_checkpoint and checkpoint_manager.validate_checkpoint("diarization", diarization_checkpoint):
                 logger.info("Loading diarization results from checkpoint...")
                 diarization_segments = diarization_checkpoint
                 meeting_repo.update_processing_details(
@@ -220,6 +233,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                         meeting_id, stage_progress=float(progress), processing_logs=[f"Diarization: {message}"]
                     )
 
+                ensure_wav_audio()
                 diarization_segments = diarization.diarize_audio(
                     str(wav_audio_path),
                     num_speakers=num_speakers,
@@ -283,7 +297,9 @@ def run_processing_pipeline(db: Session, meeting_id: int):
         if not resume_stage or resume_stage in ["conversion", "diarization", "transcription"]:
             # Check if we have a transcription checkpoint
             transcription_checkpoint = checkpoint_manager.load_checkpoint("transcription")
-            if transcription_checkpoint and checkpoint_manager.validate_checkpoint("transcription"):
+            if transcription_checkpoint and checkpoint_manager.validate_checkpoint(
+                "transcription", transcription_checkpoint
+            ):
                 logger.info("Loading transcription results from checkpoint...")
                 full_transcript = transcription_checkpoint["full_transcript"]
                 dominant_language = transcription_checkpoint["dominant_language"]
@@ -351,6 +367,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     model_size=whisper_model_size, language=transcription_language
                 )
 
+                ensure_wav_audio()
                 full_transcript, dominant_language = transcription.compile_transcript(
                     str(wav_audio_path),
                     diarization_segments,
@@ -392,28 +409,23 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                 else:
                     raise ValueError("Failed to load transcription from checkpoint or database")
 
-        # 4. Enhanced text analysis
-        logger.info("Performing text analysis...")
-
-        # Detect meeting topic
-        meeting_topic = detect_topic(full_transcript, meeting_filename) or "General Meeting"
-
-        # Extract keywords
-        keywords = extract_keywords(full_transcript, max_keywords=15)
-
-        # Identify speakers
-        speaker_names = identify_speakers(full_transcript)
-
-        # Analyze sentiment
-        sentiment_analysis = analyze_meeting_sentiment(full_transcript)
-
-        logger.info(f"Text analysis complete - Topic: {meeting_topic}, Keywords: {len(keywords)}")
-
-        # 5. Analyze the transcript with an LLM (with enhanced retry and fallback)
+        # 4. Analyze the transcript with an LLM (with enhanced retry and fallback)
+        # Title, topic, keywords, tags, folder, sentiment, decisions, action items, and speaker
+        # identification are all extracted together in a single LLM call — see
+        # analysis.analyse_meeting. Existing tags/folders/projects are passed as context so the
+        # LLM reuses them instead of inventing near-duplicates.
+        speaker_labels = sorted({seg["speaker"] for seg in diarization_segments})
+        known_persons = [m.name for m in UserMappingRepository(db).get_all_active()]
+        existing_tags = meeting_repo.get_unique_tags()
+        existing_folders = meeting_repo.get_titles_by_folder()
+        projects_context = [
+            {"name": p.name, "description": p.description, "tags": p.tags}
+            for p in ProjectRepository(db).list(status="active")
+        ]
         if not resume_stage or resume_stage in ["conversion", "diarization", "transcription", "analysis"]:
             # Check if we have an analysis checkpoint
             analysis_checkpoint = checkpoint_manager.load_checkpoint("analysis")
-            if analysis_checkpoint and checkpoint_manager.validate_checkpoint("analysis"):
+            if analysis_checkpoint and checkpoint_manager.validate_checkpoint("analysis", analysis_checkpoint):
                 logger.info("Loading analysis results from checkpoint...")
                 analysis_results = analysis_checkpoint
                 meeting_repo.update_processing_details(
@@ -439,8 +451,7 @@ def run_processing_pipeline(db: Session, meeting_id: int):
                     datetime.fromtimestamp(meeting.created_at.timestamp()) if meeting.created_at else datetime.now()
                 )
                 duration_str = f"{estimated_duration_minutes:.1f}" if estimated_duration_minutes else "Unknown"
-                enhanced_transcript = f"""Meeting: {meeting_topic}
-Date: {meeting_date.strftime('%Y-%m-%d %H:%M')}
+                enhanced_transcript = f"""Date: {meeting_date.strftime('%Y-%m-%d %H:%M')}
 File: {meeting_filename}
 Participants: {len({seg['speaker'] for seg in diarization_segments})} speakers
 Duration: {duration_str} minutes
@@ -472,7 +483,15 @@ Transcript:
 
                 logger.info(f"Sending transcript to LLM for analysis. Length: {len(enhanced_transcript)} chars")
                 analysis_results = analysis.analyse_meeting(
-                    enhanced_transcript, llm_config=llm_config, progress_callback=analysis_progress_callback
+                    enhanced_transcript,
+                    llm_config=llm_config,
+                    known_persons=known_persons,
+                    speaker_labels=speaker_labels,
+                    existing_tags=existing_tags,
+                    existing_folders=existing_folders,
+                    projects=projects_context,
+                    progress_callback=analysis_progress_callback,
+                    meeting_date=meeting_date.strftime("%Y-%m-%d"),
                 )
 
                 # Check if analysis failed
@@ -488,7 +507,7 @@ Transcript:
                     analysis_results,
                     metadata={
                         "stage": "analysis",
-                        "meeting_topic": meeting_topic,
+                        "meeting_topic": analysis_results.get("topic"),
                         "num_action_items": len(analysis_results.get("action_items", [])),
                     },
                 )
@@ -508,7 +527,45 @@ Transcript:
             analysis_results = analysis_checkpoint
             logger.info("Skipped analysis stage (using checkpoint)")
 
-        # 6. Generate exports and calendar
+        # 5. Apply the LLM's speaker identification, title/tags/folder, and prepare exports/calendar
+        meeting_topic = analysis_results.get("topic") or "General Meeting"
+        keywords = analysis_results.get("keywords") or []
+        sentiment_analysis = analysis_results.get("sentiment") or {}
+        identified_speakers = {label: name for label, name in (analysis_results.get("speakers") or {}).items() if name}
+
+        speaker_repo = SpeakerRepository(db)
+        meeting_speakers = speaker_repo.get_by_meeting_id(meeting_id)
+        for speaker in meeting_speakers:
+            identified_name = identified_speakers.get(speaker.label)
+            if identified_name and identified_name != speaker.name:
+                speaker.name = identified_name
+                speaker_repo.save(speaker)
+
+        # Only fill in title/tags/folder when the user hasn't already set them manually
+        # (e.g. before a reprocess), so we never clobber an intentional edit.
+        field_updates = {}
+        if not meeting.title:
+            field_updates["title"] = analysis_results.get("title") or meeting_filename
+        suggested_tags = analysis_results.get("tags") or []
+        if not meeting.tags and suggested_tags:
+            field_updates["tags"] = ", ".join(suggested_tags)
+        suggested_folder = analysis_results.get("folder")
+        if not meeting.folder and suggested_folder:
+            field_updates["folder"] = suggested_folder
+
+        if field_updates:
+            meeting = meeting_repo.update_fields(meeting, field_updates)
+
+        if "tags" in field_updates:
+            # Reuses the existing tag-overlap project linker (see meetings/service.py
+            # update_tags_folder) instead of re-implementing project matching here.
+            try:
+                from ...modules.projects.service import ProjectService
+
+                ProjectService(db).sync_meeting_to_projects_by_tags(meeting_id)
+            except Exception as e:
+                logger.warning(f"Failed to auto-sync meeting {meeting_id} to projects: {e}")
+
         logger.info("Generating exports and calendar...")
 
         # Prepare comprehensive data for export
@@ -519,11 +576,12 @@ Transcript:
             "filename": meeting_filename,
             "transcript": full_transcript,
             "keywords": keywords,
-            "speaker_names": speaker_names,
+            "speakers": [{"name": s.name} for s in meeting_speakers],
             "sentiment_analysis": sentiment_analysis,
             "dominant_language": dominant_language,
             "estimated_duration_minutes": estimated_duration_minutes,
             **analysis_results,  # Include summary, decisions, action_items, etc.
+            "title": meeting.title or meeting_filename,  # persisted title wins over the raw LLM value above
         }
 
         # Export to multiple formats
@@ -546,7 +604,7 @@ Transcript:
             meeting_id, stage_progress=50.0, overall_progress=95.0, processing_logs=["Export files generated"]
         )
 
-        # 7. Structure the data for database insertion
+        # 6. Structure the data for database insertion
         # Combine summary with additional insights
         enhanced_summary = []
         if isinstance(analysis_results.get("summary"), list):
@@ -559,8 +617,8 @@ Transcript:
             [
                 f"Meeting Topic: {meeting_topic}",
                 f"Key Keywords: {', '.join(keywords[:5])}" if keywords else "",
-                f"Overall Sentiment: {sentiment_analysis.get('sentiment', 'neutral').title()}",
-                f"Identified Speakers: {len(speaker_names)} of {len({seg['speaker'] for seg in diarization_segments})}",
+                f"Overall Sentiment: {sentiment_analysis.get('overall', 'neutral').title()}",
+                f"Identified Speakers: {len(identified_speakers)} of {len(speaker_labels)}",
             ]
         )
 
@@ -571,7 +629,7 @@ Transcript:
 
         action_items_data = [schemas.ActionItemCreate(**item) for item in analysis_results.get("action_items", [])]
 
-        # 8. Save results to the database
+        # 7. Save results to the database
         logger.info("Saving results to database...")
         # Check if analysis was successful before marking as completed
         analysis_success = analysis_results.get("success", True)

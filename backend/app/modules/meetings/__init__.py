@@ -7,14 +7,16 @@ This module provides:
 - Attachment handling
 - Document chunk management for RAG
 
-Usage (Repository pattern):
-    from app.modules.meetings import MeetingRepository, ActionItemRepository
+Usage:
+    from app.modules.meetings import MeetingRepository
+    from app.modules.meetings.service import MeetingService  # import service explicitly
 
-    meeting_repo = MeetingRepository(db)
-    meeting = meeting_repo.get_by_id(1)
+    service = MeetingService(db)
+    meetings = service.list_meetings()
 """
 
 from . import models, schemas
+from .file_utils import FileManager, FileValidator
 from .repository import (
     ActionItemNotFoundError,
     ActionItemRepository,
@@ -32,7 +34,10 @@ __all__ = [
     # Submodules
     "models",
     "schemas",
-    # Repository classes
+    # Utilities
+    "FileManager",
+    "FileValidator",
+    # Repositories
     "MeetingRepository",
     "ActionItemRepository",
     "AttachmentRepository",

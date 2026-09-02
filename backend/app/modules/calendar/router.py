@@ -72,7 +72,7 @@ def get_all_action_items(
         if item.transcription and item.transcription.meeting:
             meeting = item.transcription.meeting
             item_dict["meeting_id"] = meeting.id
-            item_dict["meeting_title"] = meeting.filename
+            item_dict["meeting_title"] = meeting.title or meeting.filename
             item_dict["meeting_date"] = meeting.meeting_date
 
         result.append(item_dict)

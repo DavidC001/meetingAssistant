@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 
@@ -33,7 +34,7 @@ def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
 def _chunk_to_source(chunk: RetrievedChunk) -> dict:
     metadata = chunk.chunk.chunk_metadata or {}
     meeting = chunk.chunk.meeting
-    meeting_name = getattr(meeting, "filename", f"Meeting {chunk.chunk.meeting_id}") if meeting else None
+    meeting_name = (meeting.title or meeting.filename or f"Meeting {chunk.chunk.meeting_id}") if meeting else None
     source = {
         "meeting_id": chunk.chunk.meeting_id,
         "meeting_name": meeting_name,
@@ -182,8 +183,6 @@ async def generate_rag_response(
     if llm_config is None:
         llm_config = chat.get_default_chat_config()
 
-    provider_instance = chat.ProviderFactory.create_provider(llm_config)
-
     # If full transcript mode is enabled, bypass RAG and use the full transcript
     if use_full_transcript and full_transcript:
         LOGGER.info("Using full transcript mode (bypassing RAG)")
@@ -213,7 +212,8 @@ async def generate_rag_response(
         return f"Error: Could not initialize embedding provider. {str(e)}", [], []
 
     try:
-        query_embedding = provider.embed_query(query)
+        # embed_query does a blocking HTTP call; keep it off the event loop.
+        query_embedding = await asyncio.get_event_loop().run_in_executor(None, provider.embed_query, query)
     except Exception as e:
         LOGGER.error(f"Failed to generate query embedding: {e}", exc_info=True)
         return f"Error: Could not generate embeddings for your query. {str(e)}", [], []
@@ -306,8 +306,6 @@ async def generate_project_rag_response(
     if llm_config is None:
         llm_config = chat.get_default_chat_config()
 
-    provider_instance = chat.ProviderFactory.create_provider(llm_config)
-
     try:
         provider, _ = get_embedding_provider(db)
     except Exception as e:
@@ -315,7 +313,8 @@ async def generate_project_rag_response(
         return f"Error: Could not initialize embedding provider. {str(e)}", [], []
 
     try:
-        query_embedding = provider.embed_query(query)
+        # embed_query does a blocking HTTP call; keep it off the event loop.
+        query_embedding = await asyncio.get_event_loop().run_in_executor(None, provider.embed_query, query)
     except Exception as e:
         LOGGER.error(f"Failed to generate query embedding: {e}", exc_info=True)
         return f"Error: Could not generate embeddings for your query. {str(e)}", [], []

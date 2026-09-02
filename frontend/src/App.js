@@ -48,8 +48,6 @@ function AppContent() {
   const sidebarVariant = isMobile ? 'temporary' : 'permanent';
   const sidebarCollapsed = isTablet;
 
-  const drawerWidth = sidebarCollapsed ? 72 : 280;
-
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* App Header */}
@@ -68,8 +66,11 @@ function AppContent() {
         component="main"
         sx={{
           flexGrow: 1,
-          pt: { xs: '56px', md: '64px' }, // Account for AppBar height
-          pl: isMobile ? 0 : `${drawerWidth}px`,
+          minWidth: 0,
+          maxWidth: '100%',
+          overflowX: 'hidden',
+          pt: { xs: '56px', md: '64px' },
+          pl: { xs: 0, md: '72px', lg: '280px' },
           transition: theme.transitions.create(['padding-left'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,

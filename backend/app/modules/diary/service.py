@@ -1,4 +1,5 @@
 """Service layer for diary business logic."""
+
 import re
 from datetime import date, timedelta
 
@@ -127,7 +128,7 @@ class DiaryService:
         Get action items activity for a specific date.
 
         Returns:
-        - In progress items: All items currently with "in-progress" status
+        - In progress items: All items currently with "in_progress" status
         - Completed items: Recently completed items (last 30 days) or items due near this date
         - Created items: Items due today or overdue (pending status)
 
@@ -142,8 +143,11 @@ class DiaryService:
         start_range = (target_date - timedelta(days=30)).isoformat()
         end_range = (target_date + timedelta(days=7)).isoformat()
 
-        # Get ALL items that are currently in progress (global status)
-        in_progress_items = self.meeting_service.get_action_items(status="in-progress")
+        # Get ALL items that are currently in progress (global status).
+        # Must be the underscore form: that is what the model stores and what the
+        # calendar/gantt/upcoming queries match on. Querying "in-progress" here meant the
+        # diary and those views each saw a disjoint subset of the in-progress items.
+        in_progress_items = self.meeting_service.get_action_items(status="in_progress")
 
         # Get completed items that are either:
         # 1. Due within the date range around target_date, OR

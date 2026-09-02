@@ -82,6 +82,17 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         """Get all completed meetings."""
         return self.get_by_status(models.MeetingStatus.COMPLETED, skip, limit)
 
+    def list_status_summaries(self) -> list[Any]:
+        """Get id/status/progress columns only, for the frontend's processing poll."""
+        return self.db.query(
+            models.Meeting.id,
+            models.Meeting.status,
+            models.Meeting.current_stage,
+            models.Meeting.stage_progress,
+            models.Meeting.overall_progress,
+            models.Meeting.error_message,
+        ).all()
+
     def list_by_statuses(self, statuses: list[models.MeetingStatus]) -> list[models.Meeting]:
         """Get all meetings whose status is in the provided list."""
         status_values = [s.value for s in statuses]
@@ -180,6 +191,7 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         search_lower = search.lower()
         name_match = base_query.filter(
             func.lower(models.Meeting.filename).contains(search_lower)
+            | func.lower(func.coalesce(models.Meeting.title, "")).contains(search_lower)
             | func.lower(models.Meeting.folder).contains(search_lower)
         )
         speaker_match = base_query.join(models.Speaker, models.Speaker.meeting_id == models.Meeting.id).filter(
@@ -236,6 +248,26 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
                     if tag:
                         tags_set.add(tag)
         return sorted(tags_set)
+
+    def get_titles_by_folder(self, limit_per_folder: int = 8) -> dict[str, list[str]]:
+        """Map each existing folder to a sample of titles/filenames of meetings already filed there.
+
+        Used to give the LLM concrete examples of what a folder already contains, so it can
+        decide whether a new meeting belongs with them.
+        """
+        rows = (
+            self.db.query(models.Meeting.folder, models.Meeting.title, models.Meeting.filename)
+            .filter(models.Meeting.folder.isnot(None), models.Meeting.folder != "")
+            .filter(models.Meeting.status == models.MeetingStatus.COMPLETED.value)
+            .order_by(models.Meeting.created_at.desc())
+            .all()
+        )
+        result: dict[str, list[str]] = {}
+        for folder, title, filename in rows:
+            names = result.setdefault(folder, [])
+            if len(names) < limit_per_folder:
+                names.append(title or filename)
+        return result
 
     def get_by_filters(self, folder: str | None = None, tags: str | None = None) -> list[int]:
         """
@@ -403,7 +435,15 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         # Delete related diarization timings
         self.db.query(models.DiarizationTiming).filter(models.DiarizationTiming.meeting_id == meeting_id).delete()
 
-        # Delete meeting (cascades to transcription and action items)
+        # Meeting.transcription is uselist=False, so the ORM cascade only reaches the single
+        # row it loads. Meetings reprocessed before create_with_action_items was fixed can
+        # still have extra transcription rows, and any it misses trips
+        # transcriptions_meeting_id_fkey. Delete them explicitly — ORM deletes, so each one's
+        # action items cascade with it.
+        for transcription in TranscriptionRepository(self.db).get_all_for_meeting(meeting_id):
+            self.db.delete(transcription)
+
+        # Delete meeting (cascades to speakers, attachments, chunks and chat messages)
         self.db.delete(meeting)
         self.db.commit()
         return meeting
@@ -645,6 +685,38 @@ class ActionItemRepository(BaseRepository[models.ActionItem, schemas.ActionItemC
         rows = self.db.query(models.ActionItem.owner).distinct().filter(models.ActionItem.owner.isnot(None)).all()
         return sorted(r[0] for r in rows)
 
+    def rename_owner_for_meeting(self, meeting_id: int, old_values: list[str], new_owner: str) -> int:
+        """
+        Rename the owner of every action item belonging to meeting_id whose current
+        owner case-insensitively matches one of old_values.
+
+        Used when a speaker is renamed so any action items already assigned to the
+        old speaker name/label follow the rename. Matching is case-insensitive and
+        scoped to the given meeting (via its transcription) so renaming a speaker in
+        one meeting never touches action items in another.
+        """
+        old_values_lower = {v.lower() for v in old_values if v}
+        if not old_values_lower or not new_owner:
+            return 0
+
+        items = (
+            self.db.query(models.ActionItem)
+            .join(models.Transcription, models.ActionItem.transcription_id == models.Transcription.id)
+            .filter(models.Transcription.meeting_id == meeting_id)
+            .filter(models.ActionItem.owner.isnot(None))
+            .all()
+        )
+
+        updated = 0
+        for item in items:
+            if item.owner and item.owner.lower() in old_values_lower:
+                item.owner = new_owner
+                updated += 1
+
+        if updated:
+            self.db.commit()
+        return updated
+
 
 # =============================================================================
 # Attachment Repository
@@ -720,12 +792,54 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
         """Get transcription for a meeting."""
         return self.db.query(models.Transcription).filter(models.Transcription.meeting_id == meeting_id).first()
 
+    def get_all_for_meeting(self, meeting_id: int) -> list[models.Transcription]:
+        """
+        Get every transcription row referencing a meeting, oldest first.
+
+        A meeting should only ever have one, but reprocessing historically inserted extra
+        rows, so callers that must account for all of them (deletion, deduplication) use
+        this rather than the one-to-one accessor.
+        """
+        return (
+            self.db.query(models.Transcription)
+            .filter(models.Transcription.meeting_id == meeting_id)
+            .order_by(models.Transcription.id)
+            .all()
+        )
+
     def get_meeting_title(self, transcription_id: int) -> str | None:
-        """Get meeting filename/title for a given transcription ID."""
+        """Get meeting title for a given transcription ID, falling back to filename."""
         transcription = self.get(transcription_id)
         if transcription and transcription.meeting:
-            return transcription.meeting.filename
+            return transcription.meeting.title or transcription.meeting.filename
         return None
+
+    def update_text_fields(
+        self,
+        transcription_id: int,
+        *,
+        full_text: str | None = None,
+        summary: str | None = None,
+    ) -> models.Transcription | None:
+        """
+        Persist updates to a transcription's free-text fields.
+
+        Pass only the field(s) that changed; omitted (None) fields are left as-is.
+        Used both for manual summary edits and for propagating a speaker rename
+        into the stored transcript/summary text.
+        """
+        transcription = self.get(transcription_id)
+        if not transcription:
+            return None
+
+        if full_text is not None:
+            transcription.full_text = full_text
+        if summary is not None:
+            transcription.summary = summary
+
+        self.db.commit()
+        self.db.refresh(transcription)
+        return transcription
 
     def get_meeting_info(self, transcription_id: int) -> dict | None:
         """Return a dict with meeting_id, meeting_title, and meeting_date for a transcription."""
@@ -734,7 +848,7 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
             mtg = transcription.meeting
             return {
                 "meeting_id": mtg.id,
-                "meeting_title": mtg.filename,
+                "meeting_title": mtg.title or mtg.filename,
                 "meeting_date": mtg.meeting_date,
             }
         return None
@@ -765,11 +879,31 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
         if mark_completed:
             meeting_repo.update_status(meeting_id, models.MeetingStatus.COMPLETED)
 
-        # Create transcription
-        db_transcription = models.Transcription(
-            meeting_id=meeting_id, summary=transcription_data.summary, full_text=transcription_data.full_text
-        )
-        self.db.add(db_transcription)
+        # A meeting has at most one transcription (Meeting.transcription is uselist=False).
+        # Reprocessing a meeting used to INSERT a second row here, which left the earlier
+        # transcription orphaned but still referencing the meeting — so deleting the meeting
+        # failed on transcriptions_meeting_id_fkey, because the ORM only cascades the single
+        # row the one-to-one relationship loaded. Reuse the existing row instead, replacing
+        # its action items with the freshly extracted ones.
+        existing = self.get_all_for_meeting(meeting_id)
+        db_transcription = existing[0] if existing else None
+
+        # Defensive: if earlier runs already left duplicates behind, collapse them now so the
+        # meeting is left with exactly one transcription.
+        for stale in existing[1:]:
+            self.db.delete(stale)
+
+        if db_transcription is None:
+            db_transcription = models.Transcription(meeting_id=meeting_id)
+            self.db.add(db_transcription)
+
+        db_transcription.summary = transcription_data.summary
+        db_transcription.full_text = transcription_data.full_text
+
+        # Drop the previous run's action items; the ones extracted this run replace them.
+        for old_item in list(db_transcription.action_items):
+            self.db.delete(old_item)
+
         self.db.commit()
         self.db.refresh(db_transcription)
 
@@ -911,6 +1045,10 @@ class SpeakerRepository(BaseRepository[models.Speaker, Any, Any]):
         """Get all distinct non-null speaker names across all meetings."""
         results = self.db.query(models.Speaker.name).filter(models.Speaker.name.isnot(None)).distinct().all()
         return [row[0] for row in results]
+
+    def get_by_meeting_id(self, meeting_id: int) -> list[models.Speaker]:
+        """Get all speakers for a meeting."""
+        return self.db.query(models.Speaker).filter(models.Speaker.meeting_id == meeting_id).all()
 
     def create_for_meeting(self, meeting_id: int, name: str, label: str | None) -> models.Speaker:
         """Create and persist a speaker for a meeting."""

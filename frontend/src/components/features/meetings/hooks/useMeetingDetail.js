@@ -242,6 +242,27 @@ export const useMeetingDetail = (meetingId) => {
   );
 
   /**
+   * Update (manually correct) the meeting's transcription summary
+   */
+  const updateSummary = useCallback(
+    async (newSummary) => {
+      try {
+        setIsUpdating(true);
+        const data = await MeetingService.updateSummary(meetingId, newSummary);
+        setMeeting(data);
+        return true;
+      } catch (err) {
+        logger.error('Error updating summary:', err);
+        setError('Failed to update summary.');
+        return false;
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [meetingId]
+  );
+
+  /**
    * Update tags and folder
    */
   const updateTagsFolder = useCallback(
@@ -372,6 +393,7 @@ export const useMeetingDetail = (meetingId) => {
     rename,
     deleteMeeting,
     updateNotes,
+    updateSummary,
     updateTagsFolder,
     restartProcessing,
     download,

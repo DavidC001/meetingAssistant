@@ -1,0 +1,51 @@
+# Meeting Assistant Backend Dependencies — base (no ML/audio)
+# ==============================================================
+# Installed in every image target (light and heavy). PyTorch is installed
+# separately in the Dockerfile (CPU or CUDA wheel index) — do NOT add
+# torch/torchaudio/torchvision here.
+
+# Web Framework
+fastapi==0.109.0
+starlette==0.35.1
+anyio==4.4.0
+uvicorn[standard]==0.24.0
+python-multipart>=0.0.9
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+pgvector==0.2.4
+alembic==1.13.1
+
+# Task Queue
+celery[redis]==5.3.6
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# HTTP Requests
+requests>=2.32.3
+
+# Numeric (pinned to guard the torch/numpy-2.x ABI break; not imported directly here)
+numpy==2.4.6
+
+# AI Providers
+openai>=1.50.0
+
+# Document Generation
+python-docx==1.1.0
+reportlab==4.0.7
+icalendar==5.0.11
+
+# Document parsing
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+
+# Google Calendar Integration
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+google-api-python-client==2.108.0
+
+# Structured Logging
+structlog>=23.2.0

@@ -193,7 +193,7 @@ const MeetingsBrowserContainer = () => {
         subtitle={`${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''}`}
       />
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <Box sx={{ flexGrow: 1 }}>
           <FilterBar
             searchValue={searchQuery}
@@ -237,28 +237,37 @@ const MeetingsBrowserContainer = () => {
       {/* Bulk Action Bar */}
       {selectedMeetings.length > 0 && (
         <Paper
-          sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1200, borderRadius: 0 }}
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: { xs: 0, md: 280 },
+            right: 0,
+            zIndex: 1200,
+            borderRadius: 0,
+            transition: 'left 0.3s ease',
+          }}
           elevation={8}
         >
-          <Toolbar>
-            <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+          <Toolbar sx={{ flexWrap: 'wrap', gap: 1, py: 1 }}>
+            <Typography variant="subtitle1" sx={{ flexGrow: 1, fontSize: { xs: '0.9rem', sm: '1rem' } }}>
               {selectedMeetings.length} selected
             </Typography>
-            <Stack direction="row" spacing={1}>
-              <Button startIcon={<MoveIcon />} onClick={() => setBulkMoveDialogOpen(true)}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button startIcon={<MoveIcon />} onClick={() => setBulkMoveDialogOpen(true)} size="small">
                 Move
               </Button>
-              <Button startIcon={<TagIcon />} onClick={() => setBulkTagsDialogOpen(true)}>
+              <Button startIcon={<TagIcon />} onClick={() => setBulkTagsDialogOpen(true)} size="small">
                 Add Tags
               </Button>
               <Button
                 startIcon={<DeleteIcon />}
                 onClick={() => setBulkDeleteDialogOpen(true)}
                 color="error"
+                size="small"
               >
                 Delete
               </Button>
-              <IconButton onClick={() => setSelectedMeetings([])}>
+              <IconButton onClick={() => setSelectedMeetings([])} size="small">
                 <CloseIcon />
               </IconButton>
             </Stack>

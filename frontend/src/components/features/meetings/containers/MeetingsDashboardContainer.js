@@ -30,7 +30,7 @@ const MeetingsDashboardContainer = () => {
       <Box>
         {/* Header */}
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" fontWeight="700" gutterBottom>
+          <Typography variant="h4" component="h1" fontWeight="700" gutterBottom sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
             Dashboard
           </Typography>
           <Typography variant="body2" color="text.secondary">

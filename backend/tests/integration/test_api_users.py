@@ -39,7 +39,7 @@ class TestUserMappingAPI:
         from app.modules.users.service import UserMappingService
 
         service = UserMappingService(db)
-        mapping = service.create_or_update_mapping("Jane Smith", "jane@example.com")
+        service.create_or_update_mapping("Jane Smith", "jane@example.com")
 
         # Create duplicate with different email
         mapping_data = {"name": "Jane Smith", "email": "jane.smith@newdomain.com"}

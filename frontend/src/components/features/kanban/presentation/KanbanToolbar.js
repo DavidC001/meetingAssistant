@@ -98,6 +98,17 @@ const KanbanToolbar = ({
                 label="Show only my tasks"
                 sx={{ m: 0 }}
               />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showCompleted}
+                    onChange={(e) => onShowCompletedChange(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Show completed"
+                sx={{ m: 0 }}
+              />
             </Box>
           )}
 

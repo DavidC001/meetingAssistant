@@ -2,6 +2,7 @@
 Transcript formatting utilities.
 Handles grouping consecutive utterances from the same speaker.
 """
+
 import logging
 import re
 from typing import Any
@@ -163,6 +164,35 @@ def convert_old_transcript_format(old_transcript: str) -> str:
         result_lines.append(f"{current_speaker}: {combined}")
 
     return "\n".join(result_lines)
+
+
+def replace_speaker_mentions(text: str, old_value: str, new_value: str) -> str:
+    """
+    Word-boundary-safe replacement of a speaker name/label anywhere in free-form text.
+
+    Unlike `update_speaker_name_in_transcript` (which targets the structured
+    "Speaker: text" / "Speaker (0.0s - 1.0s): text" transcript layout), this is meant
+    for prose such as an LLM-generated meeting summary, where the speaker name/label
+    can appear anywhere in a sentence (e.g. "SPEAKER_01 raised concerns about...").
+
+    A naive `str.replace`/substring regex would let a short label corrupt a longer
+    one that starts with it (replacing "SPEAKER_0" would also mangle "SPEAKER_01").
+    This uses explicit non-word boundary assertions so a match only counts when it
+    isn't glued to another word character on either side.
+
+    Args:
+        text: Free-form text to search (e.g. a meeting summary).
+        old_value: The speaker name or label to replace.
+        new_value: The replacement speaker name.
+
+    Returns:
+        Text with every whole-word occurrence of old_value replaced by new_value.
+    """
+    if not text or not old_value or not new_value or old_value == new_value:
+        return text
+
+    pattern = re.compile(rf"(?<!\w){re.escape(old_value)}(?!\w)")
+    return pattern.sub(lambda _match: new_value, text)
 
 
 def update_speaker_name_in_transcript(transcript: str, old_name: str, new_name: str) -> str:

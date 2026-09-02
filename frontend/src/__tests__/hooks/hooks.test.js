@@ -1,9 +1,11 @@
 /**
- * Tests for custom hooks: useKeyboardNavigation and useMeetingChat.
+ * Tests for custom hooks: useKeyboardNavigation, useElementSize and useMeetingChat.
  */
-import { renderHook, act, waitFor } from '@testing-library/react';
+import React from 'react';
+import { renderHook, render, screen, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import useKeyboardNavigation, { COMMON_SHORTCUTS } from '../../hooks/useKeyboardNavigation';
+import { useElementSize } from '../../hooks';
 import { useMeetingChat } from '../../hooks/useMeetingChat';
 import { MeetingChatService } from '../../services';
 
@@ -83,6 +85,88 @@ describe('useKeyboardNavigation', () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+// ============================== useElementSize ==============================
+
+describe('useElementSize', () => {
+  let observedInstances;
+  let OriginalResizeObserver;
+
+  beforeEach(() => {
+    observedInstances = [];
+    OriginalResizeObserver = global.ResizeObserver;
+    global.ResizeObserver = class {
+      constructor(callback) {
+        this.callback = callback;
+        observedInstances.push(this);
+      }
+      observe(target) {
+        this.target = target;
+      }
+      disconnect() {
+        this.disconnected = true;
+      }
+    };
+  });
+
+  afterEach(() => {
+    global.ResizeObserver = OriginalResizeObserver;
+  });
+
+  const TestComponent = () => {
+    const [ref, size] = useElementSize();
+    return (
+      <div ref={ref} data-testid="measured">
+        {size.width}x{size.height}
+      </div>
+    );
+  };
+
+  test('returns {width:0, height:0} before any measurement', () => {
+    // clientWidth/clientHeight are 0 by default in jsdom, so the very first
+    // synchronous measure() call reports the zero size.
+    render(<TestComponent />);
+    expect(screen.getByTestId('measured').textContent).toBe('0x0');
+  });
+
+  test('updates size when the ResizeObserver fires', () => {
+    render(<TestComponent />);
+    const el = screen.getByTestId('measured');
+
+    Object.defineProperty(el, 'clientWidth', { value: 640, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: 480, configurable: true });
+
+    act(() => {
+      observedInstances[0].callback();
+    });
+
+    expect(screen.getByTestId('measured').textContent).toBe('640x480');
+  });
+
+  test('disconnects the observer on unmount', () => {
+    const { unmount } = render(<TestComponent />);
+    const observer = observedInstances[0];
+
+    unmount();
+
+    expect(observer.disconnected).toBe(true);
+  });
+
+  test('falls back to a window resize listener when ResizeObserver is unavailable', () => {
+    global.ResizeObserver = undefined;
+    const addSpy = jest.spyOn(window, 'addEventListener');
+    const removeSpy = jest.spyOn(window, 'removeEventListener');
+
+    const { unmount } = render(<TestComponent />);
+    expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+    unmount();
+    expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });
 

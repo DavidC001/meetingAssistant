@@ -1,0 +1,48 @@
+name: Frontend build
+
+# Catches dependency-resolution breakage before it reaches a Docker build: `npm run
+# build` uses webpack's strict ESM resolution, which `npm test` (Jest, CommonJS-based)
+# does not exercise — a passing test suite does not mean the production build works.
+# The failure this guards against: a transitive dependency (e.g. dom-helpers, pulled
+# in via react-transition-group -> MUI) ships a version whose internal imports aren't
+# fully specified for strict ESM resolution, and webpack's build step then fails with
+# "Module not found ... BREAKING CHANGE: ... fully specified". `npm ci` (not `npm
+# install`) is required here so this job — and the frontend Docker image — installs the
+# exact versions pinned in package-lock.json instead of re-resolving semver ranges
+# against whatever the registry serves today.
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-build.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # Different npm majors can disagree about whether a lockfile is "complete" for
+      # the same package.json (observed: npm 10 and npm 12 each rejected a lockfile the
+      # other considered fine, for different packages, with no dependency change in
+      # between). Pinning removes that axis of variation — keep this in sync with the
+      # version pinned in frontend/Dockerfile.
+      - run: npm install -g npm@10.9.2
+
+      # Matches the Docker build exactly: same install command, same build command.
+      - run: npm ci
+      - run: npm run build

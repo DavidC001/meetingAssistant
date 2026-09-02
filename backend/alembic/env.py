@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import the database configuration and models
 # Import all models to ensure they're registered with Base.metadata
+import app.models  # noqa: F401  — registers all ORM models on Base.metadata
 from app.core.config import config as app_config
 from app.database import Base
 

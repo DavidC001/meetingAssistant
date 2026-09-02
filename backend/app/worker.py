@@ -8,16 +8,6 @@ from .core.config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Download NLTK data at startup
-try:
-    import nltk
-
-    nltk.download("punkt_tab", quiet=True)
-    nltk.download("stopwords", quiet=True)
-    logger.info("NLTK data downloaded successfully")
-except Exception as e:
-    logger.warning(f"Could not download NLTK data: {e}")
-
 # Try to import torch and check for GPU availability
 try:
     import torch
@@ -66,6 +56,14 @@ celery_app.conf.update(
     worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to prevent memory accumulation
     # Force spawn method for CUDA compatibility
     worker_pool="solo",  # Use solo pool which avoids multiprocessing issues with CUDA
+    # Only the GPU-bound meeting pipeline needs the "heavy" queue's solo, one-at-a-time
+    # worker. Everything else (embeddings, Drive sync, note/attachment indexing, diary)
+    # defaults to "light", served by a separate worker with real concurrency — without
+    # this split, a 30-minute Drive sync check queues behind an hour-long transcription.
+    task_default_queue="light",
+    task_routes={
+        "app.tasks.process_meeting_task": {"queue": "heavy"},
+    },
 )
 
 # Configure Celery Beat for periodic tasks

@@ -27,6 +27,7 @@ class Meeting(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, index=True)
+    title = Column(String, nullable=True, index=True)
     filepath = Column(String, unique=True)
     audio_filepath = Column(String, nullable=True)
     status = Column(String, default=MeetingStatus.PENDING.value, index=True)
@@ -92,7 +93,10 @@ class Transcription(Base):
     __tablename__ = "transcriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True)
+    # Unique: Meeting.transcription is a one-to-one (uselist=False), and without the
+    # constraint reprocessing could insert a second row that the ORM cascade would not
+    # reach, which then blocked deleting the meeting.
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), index=True, unique=True)
     summary = Column(Text)
     full_text = Column(Text)
 

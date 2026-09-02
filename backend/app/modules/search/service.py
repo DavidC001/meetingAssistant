@@ -1,4 +1,5 @@
 """Service layer for global search business logic."""
+
 import time
 
 from sqlalchemy.orm import Session
@@ -118,7 +119,7 @@ class SearchService:
                         SearchResultItem(
                             id=t.id,
                             meeting_id=t.meeting_id,
-                            meeting_title=meeting.filename,
+                            meeting_title=meeting.title or meeting.filename,
                             meeting_date=meeting.meeting_date,
                             content_type="transcript",
                             snippet=highlight_text(t.full_text, query),
@@ -137,7 +138,7 @@ class SearchService:
                         SearchResultItem(
                             id=t.id,
                             meeting_id=t.meeting_id,
-                            meeting_title=meeting.filename,
+                            meeting_title=meeting.title or meeting.filename,
                             meeting_date=meeting.meeting_date,
                             content_type="summary",
                             snippet=highlight_text(t.summary, query),
@@ -165,7 +166,7 @@ class SearchService:
                             SearchResultItem(
                                 id=ai.id,
                                 meeting_id=meeting_id,
-                                meeting_title=meeting.filename,
+                                meeting_title=meeting.title or meeting.filename,
                                 meeting_date=meeting.meeting_date,
                                 content_type="action_item",
                                 snippet=content[:200],
@@ -182,7 +183,7 @@ class SearchService:
                     SearchResultItem(
                         id=m.id,
                         meeting_id=m.id,
-                        meeting_title=m.filename,
+                        meeting_title=m.title or m.filename,
                         meeting_date=m.meeting_date,
                         content_type="note",
                         snippet=highlight_text(m.notes, query),
@@ -194,15 +195,16 @@ class SearchService:
 
         # --- Titles (always searched) ---
         for m in self.repository.search_meetings_by_title(meeting_ids, search_pattern):
-            score = min(calculate_score(m.filename, query) + 0.5, 1.0)
+            display_title = m.title or m.filename
+            score = min(calculate_score(display_title, query) + 0.5, 1.0)
             results.append(
                 SearchResultItem(
                     id=m.id,
                     meeting_id=m.id,
-                    meeting_title=m.filename,
+                    meeting_title=display_title,
                     meeting_date=m.meeting_date,
                     content_type="title",
-                    snippet=m.filename,
+                    snippet=display_title,
                     score=score,
                     folder=m.folder,
                     tags=m.tags.split(",") if m.tags else [],
@@ -234,7 +236,7 @@ class SearchService:
             results.append(
                 {
                     "id": m.id,
-                    "title": m.filename,
+                    "title": m.title or m.filename,
                     "type": "meeting",
                     "folder": m.folder,
                     "date": m.meeting_date.isoformat() if m.meeting_date else None,
@@ -257,7 +259,7 @@ class SearchService:
                                 "title": ai.task[:50],
                                 "type": "action_item",
                                 "meeting_id": m.id,
-                                "meeting_title": m.filename,
+                                "meeting_title": m.title or m.filename,
                             }
                         )
 
