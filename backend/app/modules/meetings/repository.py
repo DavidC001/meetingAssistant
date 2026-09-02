@@ -435,7 +435,15 @@ class MeetingRepository(BaseRepository[models.Meeting, schemas.MeetingCreate, sc
         # Delete related diarization timings
         self.db.query(models.DiarizationTiming).filter(models.DiarizationTiming.meeting_id == meeting_id).delete()
 
-        # Delete meeting (cascades to transcription and action items)
+        # Meeting.transcription is uselist=False, so the ORM cascade only reaches the single
+        # row it loads. Meetings reprocessed before create_with_action_items was fixed can
+        # still have extra transcription rows, and any it misses trips
+        # transcriptions_meeting_id_fkey. Delete them explicitly — ORM deletes, so each one's
+        # action items cascade with it.
+        for transcription in TranscriptionRepository(self.db).get_all_for_meeting(meeting_id):
+            self.db.delete(transcription)
+
+        # Delete meeting (cascades to speakers, attachments, chunks and chat messages)
         self.db.delete(meeting)
         self.db.commit()
         return meeting
@@ -784,6 +792,21 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
         """Get transcription for a meeting."""
         return self.db.query(models.Transcription).filter(models.Transcription.meeting_id == meeting_id).first()
 
+    def get_all_for_meeting(self, meeting_id: int) -> list[models.Transcription]:
+        """
+        Get every transcription row referencing a meeting, oldest first.
+
+        A meeting should only ever have one, but reprocessing historically inserted extra
+        rows, so callers that must account for all of them (deletion, deduplication) use
+        this rather than the one-to-one accessor.
+        """
+        return (
+            self.db.query(models.Transcription)
+            .filter(models.Transcription.meeting_id == meeting_id)
+            .order_by(models.Transcription.id)
+            .all()
+        )
+
     def get_meeting_title(self, transcription_id: int) -> str | None:
         """Get meeting title for a given transcription ID, falling back to filename."""
         transcription = self.get(transcription_id)
@@ -856,11 +879,31 @@ class TranscriptionRepository(BaseRepository[models.Transcription, schemas.Trans
         if mark_completed:
             meeting_repo.update_status(meeting_id, models.MeetingStatus.COMPLETED)
 
-        # Create transcription
-        db_transcription = models.Transcription(
-            meeting_id=meeting_id, summary=transcription_data.summary, full_text=transcription_data.full_text
-        )
-        self.db.add(db_transcription)
+        # A meeting has at most one transcription (Meeting.transcription is uselist=False).
+        # Reprocessing a meeting used to INSERT a second row here, which left the earlier
+        # transcription orphaned but still referencing the meeting — so deleting the meeting
+        # failed on transcriptions_meeting_id_fkey, because the ORM only cascades the single
+        # row the one-to-one relationship loaded. Reuse the existing row instead, replacing
+        # its action items with the freshly extracted ones.
+        existing = self.get_all_for_meeting(meeting_id)
+        db_transcription = existing[0] if existing else None
+
+        # Defensive: if earlier runs already left duplicates behind, collapse them now so the
+        # meeting is left with exactly one transcription.
+        for stale in existing[1:]:
+            self.db.delete(stale)
+
+        if db_transcription is None:
+            db_transcription = models.Transcription(meeting_id=meeting_id)
+            self.db.add(db_transcription)
+
+        db_transcription.summary = transcription_data.summary
+        db_transcription.full_text = transcription_data.full_text
+
+        # Drop the previous run's action items; the ones extracted this run replace them.
+        for old_item in list(db_transcription.action_items):
+            self.db.delete(old_item)
+
         self.db.commit()
         self.db.refresh(db_transcription)
 

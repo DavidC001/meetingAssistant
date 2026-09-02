@@ -249,3 +249,83 @@ class TestMeetingRepositoryFolderTitles:
         result = repo.get_titles_by_folder(limit_per_folder=2)
 
         assert len(result["Big Folder"]) == 2
+
+
+@pytest.mark.unit
+class TestTranscriptionDuplication:
+    """
+    A meeting has exactly one transcription. Reprocessing used to INSERT a second row
+    instead of reusing it, which left the earlier one orphaned but still referencing the
+    meeting -- and since Meeting.transcription is uselist=False, the ORM cascade only
+    reached one of them, so deleting the meeting failed on transcriptions_meeting_id_fkey.
+    """
+
+    def _transcription_data(self, summary="S", full_text="T"):
+        from app.modules.meetings import schemas
+
+        return schemas.TranscriptionCreate(summary=summary, full_text=full_text)
+
+    def _action_item(self, task):
+        from app.modules.meetings import schemas
+
+        return schemas.ActionItemCreate(task=task, owner="SPEAKER_00")
+
+    def test_reprocessing_reuses_the_existing_transcription(self, db_session, sample_meeting):
+        repo = TranscriptionRepository(db_session)
+
+        first = repo.create_with_action_items(
+            sample_meeting.id, self._transcription_data("first", "text one"), [self._action_item("a")]
+        )
+        second = repo.create_with_action_items(
+            sample_meeting.id, self._transcription_data("second", "text two"), [self._action_item("b")]
+        )
+
+        rows = repo.get_all_for_meeting(sample_meeting.id)
+        assert len(rows) == 1, "reprocessing must not leave a second transcription behind"
+        assert first.id == second.id
+        assert rows[0].summary == "second"
+        assert rows[0].full_text == "text two"
+
+    def test_reprocessing_replaces_the_previous_runs_action_items(self, db_session, sample_meeting):
+        repo = TranscriptionRepository(db_session)
+
+        repo.create_with_action_items(
+            sample_meeting.id,
+            self._transcription_data(),
+            [self._action_item("stale one"), self._action_item("stale two")],
+        )
+        transcription = repo.create_with_action_items(
+            sample_meeting.id, self._transcription_data(), [self._action_item("fresh")]
+        )
+
+        db_session.refresh(transcription)
+        assert [item.task for item in transcription.action_items] == ["fresh"]
+
+    def test_a_second_transcription_for_a_meeting_is_rejected(self, db_session, sample_meeting):
+        # The unique constraint added in migration 009 is what makes the duplicate state
+        # structurally impossible, rather than merely avoided by the repository.
+        from sqlalchemy.exc import IntegrityError
+
+        # Nested so the rollback undoes only this savepoint; the fixture owns the outer
+        # transaction and rolling that back breaks its teardown.
+        savepoint = db_session.begin_nested()
+        db_session.add(models.Transcription(meeting_id=sample_meeting.id, summary="dupe", full_text="dupe"))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+        savepoint.rollback()
+
+    def test_delete_meeting_removes_its_transcription_and_action_items(self, db_session, sample_meeting):
+        transcription = TranscriptionRepository(db_session).get_by_meeting(sample_meeting.id)
+        db_session.add(models.ActionItem(transcription_id=transcription.id, task="item", owner="SPEAKER_00"))
+        db_session.commit()
+        transcription_id = transcription.id
+        meeting_id = sample_meeting.id
+
+        MeetingRepository(db_session).delete_meeting(meeting_id)
+
+        assert MeetingRepository(db_session).get(meeting_id) is None
+        assert TranscriptionRepository(db_session).get_all_for_meeting(meeting_id) == []
+        assert (
+            db_session.query(models.ActionItem).filter(models.ActionItem.transcription_id == transcription_id).count()
+            == 0
+        )

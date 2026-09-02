@@ -1,10 +1,25 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..settings.schemas import ModelConfiguration
 from .models import MeetingStatus, ProcessingStage
+
+
+def normalize_action_item_status(value: str | None) -> str | None:
+    """
+    Canonicalise an action item status to the underscore form stored in the database.
+
+    The Kanban board groups columns by a hyphenated key ("in-progress"), and that display
+    form used to be written straight back through the API, so the column ended up holding
+    both spellings. Queries are split across the two (diary looked for "in-progress",
+    the calendar/gantt/upcoming queries for "in_progress"), meaning each view saw only part
+    of the data. Normalising on the way in keeps a single spelling in storage.
+    """
+    if value is None:
+        return None
+    return value.strip().replace("-", "_")
 
 
 class TaskStatus(BaseModel):
@@ -79,6 +94,8 @@ class ActionItemBase(BaseModel):
         None, description="Additional notes or context", example="Include Q4 metrics in the email"
     )
 
+    _normalize_status = field_validator("status")(normalize_action_item_status)
+
 
 class ActionItemCreate(ActionItemBase):
     pass
@@ -91,6 +108,8 @@ class ActionItemUpdate(BaseModel):
     status: str | None = None
     priority: str | None = None
     notes: str | None = None
+
+    _normalize_status = field_validator("status")(normalize_action_item_status)
 
 
 class ActionItem(ActionItemBase):
